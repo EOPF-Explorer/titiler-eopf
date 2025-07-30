@@ -14,11 +14,6 @@ class ApiSettings(BaseSettings):
     root_path: str = ""
     debug: bool = False
 
-    model_config = {
-        "env_prefix": "TITILER_EOPF_API_",
-        "env_file": ".env",
-        "extra": "ignore",
-    }
     model_config = SettingsConfigDict(
         env_prefix="TITILER_EOPF_API_", env_file=".env", extra="ignore"
     )
