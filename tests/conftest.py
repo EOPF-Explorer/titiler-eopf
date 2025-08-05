@@ -1,5 +1,7 @@
 """titiler.eopf tests configuration."""
 
+import os
+
 import pytest
 from starlette.testclient import TestClient
 
@@ -13,6 +15,11 @@ def set_env(monkeypatch):
     monkeypatch.setenv("AWS_REGION", "us-west-2")
     monkeypatch.delenv("AWS_PROFILE", raising=False)
     monkeypatch.setenv("AWS_CONFIG_FILE", "/tmp/noconfigheere")
+
+    # Fake data store
+    monkeypatch.setenv("TITILER_EOPF_STORE_SCHEME", "file")
+    monkeypatch.setenv("TITILER_EOPF_STORE_HOST", os.path.dirname(__file__))
+    monkeypatch.setenv("TITILER_EOPF_STORE_PATH", "fixtures")
 
 
 @pytest.fixture(autouse=True)

@@ -19,24 +19,38 @@ from titiler.core.models.OGC import Conformance, Landing
 from titiler.core.resources.enums import MediaType
 from titiler.core.templating import create_html_response
 from titiler.core.utils import accept_media_type, update_openapi
-from titiler.xarray.extensions import DatasetMetadataExtension
-from titiler.xarray.factory import TilerFactory
 
 from . import __version__ as titiler_version
+from .dependencies import DatasetPathParams
+from .extensions import DatasetMetadataExtension
+from .factory import TilerFactory
 from .settings import ApiSettings
 
 settings = ApiSettings()
 
-jinja2_env = jinja2.Environment(
-    loader=jinja2.ChoiceLoader(
-        [
-            jinja2.PackageLoader(__package__, "templates"),
-            jinja2.PackageLoader("titiler.core.templating", "html"),
-        ]
+# HTML templates
+html_templates = Jinja2Templates(
+    env=jinja2.Environment(
+        loader=jinja2.ChoiceLoader(
+            [
+                jinja2.PackageLoader(__package__, "templates"),
+                jinja2.PackageLoader("titiler.core.templating", "html"),
+            ]
+        )
     )
 )
-templates = Jinja2Templates(env=jinja2_env)
 
+# Map templates
+map_templates = Jinja2Templates(
+    env=jinja2.Environment(
+        loader=jinja2.ChoiceLoader(
+            [
+                jinja2.PackageLoader(__package__, "templates"),
+                jinja2.PackageLoader("titiler.core", "templates"),
+            ]
+        )
+    )
+)
 
 app = FastAPI(
     title=settings.name,
@@ -65,12 +79,14 @@ TITILER_CONFORMS_TO = {
 
 
 md = TilerFactory(
-    templates=templates,
+    templates=map_templates,
     extensions=[
         DatasetMetadataExtension(),
     ],
+    path_dependency=DatasetPathParams,
+    router_prefix="/collections/{collection_id}/items/{item_id}",
 )
-app.include_router(md.router)
+app.include_router(md.router, prefix="/collections/{collection_id}/items/{item_id}")
 
 TITILER_CONFORMS_TO.update(md.conforms_to)
 
@@ -226,7 +242,7 @@ def landing(
             data,
             title="TiTiler-EOPF",
             template_name="landing",
-            templates=templates,
+            templates=html_templates,
         )
 
     return data
@@ -280,7 +296,7 @@ def conformance(
             data,
             title="Conformance",
             template_name="conformance",
-            templates=templates,
+            templates=html_templates,
         )
 
     return data

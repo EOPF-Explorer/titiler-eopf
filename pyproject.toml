@@ -25,9 +25,7 @@ dependencies = [
     "titiler.core>=0.22.4,<0.23",
     "titiler.xarray>=0.22.4,<0.23",
     "zarr>=3.0.9",
-    "fsspec",
-    "s3fs",
-    "aiohttp",
+    "obstore",
     "pydantic-settings~=2.0",
     "starlette-cramjam>=0.4,<1.0",
 ]
