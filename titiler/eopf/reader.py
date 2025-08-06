@@ -12,7 +12,7 @@ import obstore
 import xarray
 from morecantile import Tile, TileMatrixSet
 from rasterio.crs import CRS
-from rasterio.warp import calculate_default_transform
+from rasterio.warp import calculate_default_transform, transform_bounds
 from rio_tiler.constants import WEB_MERCATOR_TMS, WGS84_CRS
 from rio_tiler.errors import InvalidGeographicBounds
 from rio_tiler.io.base import BaseReader
@@ -80,34 +80,24 @@ def get_multiscale_level(
     return ms_resolutions[0][0]
 
 
-def _validate_zarr(da: xarray.DataArray) -> bool:
-    if "x" not in da.dims and "y" not in da.dims:
+def _validate_zarr(ds: xarray.Dataset) -> bool:
+    if "x" not in ds.dims and "y" not in ds.dims:
         try:
             _ = next(
                 name
                 for name in ["lat", "latitude", "LAT", "LATITUDE", "Lat"]
-                if name in da.dims
+                if name in ds.dims
             )
             _ = next(
                 name
                 for name in ["lon", "longitude", "LON", "LONGITUDE", "Lon"]
-                if name in da.dims
+                if name in ds.dims
             )
         except StopIteration:
-            warnings.warn(
-                f"Could not find valid coordinates dimension for `{da.name}`",
-                UserWarning,
-                stacklevel=3,
-            )
             return False
 
     # NOTE: ref: https://github.com/EOPF-Explorer/data-model/issues/12
-    if not da.rio.crs:
-        warnings.warn(
-            f"Could not find valid coordinates reference system (CRS) for `{da.name}`",
-            UserWarning,
-            stacklevel=3,
-        )
+    if not ds.rio.crs:
         return False
 
     return True
@@ -230,10 +220,18 @@ class GeoZarrReader(BaseReader):
             self.maxzoom = self.maxzoom if self.maxzoom is not None else self._maxzoom
 
         except:  # noqa
-            self.bounds = (-180, -90, 180, 90)
             self.crs = WGS84_CRS
-            self.minzoom = self.tms.minzoom
-            self.maxzoom = self.tms.maxzoom
+            minx, miny, maxx, maxy = zip(
+                *[self.get_bounds(group, self.crs) for group in self.groups]
+            )
+            self.bounds = (min(minx), min(miny), max(maxx), max(maxy))
+
+            self.minzoom = (
+                self.minzoom if self.minzoom is not None else self.tms.minzoom
+            )
+            self.maxzoom = (
+                self.maxzoom if self.maxzoom is not None else self.tms.maxzoom
+            )
 
     def close(self):
         """Close xarray dataset."""
@@ -242,6 +240,74 @@ class GeoZarrReader(BaseReader):
     def __exit__(self, exc_type, exc_value, traceback):
         """Support using with Context Managers."""
         self.close()
+
+    def get_bounds(self, group: str, crs: CRS = WGS84_CRS) -> BBox:
+        """Get BBox for a Group."""
+        if "multiscales" in self.datatree[group].attrs:
+            scale = self.datatree[group].attrs["multiscales"]["tile_matrix_set"][
+                "tileMatrices"
+            ][0]["id"]
+            ds = self.datatree[group][scale].to_dataset()
+        else:
+            ds = self.datatree[group].to_dataset()
+
+        return transform_bounds(ds.rio.crs, crs, *ds.rio.bounds(), densify_pts=21)
+
+    def _get_zoom(self, ds: xarray.Dataset) -> int:
+        """Get MaxZoom for a Group."""
+        crs = ds.rio.crs
+        tms_crs = self.tms.rasterio_crs
+        if crs != tms_crs:
+            transform, _, _ = calculate_default_transform(
+                crs,
+                tms_crs,
+                ds.rio.width,
+                ds.rio.height,
+                *ds.rio.bounds(),
+            )
+        else:
+            transform = ds.rio.transform()
+
+        resolution = max(abs(transform[0]), abs(transform[4]))
+        return self.tms.zoom_for_res(resolution)
+
+    def get_minzoom(self, group: str) -> int:
+        """Get MinZoom for a Group."""
+        if "multiscales" in self.datatree[group].attrs:
+            # Select the last level (should be the lowest/coarsest resolution)
+            scale = self.datatree[group].attrs["multiscales"]["tile_matrix_set"][
+                "tileMatrices"
+            ][-1]["id"]
+            ds = self.datatree[group][scale].to_dataset()
+        else:
+            ds = self.datatree[group].to_dataset()
+
+        try:
+            return self._get_zoom(ds)
+        except:  # noqa
+            print("error", ds)
+            pass
+
+        return self.tms.minzoom
+
+    def get_maxzoom(self, group: str) -> int:
+        """Get MaxZoom for a Group."""
+        if "multiscales" in self.datatree[group].attrs:
+            # Select the first level (should be the highest/finest resolution)
+            scale = self.datatree[group].attrs["multiscales"]["tile_matrix_set"][
+                "tileMatrices"
+            ][0]["id"]
+            ds = self.datatree[group][scale].to_dataset()
+        else:
+            ds = self.datatree[group].to_dataset()
+
+        try:
+            return self._get_zoom(ds)
+        except:  # noqa
+            print("error", ds)
+            pass
+
+        return self.tms.maxzoom
 
     @cached_property
     def groups(self) -> List[str]:
@@ -252,14 +318,24 @@ class GeoZarrReader(BaseReader):
         for g in self.datatree.groups:
             if "multiscales" in self.datatree[g].attrs:
                 ms_groups.append(g)
-                groups.append(g)
+
+                # Validate Group using First Level of MultiScale
+                scale = self.datatree[g].attrs["multiscales"]["tile_matrix_set"][
+                    "tileMatrices"
+                ][0]["id"]
+                ds = self.datatree[g][scale].to_dataset()
+                if _validate_zarr(ds):
+                    groups.append(g)
+
             else:
                 # We skip if group is within a multiscale
                 if any(g.startswith(msg) for msg in ms_groups):
                     continue
 
                 elif self.datatree[g].data_vars:
-                    groups.append(g)
+                    ds = self.datatree[g].to_dataset()
+                    if _validate_zarr(ds):
+                        groups.append(g)
 
         return groups
 
@@ -280,9 +356,7 @@ class GeoZarrReader(BaseReader):
                 ]["id"]
                 group = group[scale]
 
-            variables.extend(
-                f"{g}:{v}" for v in list(group.data_vars) if _validate_zarr(group[v])
-            )
+            variables.extend(f"{g}:{v}" for v in list(group.data_vars))
 
         return variables
 
@@ -484,7 +558,17 @@ class GeoZarrReader(BaseReader):
         **kwargs: Any,
     ) -> PointData:
         """Read a pixel value from a dataset."""
-        raise NotImplementedError
+        pts_stack: List[PointData] = []
+
+        for gv in variables:
+            group, variable = gv.split(":") if ":" in gv else ("/", gv)
+            with XarrayReader(
+                self._get_variable(group, variable, sel=sel, method=method),
+                tms=self.tms,
+            ) as da:
+                pts_stack.append(da.point(*args, **kwargs))
+
+        return PointData.create_from_list(pts_stack)
 
     def feature(  # type: ignore
         self,
