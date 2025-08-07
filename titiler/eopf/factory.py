@@ -628,16 +628,6 @@ class TilerFactory(BaseTilerFactory):
             else:
                 supported_crs = tms.crs.srs
 
-            layers = [
-                {
-                    "title": "TiTiler",
-                    "name": "default",
-                    "tiles_url": tiles_url,
-                    "query_string": urlencode(qs, doseq=True) if qs else None,
-                    "bounds": bounds,
-                },
-            ]
-
             bbox_crs_type = "WGS84BoundingBox"
             bbox_crs_uri = "urn:ogc:def:crs:OGC:2:84"
             if tms.rasterio_geographic_crs != WGS84_CRS:
@@ -647,6 +637,16 @@ class TilerFactory(BaseTilerFactory):
                 if crs_axis_inverted(tms.geographic_crs):
                     # match the bounding box coordinate order to the CRS
                     bounds = (bounds[1], bounds[0], bounds[3], bounds[2])
+
+            layers = [
+                {
+                    "title": "TiTiler",
+                    "name": "default",
+                    "tiles_url": tiles_url,
+                    "query_string": urlencode(qs, doseq=True) if qs else None,
+                    "bounds": bounds,
+                },
+            ]
 
             return self.templates.TemplateResponse(
                 request,
