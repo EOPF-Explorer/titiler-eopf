@@ -1,0 +1,60 @@
+name: CI
+
+# Triggers on pushes to main, dev and tags.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+    - main
+    - develop
+    tags:
+    - '*'
+    paths:
+      # Only run test and docker publish if some code have changed
+      - 'pyproject.toml'
+      - 'titiler/**'
+      - '.pre-commit-config.yaml'
+      - '.github/workflows/ci.yml'
+
+  # Run tests on pull requests.
+  pull_request:
+env:
+  LATEST_PY_VERSION: '3.13'
+
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .["test"]
+
+      - name: run pre-commit
+        if: ${{ matrix.python-version == env.LATEST_PY_VERSION }}
+        run: |
+          python -m pip install pre-commit
+          pre-commit run --all-files
+
+      - name: Run tests
+        run: python -m pytest --cov titiler.eopf --cov-report term-missing -s -vv
+
+      - name: Upload Results
+        if: ${{ matrix.python-version == env.LATEST_PY_VERSION }}
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: ${{ matrix.python-version }}
+          fail_ci_if_error: false

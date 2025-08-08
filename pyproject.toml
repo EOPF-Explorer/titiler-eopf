@@ -1,0 +1,111 @@
+[project]
+name = "titiler.eopf"
+description = "TiTiler application for EOPF datasets"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Vincent Sarago", email = "vincent@developmentseed.com"},
+]
+keywords = [
+    "TiTiler",
+    "EOPF",
+]
+classifiers = [
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+dependencies = [
+    "orjson",
+    "titiler.core>=0.22.4,<0.23",
+    "titiler.xarray>=0.22.4,<0.23",
+    "zarr>=3.0.9",
+    "obstore",
+    "pydantic-settings~=2.0",
+    "starlette-cramjam>=0.4,<1.0",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = [
+    "pre-commit",
+]
+test = [
+    "pytest",
+    "pytest-cov",
+    "pytest-asyncio",
+    "httpx",
+]
+
+[project.urls]
+Homepage = 'https://github.com/EOPF-Explorer/titiler-eopf'
+Documentation = "https://github.com/EOPF-Explorer/titiler-eopf"
+Issues = "https://github.com/EOPF-Explorer/titiler-eopf/issues"
+Source = "https://github.com/EOPF-Explorer/titiler-eopf"
+Changelog = "https://github.com/EOPF-Explorer/titiler-eopf/CHANGELOG.md"
+
+[build-system]
+requires = ["pdm-pep517"]
+build-backend = "pdm.pep517.api"
+
+[tool.pdm.version]
+source = "file"
+path = "titiler/eopf/__init__.py"
+
+[tool.pdm.build]
+includes = ["titiler/eopf"]
+excludes = ["tests/", "**/.mypy_cache", "**/.DS_Store"]
+
+[tool.coverage.run]
+branch = true
+parallel = true
+
+[tool.coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
+
+[tool.isort]
+profile = "black"
+known_first_party = ["titiler"]
+known_third_party = [
+    "rasterio",
+    "morecantile",
+    "rio_tiler",
+    "geojson_pydantic",
+    "starlette_cramjam",
+]
+default_section = "THIRDPARTY"
+
+[tool.ruff.lint]
+select = [
+    "D1",  # pydocstyle errors
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # flake8
+    "C",  # flake8-comprehensions
+    "B",  # flake8-bugbear
+]
+ignore = [
+    "E501",  # line too long, handled by black
+    "B008",  # do not perform function calls in argument defaults
+    "B905",  # ignore zip() without an explicit strict= parameter, only support with python >3.10
+]
+
+[tool.mypy]
+no_implicit_optional = true
+strict_optional = true
+namespace_packages = true
+explicit_package_bases = true
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::rasterio.errors.NotGeoreferencedWarning",
+]
