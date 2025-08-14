@@ -80,7 +80,7 @@ export TITILER_EOPF_STORE_URL=s3://my-bucket/data/
 docker-compose up --build api
 ```
 
-`http://1270.0.0.1:8000/api.html`
+`http://127.0.0.1:8000/api.html`
 
 <img width="800" src="docs/img/openapi.png" />
 
