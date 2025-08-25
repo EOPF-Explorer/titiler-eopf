@@ -1,6 +1,6 @@
 """API settings."""
 
-from pydantic import AnyUrl, ValidationInfo, field_validator
+from pydantic import AnyUrl, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,8 +32,8 @@ class ApiSettings(BaseSettings):
 class DataStoreSettings(BaseSettings):
     """Data store settings"""
 
-    scheme: str
-    host: str
+    scheme: str | None = None
+    host: str | None = None
     path: str | None = None
 
     url: AnyUrl | None = None
@@ -48,8 +48,21 @@ class DataStoreSettings(BaseSettings):
         if isinstance(v, str):
             return v
 
-        return AnyUrl.build(
-            scheme=info.data["scheme"],
-            host=info.data["host"],
-            path=info.data.get("path", ""),
-        )
+        # Only build URL from components if url is not provided and scheme/host are available
+        if v is None and "scheme" in info.data and "host" in info.data:
+            return AnyUrl.build(
+                scheme=info.data["scheme"],
+                host=info.data["host"],
+                path=info.data.get("path", ""),
+            )
+        
+        return v
+
+    @model_validator(mode="after")
+    def validate_config(self):
+        """Validate that either url is provided or scheme+host are provided."""
+        if not self.url and not (self.scheme and self.host):
+            raise ValueError(
+                "Either 'url' must be provided or both 'scheme' and 'host' must be provided"
+            )
+        return self
