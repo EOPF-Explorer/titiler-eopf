@@ -32,8 +32,8 @@ class ApiSettings(BaseSettings):
 class DataStoreSettings(BaseSettings):
     """Data store settings"""
 
-    scheme: str
-    host: str
+    scheme: str | None = None
+    host: str | None = None
     path: str | None = None
 
     url: AnyUrl | None = None
@@ -48,8 +48,14 @@ class DataStoreSettings(BaseSettings):
         if isinstance(v, str):
             return v
 
-        return AnyUrl.build(
-            scheme=info.data["scheme"],
-            host=info.data["host"],
-            path=info.data.get("path", ""),
+        # Only build URL from components if url is not provided and scheme/host are available
+        if v is None and (info.data.get("scheme") and info.data.get("host")):
+            return AnyUrl.build(
+                scheme=info.data["scheme"],
+                host=info.data["host"],
+                path=info.data.get("path", ""),
+            )
+
+        raise ValueError(
+            "Either 'url' must be provided or both 'scheme' and 'host' must be provided"
         )
