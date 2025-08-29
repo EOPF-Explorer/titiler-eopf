@@ -25,6 +25,7 @@ def test_datastore_settings(params, url):
     [
         {"scheme": "s3", "host": None, "path": "yo"},
         {"scheme": None, "host": "yeah/ye", "path": None},
+        {"url": "thisisnotavalidurl", "scheme": None, "host": None, "path": None},
         {"url": None, "scheme": None, "host": None, "path": None},
     ],
 )
