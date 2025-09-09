@@ -70,8 +70,8 @@ jobs:
 
       - name: Create Secret
         run: |
-          kubectl create secret generic titiler-eopf-secret --from-literal=AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} --from-literal=AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          kubectl create secret generic titiler-eopf-secret -n titiler-eopf --from-literal=AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} --from-literal=AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
       - name: Run chart-testing (install)
-        run: ct install --chart-dirs helm
+        run: ct install --chart-dirs helm --namespace titiler-eopf
         if: steps.list-changed.outputs.changed == 'true'
