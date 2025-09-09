@@ -10,7 +10,7 @@ def main():
     pkg_version = version("titiler-eopf")
     
     # Read Chart.yaml
-    with open("helm/Chart.yaml", "r") as f:
+    with open("helm/charts/Chart.yaml", "r") as f:
         chart = yaml.safe_load(f)
     
     app_version = chart.get("appVersion", "").strip('"')
