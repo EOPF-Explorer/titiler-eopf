@@ -1,6 +1,16 @@
 """titiler.eopf Application."""
 
+import logging
+import os
 from typing import Annotated, Literal, Optional
+
+# Configure logging
+log_level = os.getenv("LOG_LEVEL", "INFO")
+logging.basicConfig(
+    level=log_level,
+    format="%(levelname)s - %(message)s",
+)
+
 
 import jinja2
 import rasterio

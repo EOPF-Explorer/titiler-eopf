@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import warnings
 from functools import cache, cached_property
 from typing import Any, Callable, Dict, List, Literal, Union
@@ -21,7 +22,17 @@ from rio_tiler.models import BandStatistics, ImageData, Info, PointData
 from rio_tiler.types import BBox
 from zarr.storage import ObjectStore
 
+logger = logging.getLogger(__name__)
+
 sel_methods = Literal["nearest", "pad", "ffill", "backfill", "bfill"]
+
+def format_bytes(size: int) -> str:
+    """Format bytes into human readable string."""
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if size < 1024.0:
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+    return f"{size:.1f} PB"
 
 
 @cache
@@ -192,6 +203,7 @@ class GeoZarrReader(BaseReader):
             self.datatree = self._ctx_stack.enter_context(
                 self.opener(self.input, **self.opener_options)
             )
+            logger.info(f"Opening dataset: {self.input}")
 
         # There might not be global bounds/CRS for a Zarr Store
         try:
@@ -409,6 +421,7 @@ class GeoZarrReader(BaseReader):
                 target_res = dst_transform.a
 
                 scale = get_multiscale_level(ds, target_res)  # type: ignore
+                logger.info(f"Selected multiscale level {scale} for target resolution {target_res:.6f}")
 
             # Select the multiscale group and variable
             da = ds[scale][variable]
@@ -495,24 +508,30 @@ class GeoZarrReader(BaseReader):
         """Read a Web Map tile from a dataset."""
         tile_bounds = tuple(self.tms.xy_bounds(Tile(x=tile_x, y=tile_y, z=tile_z)))
         dst_crs = self.tms.rasterio_crs
+        
+        logger.info(f"Reading tile z={tile_z}/x={tile_x}/y={tile_y} from dataset: {self.input}")
 
         img_stack: List[ImageData] = []
 
         for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
-            with XarrayReader(
-                self._get_variable(
-                    group,
-                    variable,
-                    sel=sel,
-                    method=method,
-                    bounds=tile_bounds,
-                    height=tilesize,
-                    width=tilesize,
-                    dst_crs=dst_crs,
-                ),
-                tms=self.tms,
-            ) as da:
+            data_array = self._get_variable(
+                group,
+                variable,
+                sel=sel,
+                method=method,
+                bounds=tile_bounds,
+                height=tilesize,
+                width=tilesize,
+                dst_crs=dst_crs,
+            )
+            # Calculate size in bytes (nbytes gives the size of the array in memory)
+            data_size = data_array.nbytes
+            logger.info(
+                f"Loading data from group '{group}', variable '{variable}' "
+                f"(size: {format_bytes(data_size)})"
+            )
+            with XarrayReader(data_array, tms=self.tms) as da:
                 img_stack.append(
                     da.tile(
                         tile_x,
