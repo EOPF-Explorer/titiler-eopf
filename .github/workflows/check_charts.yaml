@@ -3,13 +3,13 @@ name: Lint and Test Charts
 on:
   push:
     branches:
-    - main
+      - main
     paths:
-      - 'helm/**'
-      - '.github/workflows/check_charts.yaml'
-      - '.github/workflows/scripts/**'
-      - 'titiler/eopf/__init__.py'
-      - 'pyproject.toml'
+      - "helm/**"
+      - ".github/workflows/check_charts.yaml"
+      - ".github/workflows/scripts/**"
+      - "titiler/eopf/__init__.py"
+      - "pyproject.toml"
   pull_request:
 
 jobs:
@@ -34,7 +34,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: "3.x"
 
       - name: Set up chart-testing
         uses: helm/chart-testing-action@v2.7.0

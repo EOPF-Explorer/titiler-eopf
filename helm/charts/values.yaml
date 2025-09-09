@@ -29,7 +29,8 @@ service:
 
 ingress:
   enabled: false
-  annotations: {}
+  annotations:
+    {}
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
   hosts:
@@ -49,7 +50,7 @@ env:
   # Application Config
   LOG_LEVEL: "INFO"
   TITILER_EOPF_STORE_URL: "s3://esa-zarr-sentinel-explorer-fra/tests-output/"
-  
+
   # GDAL Config
   CPL_TMPDIR: /tmp
   GDAL_CACHEMAX: "75%"
@@ -58,15 +59,15 @@ env:
   GDAL_HTTP_MERGE_CONSECUTIVE_RANGES: "YES"
   GDAL_HTTP_MULTIPLEX: "YES"
   GDAL_HTTP_VERSION: "2"
-  
+
   # VSI Cache settings
   VSI_CACHE: "TRUE"
-  VSI_CACHE_SIZE: "536870912"  # 512MB
-  CPL_VSIL_CURL_CACHE_SIZE: "200000000"  # 200MB
-  
+  VSI_CACHE_SIZE: "536870912" # 512MB
+  CPL_VSIL_CURL_CACHE_SIZE: "200000000" # 200MB
+
   # AWS Configuration
-  AWS_ACCESS_KEY_ID: ""  # To be provided via secrets
-  AWS_SECRET_ACCESS_KEY: ""  # To be provided via secrets
+  AWS_ACCESS_KEY_ID: "" # To be provided via secrets
+  AWS_SECRET_ACCESS_KEY: "" # To be provided via secrets
   AWS_DEFAULT_REGION: "de"
   AWS_ENDPOINT_URL: "https://s3.de.io.cloud.ovh.net/"
   AWS_EC2_METADATA_DISABLED: "true"
