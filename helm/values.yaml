@@ -1,6 +1,9 @@
 # Default values for titiler-eopf
 replicaCount: 1
 
+# Optional netrc configuration for accessing private repositories
+netrc: ""
+
 image:
   repository: ghcr.io/eopf-explorer/titiler-eopf
   tag: latest
