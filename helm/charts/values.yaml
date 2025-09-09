@@ -62,12 +62,12 @@ env:
 
   # VSI Cache settings
   VSI_CACHE: "TRUE"
-  VSI_CACHE_SIZE: "536870912" # 512MB
-  CPL_VSIL_CURL_CACHE_SIZE: "200000000" # 200MB
+  VSI_CACHE_SIZE: "536870912"  # 512MB
+  CPL_VSIL_CURL_CACHE_SIZE: "200000000"  # 200MB
 
   # AWS Configuration
-  AWS_ACCESS_KEY_ID: "" # To be provided via secrets
-  AWS_SECRET_ACCESS_KEY: "" # To be provided via secrets
+  AWS_ACCESS_KEY_ID: ""  # To be provided via secrets
+  AWS_SECRET_ACCESS_KEY: ""  # To be provided via secrets
   AWS_DEFAULT_REGION: "de"
   AWS_ENDPOINT_URL: "https://s3.de.io.cloud.ovh.net/"
   AWS_EC2_METADATA_DISABLED: "true"
