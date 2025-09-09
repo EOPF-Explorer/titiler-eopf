@@ -53,17 +53,21 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
+            {{- if .Values.netrc }}
             - mountPath: /config
               name: config
               readOnly: true
+            {{- end }}
           {{- with .Values.extraHostPathMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       volumes:
+        {{- if .Values.netrc }}
         - name: config
           configMap:
             name: {{ include "titiler-eopf.fullname" . }}-configmap
+        {{- end }}
       {{- with .Values.extraHostPathMounts }}
         {{- range . }}
         - name: {{ .name }}
