@@ -7,7 +7,7 @@ This module checks the version of the application.
 import sys
 from importlib.metadata import version
 
-import yaml
+import yaml  # type: ignore
 
 
 def main():
