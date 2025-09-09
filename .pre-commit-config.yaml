@@ -22,7 +22,9 @@ repos:
     hooks:
       - id: mypy
         language_version: python
-        exclude: tests/.*
+        exclude: |
+          tests/.*
+          .github/.*
         additional_dependencies:
         - types-attrs
         - pydantic~=2.0
