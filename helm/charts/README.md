@@ -46,7 +46,7 @@ The following table lists the configurable parameters of the TiTiler EOPF chart 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `aws.createSecret` | Create AWS credentials secret | `true` |
-| `aws.secretName` | Name of the AWS credentials secret | `titiler-eopf-aws-secret` |
+| `aws.secretName` | Name of the AWS credentials secret | `titiler-eopf-secret` |
 | `aws.credentials.AWS_ACCESS_KEY_ID` | AWS access key ID | `""` |
 | `aws.credentials.AWS_SECRET_ACCESS_KEY` | AWS secret access key | `""` |
 | `env.AWS_DEFAULT_REGION` | AWS region | `de` |

@@ -74,9 +74,9 @@ env:
 
 # Secrets for sensitive environment variables
 # You can create a Kubernetes secret with:
-# kubectl create secret generic titiler-eopf-aws-secret --from-literal=AWS_ACCESS_KEY_ID=your_access_key --from-literal=AWS_SECRET_ACCESS_KEY=your_secret_key
+# kubectl create secret generic titiler-eopf-secret --from-literal=AWS_ACCESS_KEY_ID=your_access_key --from-literal=AWS_SECRET_ACCESS_KEY=your_secret_key
 secrets:
-  secretName: titiler-eopf-aws-secret
+  secretName: titiler-eopf-secret
   keys:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
