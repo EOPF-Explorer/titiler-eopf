@@ -48,22 +48,24 @@ jobs:
         if: steps.list-changed.outputs.changed == 'true'
         run: ct lint --chart-dirs helm --target-branch ${{ github.event.repository.default_branch }}
 
-      - name: Build container
-        uses: docker/build-push-action@v6
+      - name: Authenticate with GitHub Packages
         if: steps.list-changed.outputs.changed == 'true'
+        uses: docker/login-action@v3
         with:
-          platforms: linux/amd64
-          context: .
-          file: Dockerfile
-          push: false
-          tags: "titiler-eopf:dev"
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull Docker image
+        if: steps.list-changed.outputs.changed == 'true'
+        run: docker pull ghcr.io/${{ github.repository }}/titiler-eopf:${{ github.sha }}
       
       - name: Create kind cluster
         uses: helm/kind-action@v1.12.0
         if: steps.list-changed.outputs.changed == 'true'
 
       - name: Load container image in kind cluster
-        run: kind load docker-image titiler-eopf:dev --name chart-testing
+        run: kind load docker-image ghcr.io/${{ github.repository }}/titiler-eopf:${{ github.sha }} --name chart-testing
         if: steps.list-changed.outputs.changed == 'true'
 
       - name: Create Namespace
