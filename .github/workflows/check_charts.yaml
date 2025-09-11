@@ -6,11 +6,15 @@ on:
       - main
     paths:
       - "helm/**"
-      - ".github/workflows/check_charts.yaml"
-      - ".github/workflows/scripts/**"
+      - ".github/workflows/**"
       - "titiler/eopf/__init__.py"
       - "pyproject.toml"
   pull_request:
+    paths:
+      - "helm/**"
+      - ".github/workflows/**"
+      - "titiler/eopf/__init__.py"
+      - "pyproject.toml"
 
 jobs:
   lint-test:
