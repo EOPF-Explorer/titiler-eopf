@@ -3,8 +3,6 @@ name: Lint and Test Charts
 on:
   workflow_run:
     workflows: ["Docker Build and Deploy"]
-    branches:
-      - main
     types: 
       - completed
 
