@@ -39,7 +39,7 @@ The following table lists the configurable parameters of the TiTiler EOPF chart 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `env.LOG_LEVEL` | Application log level | `INFO` |
-| `env.TITILER_EOPF_STORE_URL` | EOPF store URL | `s3://esa-zarr-sentinel-explorer-fra/tests-output/` |
+| `env.TITILER_EOPF_STORE_URL` | EOPF store URL (can be any URL supported by xarray, fsspec, or obstore) | `s3://esa-zarr-sentinel-explorer-fra/tests-output/` |
 
 ### AWS Configuration
 
