@@ -84,8 +84,8 @@ ingress:
     - host: titiler.example.com
       paths: ["/"]
 
-aws:
-  credentials:
+secrets:
+  keys:
     AWS_ACCESS_KEY_ID: your-access-key
     AWS_SECRET_ACCESS_KEY: your-secret-key
 ```
