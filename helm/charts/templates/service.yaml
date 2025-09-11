@@ -4,6 +4,8 @@ metadata:
   name: {{ include "titiler-eopf.fullname" . }}
   labels:
     {{- include "titiler-eopf.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.service.annotations | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:
