@@ -107,3 +107,4 @@ To modify or extend this Helm chart:
 ```bash
 helm lint ./helm
 helm template titiler-eopf ./helm
+```
