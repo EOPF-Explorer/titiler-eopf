@@ -2,4 +2,4 @@ replicaCount: 1
 
 image:
   repository: titiler-eopf
-  tag: dev
+  tag: ci
