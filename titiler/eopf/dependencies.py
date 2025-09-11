@@ -7,7 +7,7 @@ from typing import Annotated, List, Literal
 from fastapi import Path, Query
 from starlette.requests import Request
 
-from titiler.core.dependencies import BidxParams, DefaultDependency
+from titiler.core.dependencies import BidxParams, DefaultDependency, ExpressionParams
 from titiler.xarray.dependencies import SelDimStr
 
 from .settings import DataStoreSettings
@@ -32,13 +32,6 @@ def DatasetPathParams(
 class XarrayParams(DefaultDependency):
     """Xarray Dataset Options."""
 
-    variables: Annotated[
-        List[str],
-        Query(
-            description="Xarray Variable name in form of `{group_name}:{variable_name}`."
-        ),
-    ]
-
     sel: Annotated[
         List[SelDimStr] | None,
         Query(
@@ -53,18 +46,6 @@ class XarrayParams(DefaultDependency):
             description="Xarray indexing method to use for inexact matches.",
         ),
     ] = None
-
-
-@dataclass
-class LayerParams(BidxParams, XarrayParams):
-    """variable + indexes."""
-
-    pass
-
-
-@dataclass
-class VariablesParams(DefaultDependency):
-    """Xarray Dataset Options."""
 
     variables: Annotated[
         List[str] | None,
@@ -73,6 +54,23 @@ class VariablesParams(DefaultDependency):
         ),
     ] = None
 
+
+@dataclass
+class LayerParams(BidxParams, ExpressionParams, XarrayParams):
+    """variable + indexes."""
+
+    def __post_init__(self):
+        """Post Init."""
+        if not self.variables and not self.expression:
+            raise ValueError(
+                "variables must be defined either via expression or variables options."
+            )
+
+
+@dataclass
+class VariablesParams(DefaultDependency):
+    """Xarray Dataset Options."""
+
     sel: Annotated[
         List[SelDimStr] | None,
         Query(
@@ -85,5 +83,12 @@ class VariablesParams(DefaultDependency):
         Query(
             alias="sel_method",
             description="Xarray indexing method to use for inexact matches.",
+        ),
+    ] = None
+
+    variables: Annotated[
+        List[str] | None,
+        Query(
+            description="Xarray Variable name in form of `{group_name}:{variable_name}`."
         ),
     ] = None

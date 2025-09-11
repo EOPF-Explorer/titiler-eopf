@@ -1,0 +1,71 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "TiTiler EOPF Local",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "titiler.eopf.main:app",
+                "--reload",
+                "--port", "8000"
+            ],
+            "jinja": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/.venv/bin",
+                "LOG_LEVEL": "INFO",
+                "TITILER_EOPF_STORE_URL": "file:///home/emathot/Workspace/eopf-explorer/data-model/tests-output/",
+            },
+        },
+        {
+            "name": "TiTiler EOPF S3",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "titiler.eopf.main:app",
+                "--reload",
+                "--port", "8000"
+            ],
+            "jinja": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/.venv/bin",
+                "LOG_LEVEL": "INFO",
+                "AWS_PROFILE": "eopf-explorer",
+                "AWS_DEFAULT_REGION": "de",
+                "AWS_ENDPOINT_URL": "https://s3.de.io.cloud.ovh.net/",
+                "AWS_EC2_METADATA_DISABLED": "true",
+                "TITILER_EOPF_STORE_URL": "s3://esa-zarr-sentinel-explorer-fra/tests-output/"
+            },
+        }
+    ]
+}
+
+/* Some urls for testing:
+
+http://127.0.0.1:8000/collections/eopf_geozarr/items/S2B_MSIL2A_20250804T103629_N0511_R008_T31TDH_20250804T130722/WebMercatorQuad/map.html?variables=%2Fmeasurements%2Freflectance%2Fr10m%3Ab04&variables=%2Fmeasurements%2Freflectance%2Fr10m%3Ab03&variables=%2Fmeasurements%2Freflectance%2Fr10m%3Ab02&sel_method=nearest&rescale=0%2C0.6
+
+http://127.0.0.1:8000/collections/eopf_geozarr/items/S2B_MSIL2A_20250804T103629_N0511_R008_T31TDH_20250804T130722/WebMercatorQuad/map.html?variables=%2Fmeasurements%2Freflectance%2Fr10m%3Ab08&variables=%2Fmeasurements%2Freflectance%2Fr10m%3Ab04&variables=%2Fmeasurements%2Freflectance%2Fr10m%3Ab03&sel_method=nearest&rescale=0%2C0.6
+
+http://127.0.0.1:8000/collections/eopf_geozarr/items/S2B_MSIL2A_20250804T103629_N0511_R008_T31TDH_20250804T130722/WebMercatorQuad/map.html?variables=/quality/l2a_quicklook/r10m:tci
+
+http://127.0.0.1:8000/collections/eopf_geozarr/items/S2B_MSIL2A_20250804T103629_N0511_R008_T31TDH_20250804T130722/WebMercatorQuad/map.html?variables=/conditions/geometry:viewing_incidence_angles
+
+http://127.0.0.1:8000/collections/eopf_geozarr/items/S2C_MSIL2A_20250811T112131_N0511_R037_T29TPF_20250811T152216/WebMercatorQuad/map.html?variables=%2Fmeasurements%2Freflectance%2Fr10m%3Ab04&variables=%2Fmeasurements%2Freflectance%2Fr10m%3Ab03&variables=%2Fmeasurements%2Freflectance%2Fr10m%3Ab02&sel_method=nearest&rescale=0%2C0.6
+
+http://127.0.0.1:8000/collections/eopf_geozarr/items/S2B_MSIL2A_20250725T103629_N0511_R008_T31TEJ_20250725T130225/WebMercatorQuad/map.html?variables=/quality/l2a_quicklook/r10m:tci
+
+http://127.0.0.1:8000/collections/eopf_geozarr/items/S2C_MSIL2A_20250811T112131_N0511_R037_T29TPF_20250811T152216/WebMercatorQuad/map.html?variables=%2Fmeasurements%2Freflectance%2Fr10m%3Ab08&variables=%2Fmeasurements%2Freflectance%2Fr10m%3Ab04&variables=%2Fmeasurements%2Freflectance%2Fr10m%3Ab03&sel_method=nearest&rescale=0%2C0.6
+
+http://127.0.0.1:8000/collections/eopf_geozarr/items/S2C_MSIL2A_20250811T112131_N0511_R037_T29TPF_20250811T152216/WebMercatorQuad/map.html?variables=%2Fmeasurements%2Freflectance%2Fr10m%3Ab08&variables=%2Fmeasurements%2Freflectance%2Fr10m%3Ab04&variables=%2Fmeasurements%2Freflectance%2Fr10m%3Ab03&sel_method=nearest&rescale=0%2C0.6
+
+http://127.0.0.1:8000/collections/eopf_geozarr/items/S2C_MSIL2A_20250811T112131_N0511_R037_T29TPF_20250811T152216/WebMercatorQuad/map.html?variables=%2Fmeasurements%2Freflectance%2Fr10m%3Ab04&variables=%2Fmeasurements%2Freflectance%2Fr10m%3Ab03&variables=%2Fmeasurements%2Freflectance%2Fr10m%3Ab02&sel_method=nearest&rescale=0%2C0.6
+
+NDVI
+http://127.0.0.1:8000/collections/eopf_geozarr/items/S2C_MSIL2A_20250811T112131_N0511_R037_T29TPF_20250811T152216/WebMercatorQuad/map.html?expression=%28%2Fmeasurements%2Freflectance%2Fr10m%3Ab08-%2Fmeasurements%2Freflectance%2Fr10m%3Ab04%29%2F%28%2Fmeasurements%2Freflectance%2Fr10m%3Ab08%2B%2Fmeasurements%2Freflectance%2Fr10m%3Ab04%29&rescale=-1,1&colormap_name=viridis
+
+*/
