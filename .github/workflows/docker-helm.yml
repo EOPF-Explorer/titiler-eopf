@@ -108,17 +108,21 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: downcase REPO
+        run: |
+          echo "REPO=${GITHUB_REPOSITORY,,}" >>${GITHUB_ENV}
 
       - name: Pull Docker image
         if: steps.list-changed.outputs.changed == 'true'
-        run: docker pull ghcr.io/${{ github.repository }}:${{ github.sha }}
-      
+        run: docker pull ghcr.io/${{ env.REPO }}:${{ github.sha }}
+
       - name: Create kind cluster
         uses: helm/kind-action@v1.12.0
         if: steps.list-changed.outputs.changed == 'true'
 
       - name: Load container image in kind cluster
-        run: kind load docker-image ghcr.io/${{ github.repository }}:${{ github.sha }} --name chart-testing
+        run: kind load docker-image ghcr.io/${{ env.REPO }}:${{ github.sha }} --name chart-testing
         if: steps.list-changed.outputs.changed == 'true'
 
       - name: Create Namespace
@@ -137,4 +141,4 @@ jobs:
 
       # delete the pull request docker image to free up space
       - name: Delete Docker image
-        run: docker rmi ghcr.io/${{ github.repository }}:${{ github.sha }}
+        run: docker rmi ghcr.io/${{ env.REPO }}:${{ github.sha }}
