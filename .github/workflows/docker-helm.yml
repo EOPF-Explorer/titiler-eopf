@@ -147,4 +147,6 @@ jobs:
 
       # delete the pull request docker image to free up space
       - name: Delete Docker image
-        run: docker rmi ghcr.io/${{ env.REPO }}:${{ env.sha_tag }}
+        if: always()
+        run: |
+          docker rmi ghcr.io/${{ env.REPO }}:${{ env.sha_tag }} || echo "Image not found, skipping deletion."
