@@ -28,8 +28,8 @@ jobs:
         with:
           # list of Docker images to use as base name for tags
           images: |
-            ${{ github.repository }}/titiler-eopf
-            ghcr.io/${{ github.repository }}/titiler-eopf
+            ${{ github.repository }}
+            ghcr.io/${{ github.repository }}
           # generate Docker tags based on the following events/attributes
           tags: |
             type=schedule
