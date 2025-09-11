@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "titiler-eopf.fullname" . }}
+  labels:
+    {{- include "titiler-eopf.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "titiler-eopf.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "titiler-eopf.selectorLabels" . | nindent 8 }}
+    spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: 
+            - {{ .Values.image.command }}
+          args:
+            {{- range .Values.image.args }}
+            - {{ . | quote }}
+            {{- end }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          env:
+            {{- include "titiler-eopf.envVars" . | nindent 12 }}
+          {{- if .Values.netrc }}
+            - name: NETRC
+              value: /config/netrc
+            - name: CURLOPT_NETRC
+              value: CURL_NETRC_OPTIONAL
+            - name: CURLOPT_NETRC_FILE
+              value: /config/netrc
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /_mgmt/ping
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /_mgmt/ping
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            {{- if .Values.netrc }}
+            - mountPath: /config
+              name: config
+              readOnly: true
+            {{- end }}
+          {{- with .Values.extraHostPathMounts }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      volumes:
+        {{- if .Values.netrc }}
+        - name: config
+          configMap:
+            name: {{ include "titiler-eopf.fullname" . }}-configmap
+        {{- end }}
+      {{- with .Values.extraHostPathMounts }}
+        {{- range . }}
+        - name: {{ .name }}
+          hostPath:
+            path: {{ .hostPath }}
+            type: Directory
+        {{- end }}
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.serviceAccountName }}
+      serviceAccountName: {{ . | quote }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

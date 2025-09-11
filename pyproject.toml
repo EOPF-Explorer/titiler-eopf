@@ -21,7 +21,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: GIS",
 ]
 dependencies = [
-    "orjson",
+    "orjson",   
     "titiler.core>=0.23,<0.24",
     "titiler.xarray>=0.23,<0.24",
     "zarr>=3.0.9",
@@ -104,6 +104,7 @@ no_implicit_optional = true
 strict_optional = true
 namespace_packages = true
 explicit_package_bases = true
+exclude = "tests/.*|.*github/.*"
 
 [tool.pytest.ini_options]
 filterwarnings = [

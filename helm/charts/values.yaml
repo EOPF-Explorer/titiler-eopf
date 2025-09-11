@@ -1,0 +1,103 @@
+# Default values for titiler-eopf
+replicaCount: 1
+
+# Optional netrc configuration for accessing private repositories
+netrc: ""
+
+image:
+  repository: ghcr.io/eopf-explorer/titiler-eopf
+  tag: latest
+  pullPolicy: IfNotPresent
+  command: "uvicorn"
+  args:
+    - "titiler.eopf.main:app"
+    - "--host"
+    - "0.0.0.0"
+    - "--port"
+    - "80"
+    - "--workers"
+    - "1"
+
+nameOverride: ""
+fullnameOverride: ""
+
+terminationGracePeriodSeconds: 30
+
+service:
+  type: ClusterIP
+  port: 80
+  annotations: {}
+
+ingress:
+  enabled: false
+  annotations:
+    {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: titiler-eopf.local
+      paths: ["/"]
+  tls: []
+  #  - secretName: titiler-eopf-tls
+  #    hosts:
+  #      - titiler-eopf.local
+
+extraHostPathMounts: []
+
+imagePullSecrets: []
+
+# Environment variables combining docker-compose.yml and launch.json configurations
+env:
+  # Application Config
+  LOG_LEVEL: "INFO"
+  TITILER_EOPF_STORE_URL: "s3://esa-zarr-sentinel-explorer-fra/tests-output/"
+
+  # GDAL Config
+  CPL_TMPDIR: /tmp
+  GDAL_CACHEMAX: "75%"
+  GDAL_DISABLE_READDIR_ON_OPEN: EMPTY_DIR
+  GDAL_INGESTED_BYTES_AT_OPEN: "32768"
+  GDAL_HTTP_MERGE_CONSECUTIVE_RANGES: "YES"
+  GDAL_HTTP_MULTIPLEX: "YES"
+  GDAL_HTTP_VERSION: "2"
+
+  # VSI Cache settings
+  VSI_CACHE: "TRUE"
+  VSI_CACHE_SIZE: "536870912"  # 512MB
+  CPL_VSIL_CURL_CACHE_SIZE: "200000000"  # 200MB
+
+  # AWS Configuration
+  AWS_ACCESS_KEY_ID: ""  # To be provided via secrets
+  AWS_SECRET_ACCESS_KEY: ""  # To be provided via secrets
+  AWS_DEFAULT_REGION: "de"
+  AWS_ENDPOINT_URL: "https://s3.de.io.cloud.ovh.net/"
+  AWS_EC2_METADATA_DISABLED: "true"
+
+# Secrets for sensitive environment variables
+# You can create a Kubernetes secret with:
+# kubectl create secret generic titiler-eopf-secret --from-literal=AWS_ACCESS_KEY_ID=your_access_key --from-literal=AWS_SECRET_ACCESS_KEY=your_secret_key
+secrets:
+  secretName: titiler-eopf-secret
+  keys:
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+
+resources:
+  limits:
+    cpu: 1
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+serviceAccountName: ""
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+securityContext: {}
+
+podSecurityContext: {}
