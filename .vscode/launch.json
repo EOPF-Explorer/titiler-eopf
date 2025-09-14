@@ -32,6 +32,7 @@
                 "--port", "8000"
             ],
             "jinja": true,
+            "justMyCode": false,
             "env": {
                 "PYTHONPATH": "${workspaceFolder}/.venv/bin",
                 "LOG_LEVEL": "INFO",
