@@ -35,7 +35,9 @@
             "env": {
                 "PYTHONPATH": "${workspaceFolder}/.venv/bin",
                 "LOG_LEVEL": "INFO",
-                "AWS_PROFILE": "eopf-explorer",
+                // "AWS_PROFILE": "eopf-explorer-vs",
+                "AWS_ACCESS_KEY_ID": "243600d0bd904c99b791d0943a2fc454",
+                "AWS_SECRET_ACCESS_KEY": "0c5e48bb7c0b4d479f3d99b9c1dbe300",
                 "AWS_DEFAULT_REGION": "de",
                 "AWS_ENDPOINT_URL": "https://s3.de.io.cloud.ovh.net/",
                 "AWS_EC2_METADATA_DISABLED": "true",
@@ -67,5 +69,8 @@ http://127.0.0.1:8000/collections/eopf_geozarr/items/S2C_MSIL2A_20250811T112131_
 
 NDVI
 http://127.0.0.1:8000/collections/eopf_geozarr/items/S2C_MSIL2A_20250811T112131_N0511_R037_T29TPF_20250811T152216/WebMercatorQuad/map.html?expression=%28%2Fmeasurements%2Freflectance%2Fr10m%3Ab08-%2Fmeasurements%2Freflectance%2Fr10m%3Ab04%29%2F%28%2Fmeasurements%2Freflectance%2Fr10m%3Ab08%2B%2Fmeasurements%2Freflectance%2Fr10m%3Ab04%29&rescale=-1,1&colormap_name=viridis
+
+http://127.0.0.1:8000/collections/eopf_geozarr/items/S1A_IW_GRDH_1SDV_20241206T180253_20241206T180318_056875_06FBFD_25AD/WebMercatorQuad/map.html?variables=%2FS01SIWGRD_20241206T180253_0025_A325_25AD_06FBFD_VH%2Fmeasurements%3Agrd&rescale=0%2C1
+
 
 */

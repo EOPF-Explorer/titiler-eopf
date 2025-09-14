@@ -60,6 +60,7 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
         consolidated=True,
         engine="zarr",
     )
+
     return ds
 
 
@@ -101,12 +102,12 @@ def _validate_zarr(ds: xarray.Dataset) -> bool:
         try:
             _ = next(
                 name
-                for name in ["lat", "latitude", "LAT", "LATITUDE", "Lat"]
+                for name in ["lat", "latitude", "LAT", "LATITUDE", "Lat", "azimuth_time"]
                 if name in ds.dims
             )
             _ = next(
                 name
-                for name in ["lon", "longitude", "LON", "LONGITUDE", "Lon"]
+                for name in ["lon", "longitude", "LON", "LONGITUDE", "Lon", "ground_range"]
                 if name in ds.dims
             )
         except StopIteration:
@@ -132,12 +133,12 @@ def _arrange_dims(da: xarray.DataArray) -> xarray.DataArray:
         try:
             latitude_var_name = next(
                 name
-                for name in ["lat", "latitude", "LAT", "LATITUDE", "Lat"]
+                for name in ["lat", "latitude", "LAT", "LATITUDE", "Lat", "azimuth_time"]
                 if name in da.dims
             )
             longitude_var_name = next(
                 name
-                for name in ["lon", "longitude", "LON", "LONGITUDE", "Lon"]
+                for name in ["lon", "longitude", "LON", "LONGITUDE", "Lon", "ground_range"]
                 if name in da.dims
             )
         except StopIteration as e:
@@ -322,6 +323,25 @@ class GeoZarrReader(BaseReader):
         else:
             ds = self.datatree[group].to_dataset()
 
+        if "azimuth_time" in ds.dims and "ground_range" in ds.dims:
+            ds.rio.set_spatial_dims(x_dim="ground_range", y_dim="azimuth_time", inplace=True)
+
+        if ds.rio.get_gcps():
+            transform, width, height = calculate_default_transform(
+                ds.rio.crs,
+                crs,
+                ds.rio.width,
+                ds.rio.height,
+                gcps=ds.rio.get_gcps(),
+            )
+            bounds = (
+                transform[2],
+                transform[5] + height * transform[4],
+                transform[2] + width * transform[0],
+                transform[5],
+            )
+            return bounds
+
         return transform_bounds(ds.rio.crs, crs, *ds.rio.bounds(), densify_pts=21)
 
     def _get_zoom(self, ds: xarray.Dataset) -> int:
@@ -329,13 +349,22 @@ class GeoZarrReader(BaseReader):
         crs = ds.rio.crs
         tms_crs = self.tms.rasterio_crs
         if crs != tms_crs:
-            transform, _, _ = calculate_default_transform(
-                crs,
-                tms_crs,
-                ds.rio.width,
-                ds.rio.height,
-                *ds.rio.bounds(),
-            )
+            if ds.rio.get_gcps():
+                transform, _, _ = calculate_default_transform(
+                    crs,
+                    tms_crs,
+                    ds.rio.width,
+                    ds.rio.height,
+                    gcps=ds.rio.get_gcps(),
+                )
+            else:
+                transform, _, _ = calculate_default_transform(
+                    crs,
+                    tms_crs,
+                    ds.rio.width,
+                    ds.rio.height,
+                    *ds.rio.bounds(),
+                )
         else:
             transform = ds.rio.transform()
 
@@ -353,10 +382,14 @@ class GeoZarrReader(BaseReader):
         else:
             ds = self.datatree[group].to_dataset()
 
+        if "azimuth_time" in ds.dims and "ground_range" in ds.dims:
+            ds.rio.set_spatial_dims(x_dim="ground_range", y_dim="azimuth_time", inplace=True)
+
         try:
             return self._get_zoom(ds)
-        except:  # noqa
+        except Exception as e:  # noqa
             print("error", ds)
+            print("error details:", e)
             pass
 
         return self.tms.minzoom
@@ -372,10 +405,14 @@ class GeoZarrReader(BaseReader):
         else:
             ds = self.datatree[group].to_dataset()
 
+        if "azimuth_time" in ds.dims and "ground_range" in ds.dims:
+            ds.rio.set_spatial_dims(x_dim="ground_range", y_dim="azimuth_time", inplace=True)
+
         try:
             return self._get_zoom(ds)
-        except:  # noqa
+        except Exception as e:  # noqa
             print("error", ds)
+            print("error details:", e)
             pass
 
         return self.tms.maxzoom
@@ -420,6 +457,20 @@ class GeoZarrReader(BaseReader):
             #         height = math.ceil(width * ratio)
             #     else:
             #         width = math.ceil(height / ratio)
+
+            dss = ds.to_dataset()
+            if dss.rio.get_gcps():
+                ms_crs = ds.rio.crs or ms_crs
+                transform, _, _ = calculate_default_transform(
+                    ms_crs,
+                    dst_crs or ms_crs,
+                    ds.rio.width,
+                    ds.rio.height,
+                    gcps=ds.rio.get_gcps(),
+                )
+                target_res = max(abs(transform[0]), abs(transform[4]))
+
+                scale = get_multiscale_level_with_gcp(ds, target_res)  # type: ignore
 
             if all([bounds, height, width, dst_crs]):
                 # Get the output resolution in the datatree CRS
