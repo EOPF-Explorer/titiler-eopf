@@ -51,6 +51,7 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
     if not parsed.scheme:
         src_path = str(Path(src_path).resolve())
         src_path = "file://" + src_path
+
     store = obstore.store.from_url(src_path)
     zarr_store = ObjectStore(store=store, read_only=True)
     ds = xarray.open_datatree(
@@ -238,6 +239,7 @@ class GeoZarrReader(BaseReader):
             self.height = ds.rio.height
             self.width = ds.rio.width
 
+            # Default to user input or Dataset min/max zoom
             self.minzoom = self.minzoom if self.minzoom is not None else self._minzoom
             self.maxzoom = self.maxzoom if self.maxzoom is not None else self._maxzoom
 
@@ -248,6 +250,7 @@ class GeoZarrReader(BaseReader):
             )
             self.bounds = (min(minx), min(miny), max(maxx), max(maxy))
 
+            # Default to user input or TMS min/max zoom
             self.minzoom = (
                 self.minzoom if self.minzoom is not None else self.tms.minzoom
             )
@@ -342,6 +345,7 @@ class GeoZarrReader(BaseReader):
         resolution = max(abs(transform[0]), abs(transform[4]))
         return self.tms.zoom_for_res(resolution)
 
+    # TODO: add cache
     def get_minzoom(self, group: str) -> int:
         """Get MinZoom for a Group."""
         if "multiscales" in self.datatree[group].attrs:
@@ -361,6 +365,7 @@ class GeoZarrReader(BaseReader):
 
         return self.tms.minzoom
 
+    # TODO: add cache
     def get_maxzoom(self, group: str) -> int:
         """Get MaxZoom for a Group."""
         if "multiscales" in self.datatree[group].attrs:
@@ -603,6 +608,8 @@ class GeoZarrReader(BaseReader):
                 self._convert_expression_from_index(b) for b in img.band_names
             ]
 
+        img.assets = [self.input]
+
         return img
 
     def part(  # type: ignore
@@ -680,6 +687,8 @@ class GeoZarrReader(BaseReader):
             pt.band_names = [
                 self._convert_expression_from_index(b) for b in pt.band_names
             ]
+
+        pt.assets = [self.input]
 
         return pt
 
