@@ -7,12 +7,11 @@ import re
 import warnings
 from functools import cache, cached_property
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Optional, Union
+from typing import Any, Callable, Dict, List, Literal, Union
 from urllib.parse import urlparse
 
 import attr
 import obstore
-import rasterio
 import xarray
 from morecantile import Tile, TileMatrixSet
 from rasterio.crs import CRS
@@ -98,6 +97,7 @@ def get_multiscale_level(
     # Default level is the first ms level
     return ms_resolutions[0][0]
 
+
 def get_multiscale_level_with_gcp(
     dt: xarray.DataTree,
     target_res: float,
@@ -130,12 +130,26 @@ def _validate_zarr(ds: xarray.Dataset) -> bool:
         try:
             _ = next(
                 name
-                for name in ["lat", "latitude", "LAT", "LATITUDE", "Lat", "azimuth_time"]
+                for name in [
+                    "lat",
+                    "latitude",
+                    "LAT",
+                    "LATITUDE",
+                    "Lat",
+                    "azimuth_time",
+                ]
                 if name in ds.dims
             )
             _ = next(
                 name
-                for name in ["lon", "longitude", "LON", "LONGITUDE", "Lon", "ground_range"]
+                for name in [
+                    "lon",
+                    "longitude",
+                    "LON",
+                    "LONGITUDE",
+                    "Lon",
+                    "ground_range",
+                ]
                 if name in ds.dims
             )
         except StopIteration:
@@ -158,10 +172,12 @@ def _arrange_dims(da: xarray.DataArray, gcps: Any = None) -> xarray.DataArray:
 
     """
     transpose = False
-    
+
     if gcps:
         da = da.rio.write_crs(da.rio.crs or "epsg:4326")
-        da = da.rio.set_spatial_dims(x_dim="ground_range", y_dim="azimuth_time", inplace=False)
+        da = da.rio.set_spatial_dims(
+            x_dim="ground_range", y_dim="azimuth_time", inplace=False
+        )
         gcps_interp = gcps.interp_like(da)
         da.assign_coords({"y": gcps_interp.latitude, "x": gcps_interp.longitude})
 
@@ -169,17 +185,31 @@ def _arrange_dims(da: xarray.DataArray, gcps: Any = None) -> xarray.DataArray:
         try:
             latitude_var_name = next(
                 name
-                for name in ["lat", "latitude", "LAT", "LATITUDE", "Lat", "azimuth_time"]
+                for name in [
+                    "lat",
+                    "latitude",
+                    "LAT",
+                    "LATITUDE",
+                    "Lat",
+                    "azimuth_time",
+                ]
                 if name in da.dims
             )
             longitude_var_name = next(
                 name
-                for name in ["lon", "longitude", "LON", "LONGITUDE", "Lon", "ground_range"]
+                for name in [
+                    "lon",
+                    "longitude",
+                    "LON",
+                    "LONGITUDE",
+                    "Lon",
+                    "ground_range",
+                ]
                 if name in da.dims
             )
         except StopIteration as e:
             raise ValueError(f"Couldn't find X/Y dimensions in {da.name}") from e
-        
+
         transpose = True
 
         da = da.rename({latitude_var_name: "y", longitude_var_name: "x"})
@@ -365,7 +395,9 @@ class GeoZarrReader(BaseReader):
             ds = self.datatree[group].to_dataset()
 
         if "azimuth_time" in ds.dims and "ground_range" in ds.dims:
-            ds.rio.set_spatial_dims(x_dim="ground_range", y_dim="azimuth_time", inplace=True)
+            ds.rio.set_spatial_dims(
+                x_dim="ground_range", y_dim="azimuth_time", inplace=True
+            )
 
         if ds.rio.get_gcps():
             transform, width, height = calculate_default_transform(
@@ -425,7 +457,9 @@ class GeoZarrReader(BaseReader):
             ds = self.datatree[group].to_dataset()
 
         if "azimuth_time" in ds.dims and "ground_range" in ds.dims:
-            ds.rio.set_spatial_dims(x_dim="ground_range", y_dim="azimuth_time", inplace=True)
+            ds.rio.set_spatial_dims(
+                x_dim="ground_range", y_dim="azimuth_time", inplace=True
+            )
 
         try:
             return self._get_zoom(ds)
@@ -449,7 +483,9 @@ class GeoZarrReader(BaseReader):
             ds = self.datatree[group].to_dataset()
 
         if "azimuth_time" in ds.dims and "ground_range" in ds.dims:
-            ds.rio.set_spatial_dims(x_dim="ground_range", y_dim="azimuth_time", inplace=True)
+            ds.rio.set_spatial_dims(
+                x_dim="ground_range", y_dim="azimuth_time", inplace=True
+            )
 
         try:
             return self._get_zoom(ds)
@@ -481,7 +517,7 @@ class GeoZarrReader(BaseReader):
                 UserWarning,
                 stacklevel=2,
             )
-            
+
         gcps = None
 
         ds = self.datatree[group]
@@ -503,10 +539,12 @@ class GeoZarrReader(BaseReader):
             #     else:
             #         width = math.ceil(height / ratio)
 
-            dss = ds[scale].to_dataset() # we use the first scale to check for GCPs
+            dss = ds[scale].to_dataset()  # we use the first scale to check for GCPs
             if dss.rio.get_gcps():
                 if "azimuth_time" in dss.dims and "ground_range" in dss.dims:
-                    dss.rio.set_spatial_dims(x_dim="ground_range", y_dim="azimuth_time", inplace=True)
+                    dss.rio.set_spatial_dims(
+                        x_dim="ground_range", y_dim="azimuth_time", inplace=True
+                    )
                 ms_crs = dss.rio.crs or ms_crs
                 transform, _, _ = calculate_default_transform(
                     ms_crs,
