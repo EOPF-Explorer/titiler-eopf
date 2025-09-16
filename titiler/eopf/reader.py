@@ -7,14 +7,16 @@ import re
 import warnings
 from functools import cache, cached_property
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Union
+from typing import Any, Callable, Literal, Union
 from urllib.parse import urlparse
 
 import attr
+import numpy
 import obstore
 import xarray
 from morecantile import Tile, TileMatrixSet
 from rasterio.crs import CRS
+from rasterio.transform import array_bounds
 from rasterio.warp import calculate_default_transform, transform_bounds
 from rio_tiler.constants import WEB_MERCATOR_TMS, WGS84_CRS
 from rio_tiler.errors import (
@@ -66,14 +68,14 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
 
 
 def get_multiscale_level(
-    dt: xarray.DataTree,
+    multiscales: dict,
     target_res: float,
     zoom_level_strategy: Literal["AUTO", "LOWER", "UPPER"] = "AUTO",
 ) -> str:
     """Return the multiscale level corresponding to the desired resolution."""
     ms_resolutions = [
         (mt["id"], mt["cellSize"])
-        for mt in dt.attrs["multiscales"]["tile_matrix_set"]["tileMatrices"]
+        for mt in multiscales["tile_matrix_set"]["tileMatrices"]
     ]
     if len(ms_resolutions) == 1:
         return ms_resolutions[0][0]
@@ -95,33 +97,6 @@ def get_multiscale_level(
             return available_resolutions[i][0]
 
     # Default level is the first ms level
-    return ms_resolutions[0][0]
-
-
-def get_multiscale_level_with_gcp(
-    dt: xarray.DataTree,
-    target_res: float,
-    zoom_level_strategy: Literal["AUTO", "LOWER", "UPPER"] = "AUTO",
-) -> str:
-    """Return the multiscale level corresponding to the desired resolution, considering GCPs."""
-    ms_resolutions = [
-        (mt["id"], mt["cellSize"])
-        for mt in dt.attrs["multiscales"]["tile_matrix_set"]["tileMatrices"]
-    ]
-    if len(ms_resolutions) == 1:
-        return ms_resolutions[0][0]
-
-    percentage = {"AUTO": 50, "LOWER": 100, "UPPER": 0}.get(zoom_level_strategy, 50)
-
-    available_resolutions = sorted(ms_resolutions, key=lambda x: x[1], reverse=True)
-
-    for i in range(0, len(available_resolutions) - 1):
-        _, res_current = available_resolutions[i]
-        _, res_higher = available_resolutions[i + 1]
-        threshold = res_higher - (res_higher - res_current) * (percentage / 100.0)
-        if target_res > threshold or target_res == res_current:
-            return available_resolutions[i][0]
-
     return ms_resolutions[0][0]
 
 
@@ -162,7 +137,9 @@ def _validate_zarr(ds: xarray.Dataset) -> bool:
     return True
 
 
-def _arrange_dims(da: xarray.DataArray, gcps: Any = None) -> xarray.DataArray:
+def _arrange_dims(
+    da: xarray.DataArray,
+) -> xarray.DataArray:
     """Arrange coordinates and time dimensions.
 
     An rioxarray.exceptions.InvalidDimensionOrder error is raised if the coordinates are not in the correct order time, y, and x.
@@ -171,17 +148,7 @@ def _arrange_dims(da: xarray.DataArray, gcps: Any = None) -> xarray.DataArray:
     We conform to using x and y as the spatial dimension names..
 
     """
-    transpose = False
-
-    if gcps:
-        da = da.rio.write_crs(da.rio.crs or "epsg:4326")
-        da = da.rio.set_spatial_dims(
-            x_dim="ground_range", y_dim="azimuth_time", inplace=False
-        )
-        gcps_interp = gcps.interp_like(da)
-        da.assign_coords({"y": gcps_interp.latitude, "x": gcps_interp.longitude})
-
-    elif "x" not in da.dims and "y" not in da.dims:
+    if "x" not in da.dims and "y" not in da.dims:
         try:
             latitude_var_name = next(
                 name
@@ -210,18 +177,15 @@ def _arrange_dims(da: xarray.DataArray, gcps: Any = None) -> xarray.DataArray:
         except StopIteration as e:
             raise ValueError(f"Couldn't find X/Y dimensions in {da.name}") from e
 
-        transpose = True
-
         da = da.rename({latitude_var_name: "y", longitude_var_name: "x"})
 
     if "TIME" in da.dims:
         da = da.rename({"TIME": "time"})
 
-    if transpose:
-        if extra_dims := [d for d in da.dims if d not in ["x", "y"]]:
-            da = da.transpose(*extra_dims, "y", "x")
-        else:
-            da = da.transpose("y", "x")
+    if extra_dims := [d for d in da.dims if d not in ["x", "y"]]:
+        da = da.transpose(*extra_dims, "y", "x")
+    else:
+        da = da.transpose("y", "x")
 
     # If min/max values are stored in `valid_range` we add them in `valid_min/valid_max`
     vmin, vmax = da.attrs.get("valid_min"), da.attrs.get("valid_max")
@@ -233,7 +197,7 @@ def _arrange_dims(da: xarray.DataArray, gcps: Any = None) -> xarray.DataArray:
     crs = da.rio.crs or "epsg:4326"
     da = da.rio.write_crs(crs)
 
-    if transpose and crs == "epsg:4326" and (da.x > 180).any():
+    if crs == "epsg:4326" and (da.x > 180).any():
         # Adjust the longitude coordinates to the -180 to 180 range
         da = da.assign_coords(x=(da.x + 180) % 360 - 180)
 
@@ -268,12 +232,12 @@ class GeoZarrReader(BaseReader):
     maxzoom: int = attr.ib(default=None)
 
     opener: Callable[..., xarray.DataTree] = attr.ib(default=open_dataset)
-    opener_options: Dict = attr.ib(factory=dict)
+    opener_options: dict = attr.ib(factory=dict)
 
     _ctx_stack: contextlib.ExitStack = attr.ib(init=False, factory=contextlib.ExitStack)
 
-    groups: List[str] = attr.ib(init=False)
-    variables: List[str] = attr.ib(init=False)
+    groups: list[str] = attr.ib(init=False)
+    variables: list[str] = attr.ib(init=False)
 
     def __attrs_post_init__(self):
         """Set bounds and CRS."""
@@ -335,10 +299,10 @@ class GeoZarrReader(BaseReader):
         """Support using with Context Managers."""
         self.close()
 
-    def _get_groups(self) -> List[str]:
+    def _get_groups(self) -> list[str]:
         """return groups within the datatree."""
-        groups: List[str] = []
-        ms_groups: List[str] = []
+        groups: list[str] = []
+        ms_groups: list[str] = []
 
         for g in self.datatree.groups:
             if "multiscales" in self.datatree[g].attrs:
@@ -364,9 +328,9 @@ class GeoZarrReader(BaseReader):
 
         return groups
 
-    def _get_variables(self) -> List[str]:
+    def _get_variables(self) -> list[str]:
         """Return available variables for a group."""
-        variables: List[str] = []
+        variables: list[str] = []
 
         for g in self.groups:
             # Select a group
@@ -399,47 +363,53 @@ class GeoZarrReader(BaseReader):
                 x_dim="ground_range", y_dim="azimuth_time", inplace=True
             )
 
-        if ds.rio.get_gcps():
+        ds_crs = ds.rio.crs
+        bounds = ds.rio.bounds()
+        if gcps := ds.rio.get_gcps():
+            # NOTE: Calculate transform, shape and bounds of the GCPS Warped Dataset
             transform, width, height = calculate_default_transform(
-                ds.rio.crs,
-                crs,
+                ds_crs,
+                ds_crs,
                 ds.rio.width,
                 ds.rio.height,
-                gcps=ds.rio.get_gcps(),
+                gcps=gcps,
             )
-            bounds = (
-                transform[2],
-                transform[5] + height * transform[4],
-                transform[2] + width * transform[0],
-                transform[5],
-            )
+            bounds = array_bounds(height, width, transform)
+
+        if ds_crs == crs:
             return bounds
 
-        return transform_bounds(ds.rio.crs, crs, *ds.rio.bounds(), densify_pts=21)
+        return transform_bounds(ds_crs, crs, *bounds, densify_pts=21)
 
     def _get_zoom(self, ds: xarray.Dataset) -> int:
         """Get MaxZoom for a Group."""
         crs = ds.rio.crs
         tms_crs = self.tms.rasterio_crs
+        bounds = ds.rio.bounds()
+
+        transform = ds.rio.transform()
+        width = ds.rio.width
+        height = ds.rio.height
+        gcps = ds.rio.get_gcps()
+        if gcps := ds.rio.get_gcps():
+            # NOTE: Calculate transform, shape and bounds of the GCPS Warped Dataset
+            transform, width, height = calculate_default_transform(
+                crs,
+                crs,
+                ds.rio.width,
+                ds.rio.height,
+                gcps=gcps,
+            )
+            bounds = array_bounds(height, width, transform)
+
         if crs != tms_crs:
-            if ds.rio.get_gcps():
-                transform, _, _ = calculate_default_transform(
-                    crs,
-                    tms_crs,
-                    ds.rio.width,
-                    ds.rio.height,
-                    gcps=ds.rio.get_gcps(),
-                )
-            else:
-                transform, _, _ = calculate_default_transform(
-                    crs,
-                    tms_crs,
-                    ds.rio.width,
-                    ds.rio.height,
-                    *ds.rio.bounds(),
-                )
-        else:
-            transform = ds.rio.transform()
+            transform, _, _ = calculate_default_transform(
+                crs,
+                tms_crs,
+                width,
+                height,
+                *bounds,
+            )
 
         resolution = max(abs(transform[0]), abs(transform[4]))
         return self.tms.zoom_for_res(resolution)
@@ -501,7 +471,7 @@ class GeoZarrReader(BaseReader):
         group: str,
         variable: str,
         *,
-        sel: List[str] | None = None,
+        sel: list[str] | None = None,
         method: sel_methods | None = None,
         # MultiScale Selection
         bounds: BBox | None = None,
@@ -517,8 +487,6 @@ class GeoZarrReader(BaseReader):
                 UserWarning,
                 stacklevel=2,
             )
-
-        gcps = None
 
         ds = self.datatree[group]
         if "multiscales" in ds.attrs:
@@ -539,36 +507,15 @@ class GeoZarrReader(BaseReader):
             #     else:
             #         width = math.ceil(height / ratio)
 
-            dss = ds[scale].to_dataset()  # we use the first scale to check for GCPs
-            if dss.rio.get_gcps():
-                if "azimuth_time" in dss.dims and "ground_range" in dss.dims:
-                    dss.rio.set_spatial_dims(
-                        x_dim="ground_range", y_dim="azimuth_time", inplace=True
-                    )
-                ms_crs = dss.rio.crs or ms_crs
-                transform, _, _ = calculate_default_transform(
-                    ms_crs,
-                    dst_crs or ms_crs,
-                    dss.rio.width,
-                    dss.rio.height,
-                    gcps=dss.rio.get_gcps(),
-                )
-                target_res = max(abs(transform[0]), abs(transform[4]))
-
-                scale = get_multiscale_level(ds, target_res)  # type: ignore
-
-            elif all([bounds, height, width, dst_crs]):
-                # Get the output resolution in the datatree CRS
+            if all([bounds, height, width, dst_crs]):
+                # Get the target resolution in the datatree CRS
                 dst_transform, _, _ = calculate_default_transform(
                     dst_crs, ms_crs, width, height, *bounds
                 )
-                target_res = dst_transform.a
-
-                scale = get_multiscale_level(ds, target_res)  # type: ignore
+                scale = get_multiscale_level(ds.attrs["multiscales"], dst_transform.a)
 
             # Select the multiscale group and variable
             da = ds[scale][variable]
-            gcps = self.datatree[group.split("/")[1] + "/conditions/gcp"].to_dataset()
 
             # NOTE: Make sure the multiscale levels have the same CRS
             # ref: https://github.com/EOPF-Explorer/data-model/issues/12
@@ -578,8 +525,13 @@ class GeoZarrReader(BaseReader):
             # Select Variable (xarray.DataArray)
             da = ds[variable]
 
+        if da.rio.get_gcps():
+            ds = ds.rename({"ground_range": "x", "azimuth_time": "y"})
+            ds["x"] = numpy.arange(ds.shape[1])
+            ds["y"] = numpy.arange(ds.shape[0])
+
         if sel:
-            _idx: Dict[str, List] = {}
+            _idx: dict[str, list] = {}
             for s in sel:
                 val: Union[str, slice]
                 dim, val = s.split("=")
@@ -596,7 +548,7 @@ class GeoZarrReader(BaseReader):
             sel_idx = {k: v[0] if len(v) < 2 else v for k, v in _idx.items()}
             da = da.sel(sel_idx, method=method)
 
-        da = _arrange_dims(da, gcps=gcps)
+        da = _arrange_dims(da)
 
         assert len(da.dims) in [
             2,
@@ -606,10 +558,10 @@ class GeoZarrReader(BaseReader):
         return da
 
     @cached_property
-    def _variable_idx(self) -> Dict[str, str]:
+    def _variable_idx(self) -> dict[str, str]:
         return {v: f"Var{ix}" for ix, v in enumerate(self.variables)}
 
-    def parse_expression(self, expression: str) -> List[str]:
+    def parse_expression(self, expression: str) -> list[str]:
         """Parse rio-tiler band math expression."""
         input_assets = "|".join(re.escape(key) for key in self.variables)
         _re = re.compile(rf"(?<!\w)({input_assets})(?!\w)")
@@ -635,10 +587,10 @@ class GeoZarrReader(BaseReader):
     def info(  # type: ignore
         self,
         *,
-        variables: List[str] | None = None,
-        sel: List[str] | None = None,
+        variables: list[str] | None = None,
+        sel: list[str] | None = None,
         method: sel_methods | None = None,
-    ) -> Dict[str, Info]:
+    ) -> dict[str, Info]:
         """Return xarray.DataArray info."""
         variables = variables or self.variables
 
@@ -656,12 +608,12 @@ class GeoZarrReader(BaseReader):
     def statistics(  # type: ignore
         self,
         *args: Any,
-        variables: List[str] | None = None,
+        variables: list[str] | None = None,
         expression: str | None = None,
-        sel: List[str] | None = None,
+        sel: list[str] | None = None,
         method: sel_methods | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Dict[str, BandStatistics]]:
+    ) -> dict[str, dict[str, BandStatistics]]:
         """Return statistics from a dataset."""
         raise NotImplementedError
 
@@ -671,10 +623,10 @@ class GeoZarrReader(BaseReader):
         tile_y: int,
         tile_z: int,
         *args: Any,
-        variables: List[str] | None = None,
+        variables: list[str] | None = None,
         expression: str | None = None,
         tilesize: int = 256,
-        sel: List[str] | None = None,
+        sel: list[str] | None = None,
         method: sel_methods | None = None,
         **kwargs: Any,
     ) -> ImageData:
@@ -682,7 +634,7 @@ class GeoZarrReader(BaseReader):
         tile_bounds = tuple(self.tms.xy_bounds(Tile(x=tile_x, y=tile_y, z=tile_z)))
         dst_crs = self.tms.rasterio_crs
 
-        img_stack: List[ImageData] = []
+        img_stack: list[ImageData] = []
 
         if variables and expression:
             warnings.warn(
@@ -747,9 +699,9 @@ class GeoZarrReader(BaseReader):
     def part(  # type: ignore
         self,
         *args: Any,
-        variables: List[str] | None = None,
+        variables: list[str] | None = None,
         expression: str | None = None,
-        sel: List[str] | None = None,
+        sel: list[str] | None = None,
         method: sel_methods | None = None,
         **kwargs: Any,
     ) -> ImageData:
@@ -759,10 +711,10 @@ class GeoZarrReader(BaseReader):
     def preview(  # type: ignore
         self,
         *args: Any,
-        variables: List[str] | None = None,
+        variables: list[str] | None = None,
         expression: str | None = None,
         max_size: int = 1024,
-        sel: List[str] | None = None,
+        sel: list[str] | None = None,
         method: sel_methods | None = None,
         **kwargs: Any,
     ) -> ImageData:
@@ -772,14 +724,14 @@ class GeoZarrReader(BaseReader):
     def point(  # type: ignore
         self,
         *args: Any,
-        variables: List[str] | None = None,
+        variables: list[str] | None = None,
         expression: str | None = None,
-        sel: List[str] | None = None,
+        sel: list[str] | None = None,
         method: sel_methods | None = None,
         **kwargs: Any,
     ) -> PointData:
         """Read a pixel value from a dataset."""
-        pts_stack: List[PointData] = []
+        pts_stack: list[PointData] = []
 
         if variables and expression:
             warnings.warn(
@@ -827,9 +779,9 @@ class GeoZarrReader(BaseReader):
     def feature(  # type: ignore
         self,
         *args: Any,
-        variables: List[str] | None = None,
+        variables: list[str] | None = None,
         expression: str | None = None,
-        sel: List[str] | None = None,
+        sel: list[str] | None = None,
         method: sel_methods | None = None,
         **kwargs: Any,
     ) -> ImageData:
