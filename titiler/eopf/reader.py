@@ -61,6 +61,7 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
         consolidated=True,
         engine="zarr",
     )
+
     return ds
 
 
@@ -97,17 +98,58 @@ def get_multiscale_level(
     return ms_resolutions[0][0]
 
 
+def get_multiscale_level_with_gcp(
+    dt: xarray.DataTree,
+    target_res: float,
+    zoom_level_strategy: Literal["AUTO", "LOWER", "UPPER"] = "AUTO",
+) -> str:
+    """Return the multiscale level corresponding to the desired resolution, considering GCPs."""
+    ms_resolutions = [
+        (mt["id"], mt["cellSize"])
+        for mt in dt.attrs["multiscales"]["tile_matrix_set"]["tileMatrices"]
+    ]
+    if len(ms_resolutions) == 1:
+        return ms_resolutions[0][0]
+
+    percentage = {"AUTO": 50, "LOWER": 100, "UPPER": 0}.get(zoom_level_strategy, 50)
+
+    available_resolutions = sorted(ms_resolutions, key=lambda x: x[1], reverse=True)
+
+    for i in range(0, len(available_resolutions) - 1):
+        _, res_current = available_resolutions[i]
+        _, res_higher = available_resolutions[i + 1]
+        threshold = res_higher - (res_higher - res_current) * (percentage / 100.0)
+        if target_res > threshold or target_res == res_current:
+            return available_resolutions[i][0]
+
+    return ms_resolutions[0][0]
+
+
 def _validate_zarr(ds: xarray.Dataset) -> bool:
     if "x" not in ds.dims and "y" not in ds.dims:
         try:
             _ = next(
                 name
-                for name in ["lat", "latitude", "LAT", "LATITUDE", "Lat"]
+                for name in [
+                    "lat",
+                    "latitude",
+                    "LAT",
+                    "LATITUDE",
+                    "Lat",
+                    "azimuth_time",
+                ]
                 if name in ds.dims
             )
             _ = next(
                 name
-                for name in ["lon", "longitude", "LON", "LONGITUDE", "Lon"]
+                for name in [
+                    "lon",
+                    "longitude",
+                    "LON",
+                    "LONGITUDE",
+                    "Lon",
+                    "ground_range",
+                ]
                 if name in ds.dims
             )
         except StopIteration:
@@ -120,7 +162,7 @@ def _validate_zarr(ds: xarray.Dataset) -> bool:
     return True
 
 
-def _arrange_dims(da: xarray.DataArray) -> xarray.DataArray:
+def _arrange_dims(da: xarray.DataArray, gcps: Any = None) -> xarray.DataArray:
     """Arrange coordinates and time dimensions.
 
     An rioxarray.exceptions.InvalidDimensionOrder error is raised if the coordinates are not in the correct order time, y, and x.
@@ -129,30 +171,57 @@ def _arrange_dims(da: xarray.DataArray) -> xarray.DataArray:
     We conform to using x and y as the spatial dimension names..
 
     """
-    if "x" not in da.dims and "y" not in da.dims:
+    transpose = False
+
+    if gcps:
+        da = da.rio.write_crs(da.rio.crs or "epsg:4326")
+        da = da.rio.set_spatial_dims(
+            x_dim="ground_range", y_dim="azimuth_time", inplace=False
+        )
+        gcps_interp = gcps.interp_like(da)
+        da.assign_coords({"y": gcps_interp.latitude, "x": gcps_interp.longitude})
+
+    elif "x" not in da.dims and "y" not in da.dims:
         try:
             latitude_var_name = next(
                 name
-                for name in ["lat", "latitude", "LAT", "LATITUDE", "Lat"]
+                for name in [
+                    "lat",
+                    "latitude",
+                    "LAT",
+                    "LATITUDE",
+                    "Lat",
+                    "azimuth_time",
+                ]
                 if name in da.dims
             )
             longitude_var_name = next(
                 name
-                for name in ["lon", "longitude", "LON", "LONGITUDE", "Lon"]
+                for name in [
+                    "lon",
+                    "longitude",
+                    "LON",
+                    "LONGITUDE",
+                    "Lon",
+                    "ground_range",
+                ]
                 if name in da.dims
             )
         except StopIteration as e:
             raise ValueError(f"Couldn't find X/Y dimensions in {da.name}") from e
+
+        transpose = True
 
         da = da.rename({latitude_var_name: "y", longitude_var_name: "x"})
 
     if "TIME" in da.dims:
         da = da.rename({"TIME": "time"})
 
-    if extra_dims := [d for d in da.dims if d not in ["x", "y"]]:
-        da = da.transpose(*extra_dims, "y", "x")
-    else:
-        da = da.transpose("y", "x")
+    if transpose:
+        if extra_dims := [d for d in da.dims if d not in ["x", "y"]]:
+            da = da.transpose(*extra_dims, "y", "x")
+        else:
+            da = da.transpose("y", "x")
 
     # If min/max values are stored in `valid_range` we add them in `valid_min/valid_max`
     vmin, vmax = da.attrs.get("valid_min"), da.attrs.get("valid_max")
@@ -164,7 +233,7 @@ def _arrange_dims(da: xarray.DataArray) -> xarray.DataArray:
     crs = da.rio.crs or "epsg:4326"
     da = da.rio.write_crs(crs)
 
-    if crs == "epsg:4326" and (da.x > 180).any():
+    if transpose and crs == "epsg:4326" and (da.x > 180).any():
         # Adjust the longitude coordinates to the -180 to 180 range
         da = da.assign_coords(x=(da.x + 180) % 360 - 180)
 
@@ -325,6 +394,27 @@ class GeoZarrReader(BaseReader):
         else:
             ds = self.datatree[group].to_dataset()
 
+        if "azimuth_time" in ds.dims and "ground_range" in ds.dims:
+            ds.rio.set_spatial_dims(
+                x_dim="ground_range", y_dim="azimuth_time", inplace=True
+            )
+
+        if ds.rio.get_gcps():
+            transform, width, height = calculate_default_transform(
+                ds.rio.crs,
+                crs,
+                ds.rio.width,
+                ds.rio.height,
+                gcps=ds.rio.get_gcps(),
+            )
+            bounds = (
+                transform[2],
+                transform[5] + height * transform[4],
+                transform[2] + width * transform[0],
+                transform[5],
+            )
+            return bounds
+
         return transform_bounds(ds.rio.crs, crs, *ds.rio.bounds(), densify_pts=21)
 
     def _get_zoom(self, ds: xarray.Dataset) -> int:
@@ -332,13 +422,22 @@ class GeoZarrReader(BaseReader):
         crs = ds.rio.crs
         tms_crs = self.tms.rasterio_crs
         if crs != tms_crs:
-            transform, _, _ = calculate_default_transform(
-                crs,
-                tms_crs,
-                ds.rio.width,
-                ds.rio.height,
-                *ds.rio.bounds(),
-            )
+            if ds.rio.get_gcps():
+                transform, _, _ = calculate_default_transform(
+                    crs,
+                    tms_crs,
+                    ds.rio.width,
+                    ds.rio.height,
+                    gcps=ds.rio.get_gcps(),
+                )
+            else:
+                transform, _, _ = calculate_default_transform(
+                    crs,
+                    tms_crs,
+                    ds.rio.width,
+                    ds.rio.height,
+                    *ds.rio.bounds(),
+                )
         else:
             transform = ds.rio.transform()
 
@@ -357,10 +456,16 @@ class GeoZarrReader(BaseReader):
         else:
             ds = self.datatree[group].to_dataset()
 
+        if "azimuth_time" in ds.dims and "ground_range" in ds.dims:
+            ds.rio.set_spatial_dims(
+                x_dim="ground_range", y_dim="azimuth_time", inplace=True
+            )
+
         try:
             return self._get_zoom(ds)
-        except:  # noqa
+        except Exception as e:  # noqa
             print("error", ds)
+            print("error details:", e)
             pass
 
         return self.tms.minzoom
@@ -377,10 +482,16 @@ class GeoZarrReader(BaseReader):
         else:
             ds = self.datatree[group].to_dataset()
 
+        if "azimuth_time" in ds.dims and "ground_range" in ds.dims:
+            ds.rio.set_spatial_dims(
+                x_dim="ground_range", y_dim="azimuth_time", inplace=True
+            )
+
         try:
             return self._get_zoom(ds)
-        except:  # noqa
+        except Exception as e:  # noqa
             print("error", ds)
+            print("error details:", e)
             pass
 
         return self.tms.maxzoom
@@ -407,6 +518,8 @@ class GeoZarrReader(BaseReader):
                 stacklevel=2,
             )
 
+        gcps = None
+
         ds = self.datatree[group]
         if "multiscales" in ds.attrs:
             # Default to first scale
@@ -426,7 +539,25 @@ class GeoZarrReader(BaseReader):
             #     else:
             #         width = math.ceil(height / ratio)
 
-            if all([bounds, height, width, dst_crs]):
+            dss = ds[scale].to_dataset()  # we use the first scale to check for GCPs
+            if dss.rio.get_gcps():
+                if "azimuth_time" in dss.dims and "ground_range" in dss.dims:
+                    dss.rio.set_spatial_dims(
+                        x_dim="ground_range", y_dim="azimuth_time", inplace=True
+                    )
+                ms_crs = dss.rio.crs or ms_crs
+                transform, _, _ = calculate_default_transform(
+                    ms_crs,
+                    dst_crs or ms_crs,
+                    dss.rio.width,
+                    dss.rio.height,
+                    gcps=dss.rio.get_gcps(),
+                )
+                target_res = max(abs(transform[0]), abs(transform[4]))
+
+                scale = get_multiscale_level(ds, target_res)  # type: ignore
+
+            elif all([bounds, height, width, dst_crs]):
                 # Get the output resolution in the datatree CRS
                 dst_transform, _, _ = calculate_default_transform(
                     dst_crs, ms_crs, width, height, *bounds
@@ -437,6 +568,7 @@ class GeoZarrReader(BaseReader):
 
             # Select the multiscale group and variable
             da = ds[scale][variable]
+            gcps = self.datatree[group.split("/")[1] + "/conditions/gcp"].to_dataset()
 
             # NOTE: Make sure the multiscale levels have the same CRS
             # ref: https://github.com/EOPF-Explorer/data-model/issues/12
@@ -464,7 +596,7 @@ class GeoZarrReader(BaseReader):
             sel_idx = {k: v[0] if len(v) < 2 else v for k, v in _idx.items()}
             da = da.sel(sel_idx, method=method)
 
-        da = _arrange_dims(da)
+        da = _arrange_dims(da, gcps=gcps)
 
         assert len(da.dims) in [
             2,
