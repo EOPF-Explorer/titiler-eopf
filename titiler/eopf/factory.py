@@ -107,7 +107,8 @@ class TilerFactory(BaseTilerFactory):
             with rasterio.Env(**env):
                 logger.info(f"opening data with reader: {self.reader}")
                 with self.reader(src_path, **reader_params.as_dict()) as src_dst:
-                    return src_dst.info(**variables_params.as_dict())
+                    variables = variables_params.variables or src_dst.variables
+                    return src_dst.info(variables=variables)
 
         @self.router.get(
             "/info.geojson",
@@ -151,7 +152,7 @@ class TilerFactory(BaseTilerFactory):
                         type="Feature",
                         bbox=bounds,
                         geometry=geometry,
-                        properties=src_dst.info(**variables_params.as_dict()),
+                        properties=src_dst.info(variables=variables),
                     )
 
     ############################################################################

@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8' />
+    <title>TiTiler EOPF Viewer</title>
+    <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"
+            integrity="sha384-d7ZDjW8dICoRWC3wnExUiOx1CgEcPFEPJmTdIo93yyxQLAUbUwa6yKg3tlACCOMf"
+            crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css"
+          integrity="sha384-g0Ap4cGP18FAKniFM6i06oyjTpBYleD9hZcGyVnlsc1JFbfedDo1Oqb9qxrxVB3a" crossorigin="anonymous"/>
+
+    <link rel="stylesheet" href="https://api.mapbox.com/mapbox-assembly/v0.23.2/assembly.min.css"
+          integrity="sha384-J8dqIWgJSfbM291RNLiN7cjnxOqlHjAWfkLu/3HiuC1pJLq9ZCYiigcknWfCYi+h" crossorigin="anonymous"/>
+    <script src="https://api.mapbox.com/mapbox-assembly/v0.23.2/assembly.js"
+            integrity="sha384-cARSC/qj9L62maU7YhlT+Ca2yHyUEEnWvMVCilUdW02txMg0Iynxz3gMsvVpV9RG"
+            crossorigin="anonymous"></script>
+    <style>
+      body { margin:0; padding:0; width:100%; height:100%;}
+      #map { position:absolute; top:0; bottom:0; width:100%; }
+      .zoom-info {
+        z-index: 10;
+        position: absolute;
+        bottom: 17px;
+        right: 0;
+        padding: 5px;
+        width: auto;
+        height: auto;
+        font-size: 12px;
+        color: #000;
+      }
+      .loading-map {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        color: #FFF;
+        background-color: #000;
+        text-align: center;
+        opacity: 0.5;
+        font-size: 45px;
+      }
+      .loading-map.off {
+        opacity: 0;
+        -o-transition: all .5s ease;
+        -webkit-transition: all .5s ease;
+        -moz-transition: all .5s ease;
+        -ms-transition: all .5s ease;
+        transition: all ease .5s;
+        visibility: hidden;
+      }
+      .middle-center {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+      }
+
+      .middle-center * {
+        display: block;
+        padding: 5px;
+      }
+
+      #menu {
+        left: 0;
+        top: 0;
+        -o-transition: all .5s ease;
+        -webkit-transition: all .5s ease;
+        -moz-transition: all .5s ease;
+        -ms-transition: all .5s ease;
+        transition: all ease .5s;
+      }
+
+      #menu.off {
+        left: -360px;
+        -o-transition: all .5s ease;
+        -webkit-transition: all .5s ease;
+        -moz-transition: all .5s ease;
+        -ms-transition: all .5s ease;
+        transition: all ease .5s;
+      }
+      #toolbar {
+        height: 35px;
+      }
+      #toolbar li {
+        display: block;
+        color: #fff;
+        background-color: #556671;
+        font-weight: 700;
+        font-size: 12px;
+        padding: 5px;
+        height: 100%;
+        width: 100%;
+        text-transform: uppercase;
+        text-align: center;
+        text-decoration: none;
+        outline: 0;
+        cursor: pointer;
+        -webkit-touch-callout: none;
+          -webkit-user-select: none;
+            -moz-user-select: none;
+              -ms-user-select: none;
+                  user-select: none;
+      }
+      #toolbar li svg {
+        font-size: 25px;
+        line-height: 25px;
+        padding-bottom: 0;
+      }
+      #toolbar li:hover {
+        background-color: #28333b;
+      }
+      #toolbar li.active {
+        color: #000;
+        background-color: #fff;
+      }
+      #toolbar li.disabled {
+        pointer-events:none;
+        opacity:0.4;
+      }
+      #menu-content section {
+        display: none;
+      }
+      #menu-content section.active {
+        display: inherit;
+      }
+      #hide-arrow {
+        -o-transition: all .5s ease;
+        -webkit-transition: all .5s ease;
+        -moz-transition: all .5s ease;
+        -ms-transition: all .5s ease;
+        transition: all ease .5s;
+      }
+      #hide-arrow.off {
+        transform: rotate(-180deg);
+      }
+      input:checked+.toggle {
+        background: #fff;
+        border: #000;
+      }
+      #btn-hide {
+        position: absolute;
+        top: 0;
+        height: 35px;
+        font-size: 35px;
+        line-height: 35px;
+        vertical-align: middle;
+        right: -35px;
+        color: #28333b;
+        background-color: #fff;
+      }
+      #btn-hide:hover {
+        color: #fff;
+        background-color: #28333b;
+        cursor: pointer;
+      }
+      .line-red {
+        fill: none;
+        stroke: red;
+        stroke-width: 1.5px;
+      }
+      .line-green {
+        fill: none;
+        stroke: green;
+        stroke-width: 1.5px;
+      }
+      .line-blue {
+        fill: none;
+        stroke: blue;
+        stroke-width: 1.5px;
+      }
+      #histogram-table td {
+        min-width: 60px;
+      }
+
+      @media(max-width: 767px) {
+        #menu.off {
+          left: -240px;
+          -o-transition: all .5s ease;
+          -webkit-transition: all .5s ease;
+          -moz-transition: all .5s ease;
+          -ms-transition: all .5s ease;
+          transition: all ease .5s;
+        }
+        .maplibregl-ctrl-attrib {
+          font-size: 10px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id='menu' class='flex-child w240 w360-ml absolute bg-gray-faint z2 off px6 py6'>
+      <div id='variables-section' class='px6 py6 wmax-full'>
+        <div class='txt-h5 mb6 color-black'><svg class='icon icon--l inline-block'><use xlink:href='#icon-layers' /></svg>Variables</div>
+        <div class='select-container'>
+          <select id='variables-selector' class='select select--s select--stroke pl6 wmax-full'></select>
+          <div class='select-arrow color-black'></div>
+        </div>
+        <div class='pt6'>Allow Variables Composition</div>
+        <label class='switch-container'>
+          <input id='compose-switch' type='checkbox' />
+          <div class='switch'></div>
+        </label>
+      </div>
+
+      <ul id='toolbar' class='grid'>
+        <li id='3b' class="col col--4 active" title="rgb" onclick="switchPane(this)">
+          <svg class='icon icon--l inline-block'><use xlink:href='#icon-raster' /></svg>
+        </li>
+        <li id='1b' class="col col--4" title="band" onclick="switchPane(this)">
+          <svg class='icon icon--l inline-block'><use xlink:href='#icon-minus' /></svg>
+        </li>
+        <li id='bm' class="col col--4 disabled" title="bandmath" onclick="switchPane(this)">
+          <svg class='icon icon--l inline-block'><use xlink:href='#icon-hash' /></svg>
+        </li>
+      </ul>
+
+      <div id='menu-content' class='relative'>
+        
+        <!-- RGB Section -->
+        <section id='3b-section' class='px6 py6 active'>
+          <div class='txt-h5 mb6 color-black'><svg class='icon icon--l inline-block'><use xlink:href='#icon-layers'/></svg> RGB</div>
+          <div id='rgb-buttons' class='align-center px6 py6'>
+            <div class='select-container'>
+              <select id='r-selector' class='select select--s select--stroke wmax-full color-red'></select>
+              <div class='select-arrow color-black'></div>
+            </div>
+            <div class='select-container'>
+              <select id='g-selector' class='select select--s select--stroke wmax-full color-green'></select>
+              <div class='select-arrow color-black'></div>
+            </div>
+            <div class='select-container'>
+              <select id='b-selector' class='select select--s select--stroke wmax-full color-blue'></select>
+              <div class='select-arrow color-black'></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 1 Band Section -->
+        <section id='1b-section' class='px6 py6'>
+          <div class='txt-h5 mb6 color-black'>
+            <svg class='icon icon--l inline-block'><use xlink:href='#icon-layers'/></svg> Layers
+          </div>
+          <div class='select-container wmax-full'>
+            <select id='layer-selector' class='select select--s select--stroke wmax-full color-black'></select>
+            <div class='select-arrow color-black'></div>
+          </div>
+        </section>
+
+        <!-- Band Math Section -->
+        <section id='bm-section' class='px6 py6'>
+          <div class='txt-h5 mb6 color-black'> Band Math</div>
+        
+          <!-- Available Band Math -->
+          <div id='band-math-algo'>
+            <div class='select-container wmax-full'>
+              <select id='bmath-selector' class='select select--s select--stroke wmax-full color-black'>
+                <option disabled selected value="default"> -- select an option -- </option>
+                <option value='ni'>Normalized Index (A - B)/(A + B)</option>
+              </select>
+              <div class='select-arrow color-black'></div>
+            </div>
+            <div id='band-math-ui' class='px6 py6'>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- Color Map -->
+        <div id='colormap-section'>
+          <div class='txt-h5 mb6 color-black'><svg class='icon icon--l inline-block'><use xlink:href='#icon-palette'/></svg> Color Map</div>
+          <div class='select-container wmax-full'>
+            <select id='colormap-selector' class='select select--s select--stroke wmax-full color-black'>
+              <option value='b&w'>Internal</option>
+              <option value=cfastie>CFastie</option>
+              <option value=rplumbo>RPlumbo</option>
+              <option value=schwarzwald>Schwarzwald (elevation)</option>
+              <option value=viridis>Viridis</option>
+              <option value=rdbu_r>Blue-Red</option>
+              <option value=bugn>Blue-Green</option>
+              <option value=ylgn>Yellow-Green</option>
+              <option value=magma>Magma</option>
+              <option value=gist_earth>Earth</option>
+              <option value=ocean>Ocean</option>
+              <option value=terrain>Terrain</option>
+            </select>
+            <div class='select-arrow color-black'></div>
+          </div>
+        </div>
+
+        <!-- Min/Max -->
+        <div id="minmax-data" class='px6 py6 none'>
+          <div class='txt-h5 mb6 color-black'><svg class='icon icon--l inline-block'><use xlink:href='#icon-smooth-ramp'/></svg> Rescale</div>
+          <input id="data-min" class='input input--s w120-ml w60 inline-block align-center color-black' value='0' />
+          <input id="data-max" class='input input--s w120-ml w60 inline-block align-center color-black' value='0' />
+          <!-- <button id="btn-rescale" class='btn bts--xs btn--stroke bg-darken25-on-hover inline-block txt-s color-black mt6'>Apply</button> -->
+        </div>
+
+        <div id='cformula-section' class='px6 py6'>
+          <div class='txt-h5 mb6 color-black'><svg class='icon icon--l inline-block'><use xlink:href='#icon-picture'/></svg>Color Formula</div>
+          <input id="ColorFormulaValue" class='input input--s w-full color-black' value='' />
+        </div>
+
+        <button id="updateButton" class='btn btn--stroke bg-darken25-on-hover txt-m color-black mt6'>Apply</button>
+
+      </div>
+      <button id='btn-hide'><svg id='hide-arrow' class='icon'><use xlink:href='#icon-arrow-right'/></svg></button>
+    </div>
+
+    <div id='map'>
+      <div id='loader' class="loading-map z3 off">
+        <div class="middle-center">
+          <div class="round animation-spin animation--infinite animation--speed-1">
+            <svg class='icon icon--l inline-block'><use xlink:href='#icon-satellite'/></svg>
+          </div>
+        </div>
+      </div>
+      <div class="zoom-info"><span id="zoom"></span></div>
+    </div>
+    <script>
+var scope = {
+  variables: undefined,
+  dataset_info: undefined,
+}
+
+const tilejson_endpoint = '{{ tilejson_endpoint }}'
+const info_endpoint = '{{ info_endpoint }}'
+
+const dtype_ranges = {
+  'int8': [-128, 127],
+  'uint8': [0, 255],
+  'uint16': [0, 65535],
+  'int16': [-32768, 32767],
+  'uint32': [0, 4294967295],
+  'int32': [-2147483648, 2147483647],
+  'float32': [-3.4028235e+38, 3.4028235e+38],
+  'float64': [-1.7976931348623157e+308, 1.7976931348623157e+308]
+}
+
+var map = new maplibregl.Map({
+  container: 'map',
+  style: {
+    version: 8,
+    sources: {
+      'basemap': {
+        type: 'raster',
+        tiles: [
+          'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+        ],
+        tileSize: 256,
+        attribution: '<a href="https://developmentseed.org/titiler" target="_blank">Titiler</a> | <a href="http://www.openstreetmap.org/copyright">© OpenStreetMap</a>'
+      }
+    },
+    layers: [
+      {
+        'id': 'basemap',
+        'type': 'raster',
+        'source': 'basemap',
+        'minzoom': 0,
+        'maxzoom': 20
+      }
+    ]
+  },
+  center: [0, 0],
+  zoom: 1
+})
+
+map.on('zoom', function (e) {
+    const z = (map.getZoom()).toString().slice(0, 6)
+    document.getElementById('zoom').textContent = z
+})
+
+const setMapLayers = (url) => {
+  fetch(url)
+    .then(res => {
+      if (res.ok) return res.json()
+      throw new Error('Network response was not ok.');
+    })
+    .then(data => {
+      let bounds = [...data.bounds]
+      if (bounds[0] > bounds[2]) {
+        if (map.getLayer('raster-l')) map.removeLayer('raster-l')
+        if (map.getSource('raster-l')) map.removeSource('raster-l')
+        if (map.getLayer('raster-r')) map.removeLayer('raster-r')
+        if (map.getSource('raster-r')) map.removeSource('raster-r')
+
+        // 2 sources and 2 layers
+        // left
+        map.addSource('raster-l', {
+          type: 'raster',
+          bounds: [-180, bounds[1], bounds[2], bounds[3]],
+          minzoom: data.minzoom,
+          maxzoom: data.maxzoom,
+          tiles: data.tiles,
+          tileSize: 256
+        })
+        map.addLayer({id: 'raster-l', type: 'raster', source: 'raster-l'})
+
+        //right
+        map.addSource('raster-r', {
+          type: 'raster',
+          bounds: [bounds[0], bounds[1], 180, bounds[3]],
+          minzoom: data.minzoom,
+          maxzoom: data.maxzoom,
+          tiles: data.tiles,
+          tileSize: 256
+        })
+        map.addLayer({id: 'raster-r', type: 'raster', source: 'raster-r'})
+
+      } else {
+        if (map.getLayer('raster')) map.removeLayer('raster')
+        if (map.getSource('raster')) map.removeSource('raster')
+
+        map.addSource('raster', {
+          type: 'raster',
+          bounds: data.bounds,
+          minzoom: data.minzoom,
+          maxzoom: data.maxzoom,
+          tiles: data.tiles,
+          tileSize: 256
+        })
+        map.addLayer({id: 'raster', type: 'raster', source: 'raster'})
+      }
+    })
+    .catch(err => {
+      console.warn(err)
+    })
+}
+
+const set1bViz = () => {
+    params = {}
+    const variable = document.getElementById('variables-selector').value
+    params.variables = variable
+
+    const bidx = document.getElementById('layer-selector').selectedOptions[0].getAttribute("bidx")
+    params.bidx = bidx
+
+    if (['uint8','int8'].indexOf(scope.dataset_info[variable].dtype) === -1) {
+        params.rescale = `${document.getElementById('data-min').value},${document.getElementById('data-max').value}`
+    }
+
+    if (document.getElementById('ColorFormulaValue').value !== '') {
+        params.color_formula = document.getElementById('ColorFormulaValue').value
+    }
+
+    const cmap = document.getElementById('colormap-selector')[document.getElementById('colormap-selector').selectedIndex]
+    if (cmap.value !== 'b&w') params.colormap_name = cmap.value
+
+    const url_params = Object.keys(params).map(i => `${i}=${params[i]}`).join('&')
+    let url = `${tilejson_endpoint}?${url_params}`
+    setMapLayers(url)
+}
+
+const set3bViz = () => {
+  const r = document.getElementById('r-selector').selectedOptions[0].getAttribute("bidx")
+  const g = document.getElementById('g-selector').selectedOptions[0].getAttribute("bidx")
+  const b = document.getElementById('b-selector').selectedOptions[0].getAttribute("bidx")
+
+  params = {}
+
+  let variables_params
+  let indexes_params
+  // variable composition
+  if (document.getElementById("compose-switch").checked === true) {
+    variables_params = [r, g, b].map(i => `variables=${i}`).join('&')
+    // When doing assets composition we select the first band (bidx=1)
+    indexes_params = 'bidx=1'
+    params.rescale = `${document.getElementById('data-min').value},${document.getElementById('data-max').value}`
+  } else {
+    const variable = document.getElementById('variables-selector').value
+    variables_params = `variables=${variable}`
+    indexes_params = [r, g, b].map(i => `bidx=${i}`).join('&')
+    if (['uint8','int8'].indexOf(scope.dataset_info[variable].dtype) === -1) {
+      params.rescale = `${document.getElementById('data-min').value},${document.getElementById('data-max').value}`
+    }
+  }
+
+  if (document.getElementById('ColorFormulaValue').value !== '') {
+    params.color_formula = document.getElementById('ColorFormulaValue').value
+  }
+
+  const url_params = Object.keys(params).map(i => `${i}=${params[i]}`).join('&')
+  let url = `{{ tilejson_endpoint }}?${url_params}&${variables_params}&${indexes_params}`
+  setMapLayers(url)
+}
+
+const setBandMathViz = () => {
+    const bandMath = document.getElementById('bmath-selector').selectedOptions[0].getAttribute("value")
+    switch (bandMath) {
+      case 'ni':
+        const a = document.getElementById('NdI-a-selector').selectedOptions[0].getAttribute("bidx")
+        const b = document.getElementById('NdI-b-selector').selectedOptions[0].getAttribute("bidx")
+
+        params = {}
+        params.bidx = 1
+        params.rescale = `${document.getElementById('data-min').value},${document.getElementById('data-max').value}`
+        params.expression = encodeURIComponent(`(${a}-${b})/(${a}+${b})`)
+
+        if (document.getElementById('ColorFormulaValue').value !== '') {
+          params.color_formula = document.getElementById('ColorFormulaValue').value
+        }
+        
+        const cmap = document.getElementById('colormap-selector')[document.getElementById('colormap-selector').selectedIndex]
+        if (cmap.value !== 'b&w') params.colormap_name = cmap.value
+
+        const url_params = Object.keys(params).map(i => `${i}=${params[i]}`).join('&')
+        let url = `{{ tilejson_endpoint }}?${url_params}`
+        setMapLayers(url)
+
+        break
+      case 'default':
+        break
+      default:
+        throw new Error(`Unsupported ${bandMath} Band Math`)
+    }
+}
+
+const updateViz = () => {
+  if (map.getLayer('raster')) map.removeLayer('raster')
+  if (map.getSource('raster')) map.removeSource('raster')
+
+  const rasterType = document.getElementById('toolbar').querySelector(".active").id
+  switch (rasterType) {
+    case '1b':
+      document.getElementById('colormap-section').classList.remove('none')
+      set1bViz()
+      break
+    case '3b':
+      document.getElementById('colormap-section').classList.add('none')
+      set3bViz()
+      break
+    case 'bm':
+      document.getElementById('colormap-section').classList.remove('none')
+      setBandMathViz()
+      break
+    default:
+      throw new Error(`Invalid ${rasterType}`)
+  }
+}
+
+document.getElementById('btn-hide').addEventListener('click', () => {
+  document.getElementById('hide-arrow').classList.toggle('off')
+  document.getElementById('menu').classList.toggle('off')
+})
+
+document.getElementById('variables-selector').addEventListener('change', (e) => {
+  const info = scope.dataset_info[document.getElementById('variables-selector').value]
+  console.log(info.count)
+  if (info.count=== 1) {
+    document.getElementById('3b').classList.add('disabled')
+    document.getElementById('3b').classList.remove('active')
+    document.getElementById('3b-section').classList.remove('active')
+
+    document.getElementById('1b').classList.add('active')
+    document.getElementById('1b-section').classList.add('active')
+  } else {
+    document.getElementById('3b').classList.remove('disabled')
+    document.getElementById('3b').classList.add('active')
+    document.getElementById('3b-section').classList.add('active')
+
+    document.getElementById('1b').classList.remove('disabled')
+  }
+  updateUI()
+})
+
+document.getElementById('compose-switch').addEventListener('change', () => {
+  document.getElementById('3b').classList.add('active')
+  document.getElementById('3b-section').classList.add('active')
+  document.getElementById('3b').classList.remove('disabled')
+  document.getElementById('bm').classList.remove('active')
+  document.getElementById('bm-section').classList.remove('active')
+  document.getElementById('1b').classList.remove('active')
+  document.getElementById('1b-section').classList.remove('active')
+
+  if (document.getElementById("compose-switch").checked === true) {
+    document.getElementById('variables-selector').classList.add('disabled')
+    document.getElementById("variables-selector").disabled = true
+    document.getElementById('1b').classList.add('disabled')
+    document.getElementById('bm').classList.remove('disabled')
+  } else {
+    document.getElementById('variables-selector').classList.remove('disabled')
+    document.getElementById("variables-selector").disabled = false  
+    document.getElementById('1b').classList.remove('disabled')
+    document.getElementById('bm').classList.add('disabled')
+
+  }
+  updateUI()
+})
+
+document.getElementById('updateButton').addEventListener('click', () => {
+  updateViz()
+})
+
+document.getElementById('bmath-selector').addEventListener('change', () => {
+  const bandMath = document.getElementById('bmath-selector').selectedOptions[0].getAttribute("value")
+  document.getElementById('band-math-ui').innerHTML = ''
+  switch (bandMath) {
+    case 'ni':
+      // construct band math UI
+      normalizedIndexUi()
+      break
+    case 'default':
+      break
+    default:
+      throw new Error(`Unsupported ${bandMath} Band Math`)
+  }
+})
+
+const switchPane = (event) => {
+  const cur = document.getElementById('toolbar').querySelector(".active")
+  const activeViz = cur.id
+  const nextViz = event.id
+  cur.classList.toggle('active')
+  event.classList.toggle('active')
+
+  document.getElementById(`${activeViz}-section`).classList.remove('active')
+  document.getElementById(`${nextViz}-section`).classList.add('active')
+  console.log(nextViz)
+
+  updateUI()
+}
+
+const bboxPolygon = (bounds) => {
+  return {
+    'type': 'Feature',
+    'geometry': {
+      'type': 'Polygon',
+      'coordinates': [[
+        [bounds[0], bounds[1]],
+        [bounds[2], bounds[1]],
+        [bounds[2], bounds[3]],
+        [bounds[0], bounds[3]],
+        [bounds[0], bounds[1]]
+      ]]
+    },
+    'properties': {}
+  }
+}
+
+const init3bUI = () => {
+  document.getElementById('3b').classList.add('active')
+  document.getElementById('3b-section').classList.add('active')
+
+  document.getElementById('bm').classList.remove('active')
+  document.getElementById('bm-section').classList.remove('active')
+  
+  document.getElementById('1b').classList.remove('active')
+  document.getElementById('1b-section').classList.remove('active')
+
+  document.getElementById('r-selector').innerHTML = ''
+  document.getElementById('b-selector').innerHTML = ''  
+  document.getElementById('g-selector').innerHTML = ''
+
+  if (document.getElementById("compose-switch").checked === true) {
+    scope.variables.forEach((opt, idx) => {
+      const option = document.createElement('option');
+      option.value = opt;
+      option.text = opt
+      option.setAttribute('bidx', opt)
+      option.setAttribute('bname', opt)
+      if (idx === 0) option.selected = "selected"
+      document.getElementById('r-selector').appendChild(option);
+    });
+
+    scope.variables.forEach((opt, idx) => {
+      const option = document.createElement('option');
+      option.value = opt;
+      option.text = opt
+      option.setAttribute('bidx', opt)
+      option.setAttribute('bname', opt)
+      if (idx === 1) option.selected = "selected"
+      document.getElementById('g-selector').appendChild(option);
+    });
+
+    scope.variables.forEach((opt, idx) => {
+      const option = document.createElement('option');
+      option.value = opt;
+      option.text = opt
+      option.setAttribute('bidx', opt)
+      option.setAttribute('bname', opt)
+      if (idx === 2) option.selected = "selected"
+      document.getElementById('b-selector').appendChild(option);
+    });
+
+    document.getElementById('minmax-data').classList.remove('none')
+    const mm = dtype_ranges[scope.dataset_info[scope.variables[0]].dtype]
+    document.getElementById('data-min').value = mm[0]
+    document.getElementById('data-max').value = mm[1]
+  
+  } else {
+    // Per Variable Viz
+    const info = scope.dataset_info[document.getElementById('variables-selector').value]
+    info.band_descriptions.forEach((opt, bidx) => {
+      const option = document.createElement('option');
+      option.setAttribute('bidx', bidx + 1)
+      option.setAttribute('bname', opt[0])
+      option.text = opt[1] || opt[0]
+      if (bidx === 0) option.selected = "selected"
+      document.getElementById('r-selector').appendChild(option);
+    });
+
+    info.band_descriptions.forEach((opt, bidx) => {
+      const option = document.createElement('option');
+      option.setAttribute('bidx', bidx + 1)
+      option.setAttribute('bname', opt[0])
+      option.text = opt[1] || opt[0]
+      if (bidx === 1) option.selected = "selected"
+      document.getElementById('g-selector').appendChild(option);
+    });
+
+    info.band_descriptions.forEach((opt, bidx) => {
+      const option = document.createElement('option');
+      option.setAttribute('bidx', bidx + 1)
+      option.setAttribute('bname', opt[0])
+      option.text = opt[1] || opt[0]
+      if (bidx === 2) option.selected = "selected"
+      document.getElementById('b-selector').appendChild(option);
+    });
+
+    if (['uint8','int8'].indexOf(info.dtype) === -1) {
+      document.getElementById('minmax-data').classList.remove('none')
+    } else {
+      document.getElementById('minmax-data').classList.add('none')
+    }
+    const mm = dtype_ranges[info.dtype]
+    document.getElementById('data-min').value = mm[0]
+    document.getElementById('data-max').value = mm[1]
+  }
+}
+
+const init1bUI = () => {
+  document.getElementById('1b').classList.add('active')
+  document.getElementById('1b-section').classList.add('active')
+
+  document.getElementById('bm').classList.remove('active')
+  document.getElementById('bm-section').classList.remove('active')
+  
+  document.getElementById('3b').classList.remove('active')
+  document.getElementById('3b-section').classList.remove('active')
+
+  document.getElementById('layer-selector').innerHTML = ''
+
+  const info = scope.dataset_info[document.getElementById('variables-selector').value]
+  info.band_descriptions.forEach((opt, bidx) => {
+    const option = document.createElement('option');
+    option.setAttribute('bidx', bidx + 1)
+    option.setAttribute('bname', opt[0])
+    option.text = opt[1] || opt[0]
+    document.getElementById('layer-selector').appendChild(option);
+  });
+
+  if (['uint8','int8'].indexOf(info.dtype) === -1) {
+    document.getElementById('minmax-data').classList.remove('none')
+  } else {
+    document.getElementById('minmax-data').classList.add('none')
+  }
+  const mm = dtype_ranges[info.dtype]
+  document.getElementById('data-min').value = mm[0]
+  document.getElementById('data-max').value = mm[1]
+}
+
+const initbmUI = () => {
+  document.getElementById('bm').classList.add('active')
+  document.getElementById('bm-section').classList.add('active')
+
+  document.getElementById('1b').classList.remove('active')
+  document.getElementById('1b-section').classList.remove('active')
+  
+  document.getElementById('3b').classList.remove('active')
+  document.getElementById('3b-section').classList.remove('active')
+
+  document.getElementById('bmath-selector').getElementsByTagName('option')[0].selected = 'selected'
+  document.getElementById('band-math-ui').innerHTML = ''
+}
+
+const normalizedIndexUi = () => {
+  const is_checked = document.getElementById("compose-switch").checked
+
+  const selectAContainer = document.createElement('div');
+  const selectAText = document.createElement('span');
+  selectAText.textContent = "A: "
+  selectAContainer.appendChild(selectAText);
+  const selectA = document.createElement('select');
+  selectA.id = 'NdI-a-selector';
+  selectAContainer.appendChild(selectA);
+  document.getElementById('band-math-ui').appendChild(selectAContainer);
+
+  const selectBContainer = document.createElement('div');
+  const selectBText = document.createElement('span');
+  selectBText.textContent = "B: "
+  selectBContainer.appendChild(selectBText);
+  const selectB = document.createElement('select');
+  selectB.id = 'NdI-b-selector';
+  selectBContainer.appendChild(selectB);
+  document.getElementById('band-math-ui').appendChild(selectBContainer);
+
+  // Add options
+  scope.variables.forEach((opt, idx) => {
+    const option = document.createElement('option');
+    option.value = opt;
+    option.text = opt;
+    option.setAttribute('bidx', opt)
+    option.setAttribute('bname', opt)
+    selectA.appendChild(option);
+  });
+
+  scope.variables.forEach((opt, idx) => {
+    const option = document.createElement('option');
+    option.value = opt;
+    option.text = opt;
+    option.setAttribute('bidx', opt)
+    option.setAttribute('bname', opt)
+    selectB.appendChild(option);
+  });
+
+  document.getElementById('minmax-data').classList.remove('none')
+  document.getElementById('data-min').value = -1
+  document.getElementById('data-max').value = 1
+}
+
+const updateUI = () => {
+  const vizId = document.getElementById('toolbar').querySelector(".active").id
+  switch (vizId) {
+    case '3b':
+      init3bUI()
+      break
+    case '1b':
+      init1bUI()
+      break
+    case 'bm':
+      initbmUI()
+      break
+    default:
+      throw new Error(`Unsupported ${vizId} Band Math`)
+  }
+}
+
+map.on('load', () => {
+  fetch(`${info_endpoint}`)
+    .then(res => {
+      if (res.ok) return res.json()
+      throw new Error('Network response was not ok.')
+    })
+    .then(data => {
+      console.log(data)
+      document.getElementById('hide-arrow').classList.toggle('off')
+      document.getElementById('menu').classList.toggle('off')
+      document.getElementById('loader').classList.toggle('off')
+
+      scope.variables = Object.keys(data.properties)
+      scope.dataset_info = data.properties
+
+      let bounds = [...data.bbox]
+      // Bounds crossing dateline
+      if (bounds[0] > bounds[2]) {
+        bounds[0] = bounds[0] - 360
+      }
+      map.fitBounds([[bounds[0], bounds[1]], [bounds[2], bounds[3]]])
+      map.addSource('aoi', {'type': 'geojson', 'data': data})
+      map.addLayer({
+        id: 'aoi-polygon',
+        type: 'line',
+        source: 'aoi',
+        layout: {'line-cap': 'round', 'line-join': 'round'},
+        paint: {'line-color': '#3bb2d0', 'line-width': 1}
+      })
+
+      for (var i = 0; i < scope.variables.length; i++) {
+        let option = document.createElement('option')
+        option.value = scope.variables[i]
+        option.setAttribute('data-asset', scope.variables[i])
+        option.text = scope.variables[i]
+        document.getElementById('variables-selector').appendChild(option)
+      }
+    })
+    .then(() => {
+      updateUI()
+      document.getElementById('loader').classList.add('off')
+    })
+    .catch(err => {
+      console.warn(err)
+    })
+})
+    </script>
+  </body>
+</html>
