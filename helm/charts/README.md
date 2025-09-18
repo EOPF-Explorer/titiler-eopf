@@ -68,6 +68,7 @@ The following table lists the configurable parameters of the TiTiler EOPF chart 
 | `ingress.annotations` | Ingress annotations | `{}` |
 | `ingress.hosts` | Ingress hosts configuration | `[{host: titiler-eopf.local, paths: ["/"]}]` |
 | `ingress.tls` | Ingress TLS configuration | `[]` |
+| `ingress.className` | Ingress class | `""` |
 
 ## Usage Example
 
@@ -79,7 +80,8 @@ replicaCount: 2
 ingress:
   enabled: true
   annotations:
-    kubernetes.io/ingress.class: nginx
+    kubernetes.io/ingress.class: nginx # Deprecated - https://kubernetes.io/docs/concepts/services-networking/ingress/#deprecated-annotation
+  className: nginx
   hosts:
     - host: titiler.example.com
       paths: ["/"]
