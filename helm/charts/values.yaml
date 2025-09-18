@@ -29,6 +29,7 @@ service:
   annotations: {}
 
 ingress:
+  className: ""
   enabled: false
   annotations:
     {}
