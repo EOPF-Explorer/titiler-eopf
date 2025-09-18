@@ -62,6 +62,7 @@ app = FastAPI(
 
 ---
     """,
+    root_path=settings.root_path,
     openapi_url="/api",
     docs_url="/api.html",
     version=titiler_version,
