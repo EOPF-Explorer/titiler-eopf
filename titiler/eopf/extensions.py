@@ -1,15 +1,22 @@
 """titiler.xarray Extensions."""
 
-from typing import List
-
+import jinja2
 from attrs import define
 from fastapi import Depends
+from starlette.requests import Request
 from starlette.responses import HTMLResponse
+from starlette.templating import Jinja2Templates
 
 from titiler.core.factory import FactoryExtension
 from titiler.core.resources.enums import MediaType
 
 from .factory import TilerFactory
+
+jinja2_env = jinja2.Environment(
+    autoescape=jinja2.select_autoescape(["html"]),
+    loader=jinja2.ChoiceLoader([jinja2.PackageLoader(__package__, "templates")]),
+)
+DEFAULT_TEMPLATES = Jinja2Templates(env=jinja2_env)
 
 
 @define
@@ -49,7 +56,7 @@ class DatasetMetadataExtension(FactoryExtension):
 
         @factory.router.get(
             "/dataset/groups",
-            response_model=List[str],
+            response_model=list[str],
             responses={
                 200: {"description": "Returns the list of groups in the DataTree."}
             },
@@ -61,7 +68,7 @@ class DatasetMetadataExtension(FactoryExtension):
 
         @factory.router.get(
             "/dataset/keys",
-            response_model=List[str],
+            response_model=list[str],
             responses={
                 200: {
                     "description": "Returns the list of keys/variables in the DataTree."
@@ -72,3 +79,34 @@ class DatasetMetadataExtension(FactoryExtension):
             """Returns the list of keys/variables in the DataTree."""
             with factory.reader(src_path) as ds:
                 return ds.variables
+
+
+@define
+class EOPFViewerExtension(FactoryExtension):
+    """Add /viewer endpoint to the TilerFactory."""
+
+    templates: Jinja2Templates = DEFAULT_TEMPLATES
+
+    def register(self, factory: TilerFactory):
+        """Register endpoint to the tiler factory."""
+
+        @factory.router.get(
+            "/viewer",
+            response_class=HTMLResponse,
+            operation_id=f"{factory.operation_prefix}getViewer",
+        )
+        def html_viewer(request: Request):
+            """Viewer."""
+            return self.templates.TemplateResponse(
+                request,
+                name="viewer.html",
+                context={
+                    "tilejson_endpoint": factory.url_for(
+                        request,
+                        "tilejson",
+                        tileMatrixSetId="WebMercatorQuad",
+                    ),
+                    "info_endpoint": factory.url_for(request, "info_geojson"),
+                },
+                media_type="text/html",
+            )

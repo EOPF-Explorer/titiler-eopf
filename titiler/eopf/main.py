@@ -22,7 +22,7 @@ from titiler.core.utils import accept_media_type, update_openapi
 
 from . import __version__ as titiler_version
 from .dependencies import DatasetPathParams
-from .extensions import DatasetMetadataExtension
+from .extensions import DatasetMetadataExtension, EOPFViewerExtension
 from .factory import TilerFactory
 from .settings import ApiSettings
 
@@ -83,6 +83,7 @@ md = TilerFactory(
     templates=map_templates,
     extensions=[
         DatasetMetadataExtension(),
+        EOPFViewerExtension(),
     ],
     path_dependency=DatasetPathParams,
     router_prefix="/collections/{collection_id}/items/{item_id}",
