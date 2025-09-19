@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import re
 import warnings
 from functools import cache, cached_property
@@ -507,19 +508,36 @@ class GeoZarrReader(BaseReader):
         sel: List[str] | None = None,
         method: sel_methods | None = None,
     ) -> Dict[str, Info]:
-        """Return xarray.DataArray info."""
+        """Return xarray.DataArray info.
+        
+        Variables that fail to load will be skipped and logged as warnings.
+        """
         variables = variables or self.variables
 
-        def _get_info(group_var: str):
-            group, variable = (
-                group_var.split(":") if ":" in group_var else ("/", group_var)
-            )
-            with XarrayReader(
-                self._get_variable(group, variable, sel=sel, method=method),
-            ) as da:
-                return da.info()
+        def _get_info_safe(group_var: str) -> Info | None:
+            """Get info for a single variable, with error handling."""
+            try:
+                group, variable = (
+                    group_var.split(":") if ":" in group_var else ("/", group_var)
+                )
+                with XarrayReader(
+                    self._get_variable(group, variable, sel=sel, method=method),
+                ) as da:
+                    return da.info()
+            except Exception as e:
+                logging.warning(
+                    f"Failed to get info for variable '{group_var}': {e!s}"
+                )
+                return None
 
-        return {gv: _get_info(gv) for gv in variables}
+        # Build result dictionary, skipping variables that failed
+        result = {}
+        for gv in variables:
+            info_data = _get_info_safe(gv)
+            if info_data is not None:
+                result[gv] = info_data
+        
+        return result
 
     def statistics(  # type: ignore
         self,
