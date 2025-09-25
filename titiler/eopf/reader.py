@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
+import re
 import warnings
 from functools import cache, cached_property
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Union
+from urllib.parse import urlparse
 
 import attr
 import obstore
@@ -15,7 +19,12 @@ from morecantile import Tile, TileMatrixSet
 from rasterio.crs import CRS
 from rasterio.warp import calculate_default_transform, transform_bounds
 from rio_tiler.constants import WEB_MERCATOR_TMS, WGS84_CRS
-from rio_tiler.errors import InvalidGeographicBounds
+from rio_tiler.errors import (
+    ExpressionMixingWarning,
+    InvalidExpression,
+    InvalidGeographicBounds,
+    RioTilerError,
+)
 from rio_tiler.io.base import BaseReader
 from rio_tiler.io.xarray import XarrayReader
 from rio_tiler.models import BandStatistics, ImageData, Info, PointData
@@ -23,6 +32,13 @@ from rio_tiler.types import BBox
 from zarr.storage import ObjectStore
 
 logger = logging.getLogger(__name__)
+
+try:
+    from obstore.auth.boto3 import Boto3CredentialProvider
+
+    HAS_BOTO3_PROVIDER = True
+except ImportError:
+    HAS_BOTO3_PROVIDER = False
 
 sel_methods = Literal["nearest", "pad", "ffill", "backfill", "bfill"]
 
@@ -33,6 +49,10 @@ def format_bytes(size: int) -> str:
             return f"{size:.1f} {unit}"
         size /= 1024.0
     return f"{size:.1f} PB"
+
+
+class MissingVariables(RioTilerError):
+    """Missing Variables."""
 
 
 @cache
@@ -46,8 +66,37 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
         xarray.DataTree
 
     """
-    store = obstore.store.from_url(src_path)
-    zarr_store = ObjectStore(store=store, read_only=True)
+    parsed = urlparse(src_path)
+    if not parsed.scheme:
+        src_path = str(Path(src_path).resolve())
+        src_path = "file://" + src_path
+
+    # Check if AWS_PROFILE is set and we're dealing with an S3 URL
+    aws_profile = os.environ.get("AWS_PROFILE")
+    if aws_profile and parsed.scheme == "s3" and HAS_BOTO3_PROVIDER:
+        # Use Boto3CredentialProvider for AWS profile support
+        from obstore.store import S3Store
+
+        # Extract bucket and key from S3 URL
+        bucket = parsed.netloc
+        key = parsed.path.lstrip("/")
+
+        store = S3Store(
+            bucket,
+            credential_provider=Boto3CredentialProvider(),
+            region=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
+            endpoint=os.environ.get("AWS_ENDPOINT_URL", None),
+            virtual_hosted_style_request=False,
+            prefix=key,
+        )
+
+        # Create the zarr store with the configured S3 store
+        zarr_store = ObjectStore(store=store, read_only=True)
+    else:
+        # Use the default obstore.store.from_url method
+        store = obstore.store.from_url(src_path)
+        zarr_store = ObjectStore(store=store, read_only=True)
+
     ds = xarray.open_datatree(
         zarr_store,
         decode_times=True,
@@ -197,13 +246,22 @@ class GeoZarrReader(BaseReader):
 
     _ctx_stack: contextlib.ExitStack = attr.ib(init=False, factory=contextlib.ExitStack)
 
+    groups: List[str] = attr.ib(init=False)
+    variables: List[str] = attr.ib(init=False)
+
     def __attrs_post_init__(self):
         """Set bounds and CRS."""
         if not self.datatree:
             self.datatree = self._ctx_stack.enter_context(
                 self.opener(self.input, **self.opener_options)
             )
-            logger.info(f"Opening dataset: {self.input}")
+            logger.debug(f"Opening dataset: {self.input}")
+
+        self.groups = self._get_groups()
+        self.variables = self._get_variables()
+
+        self.groups = self._get_groups()
+        self.variables = self._get_variables()
 
         # There might not be global bounds/CRS for a Zarr Store
         try:
@@ -228,6 +286,7 @@ class GeoZarrReader(BaseReader):
             self.height = ds.rio.height
             self.width = ds.rio.width
 
+            # Default to user input or Dataset min/max zoom
             self.minzoom = self.minzoom if self.minzoom is not None else self._minzoom
             self.maxzoom = self.maxzoom if self.maxzoom is not None else self._maxzoom
 
@@ -238,6 +297,7 @@ class GeoZarrReader(BaseReader):
             )
             self.bounds = (min(minx), min(miny), max(maxx), max(maxy))
 
+            # Default to user input or TMS min/max zoom
             self.minzoom = (
                 self.minzoom if self.minzoom is not None else self.tms.minzoom
             )
@@ -252,6 +312,55 @@ class GeoZarrReader(BaseReader):
     def __exit__(self, exc_type, exc_value, traceback):
         """Support using with Context Managers."""
         self.close()
+
+    def _get_groups(self) -> List[str]:
+        """return groups within the datatree."""
+        groups: List[str] = []
+        ms_groups: List[str] = []
+
+        for g in self.datatree.groups:
+            if "multiscales" in self.datatree[g].attrs:
+                ms_groups.append(g)
+
+                # Validate Group using First Level of MultiScale
+                scale = self.datatree[g].attrs["multiscales"]["tile_matrix_set"][
+                    "tileMatrices"
+                ][0]["id"]
+                ds = self.datatree[g][scale].to_dataset()
+                if _validate_zarr(ds):
+                    groups.append(g)
+
+            else:
+                # We skip if group is within a multiscale
+                if any(g.startswith(msg) for msg in ms_groups):
+                    continue
+
+                elif self.datatree[g].data_vars:
+                    ds = self.datatree[g].to_dataset()
+                    if _validate_zarr(ds):
+                        groups.append(g)
+
+        return groups
+
+    def _get_variables(self) -> List[str]:
+        """Return available variables for a group."""
+        variables: List[str] = []
+
+        for g in self.groups:
+            # Select a group
+            group = self.datatree[g]
+
+            # If a Group is a Multiscale group then we select the first scale
+            if "multiscales" in group.attrs:
+                # Get id for the first multiscale group
+                scale = group.attrs["multiscales"]["tile_matrix_set"]["tileMatrices"][
+                    0
+                ]["id"]
+                group = group[scale]
+
+            variables.extend(f"{g}:{v}" for v in list(group.data_vars))
+
+        return variables
 
     def get_bounds(self, group: str, crs: CRS = WGS84_CRS) -> BBox:
         """Get BBox for a Group."""
@@ -283,6 +392,7 @@ class GeoZarrReader(BaseReader):
         resolution = max(abs(transform[0]), abs(transform[4]))
         return self.tms.zoom_for_res(resolution)
 
+    # TODO: add cache
     def get_minzoom(self, group: str) -> int:
         """Get MinZoom for a Group."""
         if "multiscales" in self.datatree[group].attrs:
@@ -302,6 +412,7 @@ class GeoZarrReader(BaseReader):
 
         return self.tms.minzoom
 
+    # TODO: add cache
     def get_maxzoom(self, group: str) -> int:
         """Get MaxZoom for a Group."""
         if "multiscales" in self.datatree[group].attrs:
@@ -320,57 +431,6 @@ class GeoZarrReader(BaseReader):
             pass
 
         return self.tms.maxzoom
-
-    @cached_property
-    def groups(self) -> List[str]:
-        """return groups within the datatree."""
-        groups: List[str] = []
-        ms_groups: List[str] = []
-
-        for g in self.datatree.groups:
-            if "multiscales" in self.datatree[g].attrs:
-                ms_groups.append(g)
-
-                # Validate Group using First Level of MultiScale
-                scale = self.datatree[g].attrs["multiscales"]["tile_matrix_set"][
-                    "tileMatrices"
-                ][0]["id"]
-                ds = self.datatree[g][scale].to_dataset()
-                if _validate_zarr(ds):
-                    groups.append(g)
-
-            else:
-                # We skip if group is within a multiscale
-                if any(g.startswith(msg) for msg in ms_groups):
-                    continue
-
-                elif self.datatree[g].data_vars:
-                    ds = self.datatree[g].to_dataset()
-                    if _validate_zarr(ds):
-                        groups.append(g)
-
-        return groups
-
-    @cached_property
-    def variables(self) -> List[str]:
-        """Return available variables for a group."""
-        variables: List[str] = []
-
-        for g in self.groups:
-            # Select a group
-            group = self.datatree[g]
-
-            # If a Group is a Multiscale group then we select the first scale
-            if "multiscales" in group.attrs:
-                # Get id for the first multiscale group
-                scale = group.attrs["multiscales"]["tile_matrix_set"]["tileMatrices"][
-                    0
-                ]["id"]
-                group = group[scale]
-
-            variables.extend(f"{g}:{v}" for v in list(group.data_vars))
-
-        return variables
 
     def _get_variable(
         self,
@@ -461,6 +521,33 @@ class GeoZarrReader(BaseReader):
 
         return da
 
+    @cached_property
+    def _variable_idx(self) -> Dict[str, str]:
+        return {v: f"Var{ix}" for ix, v in enumerate(self.variables)}
+
+    def parse_expression(self, expression: str) -> List[str]:
+        """Parse rio-tiler band math expression."""
+        input_assets = "|".join(re.escape(key) for key in self.variables)
+        _re = re.compile(rf"(?<!\w)({input_assets})(?!\w)")
+        variables = list(set(re.findall(_re, expression)))
+        if not variables:
+            raise InvalidExpression(
+                f"Could not find any valid variables in '{expression}' expression"
+            )
+
+        return variables
+
+    def _convert_expression_to_index(self, expression: str) -> str:
+        input_assets = "|".join(re.escape(key) for key in self.variables)
+        _re = re.compile(rf"(?<!\w)({input_assets})(?!\w)")
+        return _re.sub(lambda x: self._variable_idx[x.group()], expression)
+
+    def _convert_expression_from_index(self, expression: str) -> str:
+        input_assets = "|".join(re.escape(key) for key in self._variable_idx.values())
+        _re = re.compile(rf"(?<!\w)({input_assets})(?!\w)")
+        _variable_idx = {v: k for k, v in self._variable_idx.items()}
+        return _re.sub(lambda x: _variable_idx[x.group()], expression)
+
     def info(  # type: ignore
         self,
         *,
@@ -468,24 +555,40 @@ class GeoZarrReader(BaseReader):
         sel: List[str] | None = None,
         method: sel_methods | None = None,
     ) -> Dict[str, Info]:
-        """Return xarray.DataArray info."""
+        """Return xarray.DataArray info.
+
+        Variables that fail to load will be skipped and logged as warnings.
+        """
         variables = variables or self.variables
 
-        def _get_info(group_var: str):
-            group, variable = (
-                group_var.split(":") if ":" in group_var else ("/", group_var)
-            )
-            with XarrayReader(
-                self._get_variable(group, variable, sel=sel, method=method),
-            ) as da:
-                return da.info()
+        def _get_info_safe(group_var: str) -> Info | None:
+            """Get info for a single variable, with error handling."""
+            try:
+                group, variable = (
+                    group_var.split(":") if ":" in group_var else ("/", group_var)
+                )
+                with XarrayReader(
+                    self._get_variable(group, variable, sel=sel, method=method),
+                ) as da:
+                    return da.info()
+            except Exception as e:
+                logging.warning(f"Failed to get info for variable '{group_var}': {e!s}")
+                return None
 
-        return {gv: _get_info(gv) for gv in variables}
+        # Build result dictionary, skipping variables that failed
+        result = {}
+        for gv in variables:
+            info_data = _get_info_safe(gv)
+            if info_data is not None:
+                result[gv] = info_data
+
+        return result
 
     def statistics(  # type: ignore
         self,
         *args: Any,
-        variables: List[str],
+        variables: List[str] | None = None,
+        expression: str | None = None,
         sel: List[str] | None = None,
         method: sel_methods | None = None,
         **kwargs: Any,
@@ -499,7 +602,8 @@ class GeoZarrReader(BaseReader):
         tile_y: int,
         tile_z: int,
         *args: Any,
-        variables: List[str],
+        variables: List[str] | None = None,
+        expression: str | None = None,
         tilesize: int = 256,
         sel: List[str] | None = None,
         method: sel_methods | None = None,
@@ -508,47 +612,76 @@ class GeoZarrReader(BaseReader):
         """Read a Web Map tile from a dataset."""
         tile_bounds = tuple(self.tms.xy_bounds(Tile(x=tile_x, y=tile_y, z=tile_z)))
         dst_crs = self.tms.rasterio_crs
-        
-        logger.info(f"Reading tile z={tile_z}/x={tile_x}/y={tile_y} from dataset: {self.input}")
+
+        logger.debug(f"Reading tile z={tile_z}/x={tile_x}/y={tile_y} from dataset: {self.input}")
 
         img_stack: List[ImageData] = []
 
+        if variables and expression:
+            warnings.warn(
+                "Both expression and assets passed; expression will overwrite assets parameter.",
+                ExpressionMixingWarning,
+                stacklevel=2,
+            )
+
+        if expression:
+            variables = self.parse_expression(expression)
+
+        if not variables:
+            raise MissingVariables(
+                "`variables` must be passed via `expression` or `variables` options."
+            )
+
         for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
-            data_array = self._get_variable(
-                group,
-                variable,
-                sel=sel,
-                method=method,
-                bounds=tile_bounds,
-                height=tilesize,
-                width=tilesize,
-                dst_crs=dst_crs,
-            )
-            # Calculate size in bytes (nbytes gives the size of the array in memory)
-            data_size = data_array.nbytes
-            logger.info(
-                f"Loading data from group '{group}', variable '{variable}' "
-                f"(size: {format_bytes(data_size)})"
-            )
-            with XarrayReader(data_array, tms=self.tms) as da:
-                img_stack.append(
-                    da.tile(
-                        tile_x,
-                        tile_y,
-                        tile_z,
-                        *args,
-                        tilesize=tilesize,
-                        **kwargs,
-                    )
+            with XarrayReader(
+                self._get_variable(
+                    group,
+                    variable,
+                    sel=sel,
+                    method=method,
+                    bounds=tile_bounds,
+                    height=tilesize,
+                    width=tilesize,
+                    dst_crs=dst_crs,
+                ),
+                tms=self.tms,
+            ) as da:
+                img = da.tile(
+                    tile_x,
+                    tile_y,
+                    tile_z,
+                    *args,
+                    tilesize=tilesize,
+                    **kwargs,
                 )
+                if expression:
+                    if len(img.band_names) > 1:
+                        raise ValueError("Can't use `expression` for multidim dataset")
+                    img.band_names = [self._variable_idx[gv]]
 
-        return ImageData.create_from_list(img_stack)
+                img_stack.append(img)
+
+        img = ImageData.create_from_list(img_stack)
+
+        if expression:
+            # edit expression to avoid forbiden characters
+            expression = self._convert_expression_to_index(expression)
+            img = img.apply_expression(expression)
+            # transform expression back
+            img.band_names = [
+                self._convert_expression_from_index(b) for b in img.band_names
+            ]
+
+        img.assets = [self.input]
+
+        return img
 
     def part(  # type: ignore
         self,
         *args: Any,
-        variables: List[str],
+        variables: List[str] | None = None,
+        expression: str | None = None,
         sel: List[str] | None = None,
         method: sel_methods | None = None,
         **kwargs: Any,
@@ -559,7 +692,8 @@ class GeoZarrReader(BaseReader):
     def preview(  # type: ignore
         self,
         *args: Any,
-        variables: List[str],
+        variables: List[str] | None = None,
+        expression: str | None = None,
         max_size: int = 1024,
         sel: List[str] | None = None,
         method: sel_methods | None = None,
@@ -571,7 +705,8 @@ class GeoZarrReader(BaseReader):
     def point(  # type: ignore
         self,
         *args: Any,
-        variables: List[str],
+        variables: List[str] | None = None,
+        expression: str | None = None,
         sel: List[str] | None = None,
         method: sel_methods | None = None,
         **kwargs: Any,
@@ -579,20 +714,54 @@ class GeoZarrReader(BaseReader):
         """Read a pixel value from a dataset."""
         pts_stack: List[PointData] = []
 
+        if variables and expression:
+            warnings.warn(
+                "Both expression and assets passed; expression will overwrite assets parameter.",
+                ExpressionMixingWarning,
+                stacklevel=2,
+            )
+
+        if expression:
+            variables = self.parse_expression(expression)
+
+        if not variables:
+            raise MissingVariables(
+                "`variables` must be passed via `expression` or `variables` options."
+            )
+
         for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
             with XarrayReader(
                 self._get_variable(group, variable, sel=sel, method=method),
                 tms=self.tms,
             ) as da:
-                pts_stack.append(da.point(*args, **kwargs))
+                pt = da.point(*args, **kwargs)
+                if expression:
+                    if len(pt.band_names) > 1:
+                        raise ValueError("Can't use `expression` for multidim dataset")
+                    pt.band_names = [self._variable_idx[gv]]
 
-        return PointData.create_from_list(pts_stack)
+                pts_stack.append(pt)
+
+        pt = PointData.create_from_list(pts_stack)
+        if expression:
+            # edit expression to avoid forbiden characters
+            expression = self._convert_expression_to_index(expression)
+            pt = pt.apply_expression(expression)
+            # transform expression back
+            pt.band_names = [
+                self._convert_expression_from_index(b) for b in pt.band_names
+            ]
+
+        pt.assets = [self.input]
+
+        return pt
 
     def feature(  # type: ignore
         self,
         *args: Any,
-        variables: List[str],
+        variables: List[str] | None = None,
+        expression: str | None = None,
         sel: List[str] | None = None,
         method: sel_methods | None = None,
         **kwargs: Any,

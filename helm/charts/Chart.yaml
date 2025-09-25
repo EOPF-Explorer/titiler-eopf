@@ -1,0 +1,9 @@
+apiVersion: v2
+appVersion: "0.1.0"
+description: A dynamic Web Map tile server for EOPF data
+name: titiler-eopf
+version: 0.1.1
+icon: https://raw.githubusercontent.com/EOPF-Explorer/titiler-eopf/main/docs/img/landing.png
+maintainers:
+  - name: emmanuelmathot
+    url: https://github.com/emmanuelmathot

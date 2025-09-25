@@ -41,10 +41,11 @@ class TilerFactory(BaseTilerFactory):
     reader_dependency: Type[DefaultDependency] = DefaultDependency
 
     # variable/sel/method options
-    # Used in info/statistics
+    # Used in info/statistics endpoints
     variables_dependency: Type[DefaultDependency] = VariablesParams
 
-    # Indexes Dependencies
+    # Variables/Expression/Indexes Options
+    # User in /tiles/... endpoints
     layer_dependency: Type[DefaultDependency] = LayerParams
 
     # Dataset Options (nodata, reproject)
@@ -106,7 +107,8 @@ class TilerFactory(BaseTilerFactory):
             with rasterio.Env(**env):
                 logger.info(f"opening data with reader: {self.reader}")
                 with self.reader(src_path, **reader_params.as_dict()) as src_dst:
-                    return src_dst.info(**variables_params.as_dict())
+                    variables = variables_params.variables or src_dst.variables
+                    return src_dst.info(variables=variables)
 
         @self.router.get(
             "/info.geojson",
@@ -150,7 +152,7 @@ class TilerFactory(BaseTilerFactory):
                         type="Feature",
                         bbox=bounds,
                         geometry=geometry,
-                        properties=src_dst.info(**variables_params.as_dict()),
+                        properties=src_dst.info(variables=variables),
                     )
 
     ############################################################################
@@ -178,14 +180,16 @@ class TilerFactory(BaseTilerFactory):
             request: Request,
             src_path=Depends(self.path_dependency),
             reader_params=Depends(self.reader_dependency),
-            variables_params=Depends(self.variables_dependency),
+            layer_params=Depends(self.layer_dependency),
             crs=Depends(CRSParams),
             env=Depends(self.environment_dependency),
         ):
             """Retrieve a list of available raster tilesets for the specified dataset."""
             with rasterio.Env(**env):
                 with self.reader(src_path, **reader_params.as_dict()) as src_dst:
-                    variables = variables_params.variables or src_dst.variables
+                    variables = layer_params.variables or src_dst.parse_expression(
+                        layer_params.expression
+                    )
                     groups = {
                         group_var.split(":")[0] if ":" in group_var else "/"
                         for group_var in variables
@@ -279,7 +283,7 @@ class TilerFactory(BaseTilerFactory):
             ],
             src_path=Depends(self.path_dependency),
             reader_params=Depends(self.reader_dependency),
-            variables_params=Depends(self.variables_dependency),
+            layer_params=Depends(self.layer_dependency),
             env=Depends(self.environment_dependency),
         ):
             """Retrieve the raster tileset metadata for the specified dataset and tiling scheme (tile matrix set)."""
@@ -288,7 +292,9 @@ class TilerFactory(BaseTilerFactory):
                 with self.reader(
                     src_path, tms=tms, **reader_params.as_dict()
                 ) as src_dst:
-                    variables = variables_params.variables or src_dst.variables
+                    variables = layer_params.variables or src_dst.parse_expression(
+                        layer_params.expression
+                    )
                     groups = list(
                         {
                             group_var.split(":")[0] if ":" in group_var else "/"
@@ -484,9 +490,12 @@ class TilerFactory(BaseTilerFactory):
                 with self.reader(
                     src_path, tms=tms, **reader_params.as_dict()
                 ) as src_dst:
+                    variables = layer_params.variables or src_dst.parse_expression(
+                        layer_params.expression
+                    )
                     groups = {
                         group_var.split(":")[0] if ":" in group_var else "/"
-                        for group_var in layer_params.variables
+                        for group_var in variables
                     }
                     minx, miny, maxx, maxy = zip(
                         *[
@@ -591,9 +600,12 @@ class TilerFactory(BaseTilerFactory):
                 with self.reader(
                     src_path, tms=tms, **reader_params.as_dict()
                 ) as src_dst:
+                    variables = layer_params.variables or src_dst.parse_expression(
+                        layer_params.expression
+                    )
                     groups = {
                         group_var.split(":")[0] if ":" in group_var else "/"
-                        for group_var in layer_params.variables
+                        for group_var in variables
                     }
                     minx, miny, maxx, maxy = zip(
                         *[
