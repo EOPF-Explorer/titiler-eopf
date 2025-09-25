@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 import re
 import warnings
 from functools import cache, cached_property
@@ -30,7 +31,24 @@ from rio_tiler.models import BandStatistics, ImageData, Info, PointData
 from rio_tiler.types import BBox
 from zarr.storage import ObjectStore
 
+logger = logging.getLogger(__name__)
+
+try:
+    from obstore.auth.boto3 import Boto3CredentialProvider
+
+    HAS_BOTO3_PROVIDER = True
+except ImportError:
+    HAS_BOTO3_PROVIDER = False
+
 sel_methods = Literal["nearest", "pad", "ffill", "backfill", "bfill"]
+
+def format_bytes(size: int) -> str:
+    """Format bytes into human readable string."""
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if size < 1024.0:
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+    return f"{size:.1f} PB"
 
 
 class MissingVariables(RioTilerError):
@@ -53,8 +71,32 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
         src_path = str(Path(src_path).resolve())
         src_path = "file://" + src_path
 
-    store = obstore.store.from_url(src_path)
-    zarr_store = ObjectStore(store=store, read_only=True)
+    # Check if AWS_PROFILE is set and we're dealing with an S3 URL
+    aws_profile = os.environ.get("AWS_PROFILE")
+    if aws_profile and parsed.scheme == "s3" and HAS_BOTO3_PROVIDER:
+        # Use Boto3CredentialProvider for AWS profile support
+        from obstore.store import S3Store
+
+        # Extract bucket and key from S3 URL
+        bucket = parsed.netloc
+        key = parsed.path.lstrip("/")
+
+        store = S3Store(
+            bucket,
+            credential_provider=Boto3CredentialProvider(),
+            region=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
+            endpoint=os.environ.get("AWS_ENDPOINT_URL", None),
+            virtual_hosted_style_request=False,
+            prefix=key,
+        )
+
+        # Create the zarr store with the configured S3 store
+        zarr_store = ObjectStore(store=store, read_only=True)
+    else:
+        # Use the default obstore.store.from_url method
+        store = obstore.store.from_url(src_path)
+        zarr_store = ObjectStore(store=store, read_only=True)
+
     ds = xarray.open_datatree(
         zarr_store,
         decode_times=True,
@@ -213,6 +255,10 @@ class GeoZarrReader(BaseReader):
             self.datatree = self._ctx_stack.enter_context(
                 self.opener(self.input, **self.opener_options)
             )
+            logger.debug(f"Opening dataset: {self.input}")
+
+        self.groups = self._get_groups()
+        self.variables = self._get_variables()
 
         self.groups = self._get_groups()
         self.variables = self._get_variables()
@@ -435,6 +481,7 @@ class GeoZarrReader(BaseReader):
                 target_res = dst_transform.a
 
                 scale = get_multiscale_level(ds, target_res)  # type: ignore
+                logger.info(f"Selected multiscale level {scale} for target resolution {target_res:.6f}")
 
             # Select the multiscale group and variable
             da = ds[scale][variable]
@@ -509,7 +556,7 @@ class GeoZarrReader(BaseReader):
         method: sel_methods | None = None,
     ) -> Dict[str, Info]:
         """Return xarray.DataArray info.
-        
+
         Variables that fail to load will be skipped and logged as warnings.
         """
         variables = variables or self.variables
@@ -525,9 +572,7 @@ class GeoZarrReader(BaseReader):
                 ) as da:
                     return da.info()
             except Exception as e:
-                logging.warning(
-                    f"Failed to get info for variable '{group_var}': {e!s}"
-                )
+                logging.warning(f"Failed to get info for variable '{group_var}': {e!s}")
                 return None
 
         # Build result dictionary, skipping variables that failed
@@ -536,7 +581,7 @@ class GeoZarrReader(BaseReader):
             info_data = _get_info_safe(gv)
             if info_data is not None:
                 result[gv] = info_data
-        
+
         return result
 
     def statistics(  # type: ignore
@@ -567,6 +612,8 @@ class GeoZarrReader(BaseReader):
         """Read a Web Map tile from a dataset."""
         tile_bounds = tuple(self.tms.xy_bounds(Tile(x=tile_x, y=tile_y, z=tile_z)))
         dst_crs = self.tms.rasterio_crs
+
+        logger.debug(f"Reading tile z={tile_z}/x={tile_x}/y={tile_y} from dataset: {self.input}")
 
         img_stack: List[ImageData] = []
 

@@ -26,6 +26,7 @@ dependencies = [
     "titiler.xarray>=0.23,<0.24",
     "zarr>=3.1.3",
     "obstore",
+    "boto3",
     "pydantic-settings~=2.0",
     "starlette-cramjam>=0.4,<1.0",
 ]
