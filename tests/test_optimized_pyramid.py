@@ -9,9 +9,19 @@ from titiler.eopf.reader import GeoZarrReader, MissingVariables
 DATA_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 OPTIMIZED_PYRAMID = os.path.join(
     DATA_DIR,
-    "eopf_geozarr",
+    "eopf_geozarr", 
     "optimized_pyramid.zarr",
 )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def create_optimized_pyramid_fixture():
+    """Ensure the optimized pyramid fixture exists before running tests."""
+    if not os.path.exists(OPTIMIZED_PYRAMID):
+        # Import and run the fixture creation script
+        from tests.create_multiscale_fixture import create_optimized_pyramid_fixture
+        create_optimized_pyramid_fixture()
+    return OPTIMIZED_PYRAMID
 
 
 def test_optimized_pyramid_structure():
