@@ -17,8 +17,7 @@ from titiler.core.factory import AlgorithmFactory, ColorMapFactory, TMSFactory
 from titiler.core.middleware import CacheControlMiddleware
 from titiler.core.models.OGC import Conformance, Landing
 from titiler.core.resources.enums import MediaType
-from titiler.core.templating import create_html_response
-from titiler.core.utils import accept_media_type, update_openapi
+from titiler.core.utils import accept_media_type, create_html_response, update_openapi
 
 from . import __version__ as titiler_version
 from .dependencies import DatasetPathParams
@@ -29,19 +28,8 @@ from .settings import ApiSettings
 settings = ApiSettings()
 
 # HTML templates
-html_templates = Jinja2Templates(
-    env=jinja2.Environment(
-        loader=jinja2.ChoiceLoader(
-            [
-                jinja2.PackageLoader(__package__, "templates"),
-                jinja2.PackageLoader("titiler.core.templating", "html"),
-            ]
-        )
-    )
-)
-
-# Map templates
-map_templates = Jinja2Templates(
+templates = Jinja2Templates(
+    autoescape=jinja2.select_autoescape(["html", "xml"]),
     env=jinja2.Environment(
         loader=jinja2.ChoiceLoader(
             [
@@ -49,8 +37,9 @@ map_templates = Jinja2Templates(
                 jinja2.PackageLoader("titiler.core", "templates"),
             ]
         )
-    )
+    ),
 )
+
 
 app = FastAPI(
     title=settings.name,
@@ -80,7 +69,7 @@ TITILER_CONFORMS_TO = {
 
 
 md = TilerFactory(
-    templates=map_templates,
+    templates=templates,
     extensions=[
         DatasetMetadataExtension(),
         EOPFViewerExtension(),
@@ -93,13 +82,13 @@ app.include_router(md.router, prefix="/collections/{collection_id}/items/{item_i
 TITILER_CONFORMS_TO.update(md.conforms_to)
 
 # TileMatrixSets endpoints
-tms = TMSFactory()
+tms = TMSFactory(templates=templates)
 app.include_router(tms.router, tags=["Tiling Schemes"])
 TITILER_CONFORMS_TO.update(tms.conforms_to)
 
 ###############################################################################
 # Algorithms endpoints
-algorithms = AlgorithmFactory()
+algorithms = AlgorithmFactory(templates=templates)
 app.include_router(
     algorithms.router,
     tags=["Algorithms"],
@@ -107,7 +96,7 @@ app.include_router(
 TITILER_CONFORMS_TO.update(algorithms.conforms_to)
 
 # Colormaps endpoints
-cmaps = ColorMapFactory()
+cmaps = ColorMapFactory(templates=templates)
 app.include_router(
     cmaps.router,
     tags=["ColorMaps"],
@@ -221,6 +210,24 @@ def landing(
                 "rel": "http://www.opengis.net/def/rel/ogc/1.0/conformance",
             },
             {
+                "title": "List of Available TileMatrixSets",
+                "href": str(request.url_for("tilematrixsets")),
+                "type": "application/json",
+                "rel": "http://www.opengis.net/def/rel/ogc/1.0/tiling-schemes",
+            },
+            {
+                "title": "List of Available Algorithms",
+                "href": str(request.url_for("available_algorithms")),
+                "type": "application/json",
+                "rel": "data",
+            },
+            {
+                "title": "List of Available ColorMaps",
+                "href": str(request.url_for("available_colormaps")),
+                "type": "application/json",
+                "rel": "data",
+            },
+            {
                 "title": "titiler.eopf source code (external link)",
                 "href": "https://github.com/EOPF-Explorer/titiler-eopf",
                 "type": "text/html",
@@ -229,13 +236,13 @@ def landing(
         ],
     }
 
-    output_type: Optional[MediaType]
     if f:
         output_type = MediaType[f]
     else:
         accepted_media = [MediaType.html, MediaType.json]
-        output_type = accept_media_type(
-            request.headers.get("accept", ""), accepted_media
+        output_type = (
+            accept_media_type(request.headers.get("accept", ""), accepted_media)
+            or MediaType.json
         )
 
     if output_type == MediaType.html:
@@ -244,7 +251,7 @@ def landing(
             data,
             title="TiTiler-EOPF",
             template_name="landing",
-            templates=html_templates,
+            templates=templates,
         )
 
     return data
@@ -283,13 +290,13 @@ def conformance(
     """
     data = {"conformsTo": sorted(TITILER_CONFORMS_TO)}
 
-    output_type: Optional[MediaType]
     if f:
         output_type = MediaType[f]
     else:
         accepted_media = [MediaType.html, MediaType.json]
-        output_type = accept_media_type(
-            request.headers.get("accept", ""), accepted_media
+        output_type = (
+            accept_media_type(request.headers.get("accept", ""), accepted_media)
+            or MediaType.json
         )
 
     if output_type == MediaType.html:
@@ -298,7 +305,7 @@ def conformance(
             data,
             title="Conformance",
             template_name="conformance",
-            templates=html_templates,
+            templates=templates,
         )
 
     return data

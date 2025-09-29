@@ -509,7 +509,7 @@ class GeoZarrReader(BaseReader):
         method: sel_methods | None = None,
     ) -> Dict[str, Info]:
         """Return xarray.DataArray info.
-        
+
         Variables that fail to load will be skipped and logged as warnings.
         """
         variables = variables or self.variables
@@ -525,9 +525,7 @@ class GeoZarrReader(BaseReader):
                 ) as da:
                     return da.info()
             except Exception as e:
-                logging.warning(
-                    f"Failed to get info for variable '{group_var}': {e!s}"
-                )
+                logging.warning(f"Failed to get info for variable '{group_var}': {e!s}")
                 return None
 
         # Build result dictionary, skipping variables that failed
@@ -536,7 +534,6 @@ class GeoZarrReader(BaseReader):
             info_data = _get_info_safe(gv)
             if info_data is not None:
                 result[gv] = info_data
-        
         return result
 
     def statistics(  # type: ignore
