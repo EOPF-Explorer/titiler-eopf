@@ -566,7 +566,6 @@ class GeoZarrReader(BaseReader):
             info_data = _get_info_safe(gv)
             if info_data is not None:
                 result[gv] = info_data
-
         return result
 
     def statistics(  # type: ignore
