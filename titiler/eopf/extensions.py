@@ -1,14 +1,25 @@
 """titiler.xarray Extensions."""
 
+import json
+import math
+from typing import Annotated
+
 import jinja2
 from attrs import define
-from fastapi import Depends
+from fastapi import Depends, Query
+from geojson_pydantic.features import Feature
+from rasterio import windows
+from rasterio.crs import CRS
+from rasterio.warp import transform_geom
+from rio_tiler.constants import WGS84_CRS
 from starlette.requests import Request
 from starlette.responses import HTMLResponse
 from starlette.templating import Jinja2Templates
 
 from titiler.core.factory import FactoryExtension
 from titiler.core.resources.enums import MediaType
+from titiler.core.resources.responses import GeoJSONResponse
+from titiler.core.utils import bounds_to_geometry
 
 from .factory import TilerFactory
 
@@ -110,3 +121,221 @@ class EOPFViewerExtension(FactoryExtension):
                 },
                 media_type="text/html",
             )
+
+
+def _dims(total: int, chop: int):
+    """Given a total number of pixels, chop into equal chunks.
+
+    yeilds (offset, size) tuples
+    >>> list(dims(512, 256))
+    [(0, 256), (256, 256)]
+    >>> list(dims(502, 256))
+    [(0, 256), (256, 246)]
+    >>> list(dims(522, 256))
+    [(0, 256), (256, 256), (512, 10)]
+    """
+    for a in range(int(math.ceil(total / chop))):
+        offset = a * chop
+        yield offset, chop
+
+
+def bbox_to_feature(
+    bbox: tuple[float, float, float, float],
+    properties: dict | None = None,
+) -> dict:
+    """Create a GeoJSON feature polygon from a bounding box."""
+    # Dateline crossing dataset
+    if bbox[0] > bbox[2]:
+        bounds_left = [-180, bbox[1], bbox[2], bbox[3]]
+        bounds_right = [bbox[0], bbox[1], 180, bbox[3]]
+
+        features = [
+            {
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [
+                        [
+                            [bounds_left[0], bounds_left[3]],
+                            [bounds_left[0], bounds_left[1]],
+                            [bounds_left[2], bounds_left[1]],
+                            [bounds_left[2], bounds_left[3]],
+                            [bounds_left[0], bounds_left[3]],
+                        ]
+                    ],
+                },
+                "properties": properties or {},
+                "type": "Feature",
+            },
+            {
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [
+                        [
+                            [bounds_right[0], bounds_right[3]],
+                            [bounds_right[0], bounds_right[1]],
+                            [bounds_right[2], bounds_right[1]],
+                            [bounds_right[2], bounds_right[3]],
+                            [bounds_right[0], bounds_right[3]],
+                        ]
+                    ],
+                },
+                "properties": properties or {},
+                "type": "Feature",
+            },
+        ]
+    else:
+        features = [
+            {
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [
+                        [
+                            [bbox[0], bbox[3]],
+                            [bbox[0], bbox[1]],
+                            [bbox[2], bbox[1]],
+                            [bbox[2], bbox[3]],
+                            [bbox[0], bbox[3]],
+                        ]
+                    ],
+                },
+                "properties": properties or {},
+                "type": "Feature",
+            },
+        ]
+
+    return {"type": "FeatureCollection", "features": features}
+
+
+@define
+class EOPFChunkVizExtension(FactoryExtension):
+    """Add /chunks.html endpoint to the TilerFactory."""
+
+    templates: Jinja2Templates = DEFAULT_TEMPLATES
+
+    def register(self, factory: TilerFactory):
+        """Register endpoint to the tiler factory."""
+
+        @factory.router.get(
+            "/chunks.html",
+            response_class=HTMLResponse,
+            operation_id=f"{factory.operation_prefix}getChunkViewer",
+        )
+        def chunk_viewer(
+            request: Request,
+            src_path=Depends(factory.path_dependency),
+        ):
+            """Chunk Viewer."""
+            with factory.reader(src_path) as src_dst:
+                groups = src_dst.groups
+                minx, miny, maxx, maxy = zip(
+                    *[src_dst.get_bounds(group, WGS84_CRS) for group in groups]
+                )
+                bounds = (min(minx), min(miny), max(maxx), max(maxy))
+                geojson = Feature(
+                    type="Feature",
+                    bbox=bounds,
+                    geometry=bounds_to_geometry(bounds),
+                    properties={},
+                ).model_dump_json(exclude_none=True)
+
+                metadata = {}
+                for group in groups:
+                    # get MultiScale info
+                    levels = []
+                    if multiscales := src_dst.datatree[group].attrs.get("multiscales"):
+                        raw_res = None
+                        for mat in multiscales["tile_matrix_set"]["tileMatrices"]:
+                            raw_res = mat["cellSize"] if raw_res is None else raw_res
+                            levels.append(
+                                {
+                                    "Level": mat["id"],
+                                    "Width": mat["tileWidth"] * mat["matrixWidth"],
+                                    "Height": mat["tileHeight"] * mat["matrixHeight"],
+                                    "ChunkSize": (mat["tileWidth"], mat["tileHeight"]),
+                                    "Decimation": mat["cellSize"] / raw_res,
+                                }
+                            )
+
+                    else:
+                        ds = self.datatree[group]
+                        chunksizes = ds.chunksizes
+                        levels.append(
+                            {
+                                "Level": "0",
+                                "Width": ds.rio.width,
+                                "Height": ds.rio.height,
+                                "ChunkSize": (None, None)
+                                if chunksizes
+                                else (ds.rio.height, ds.rio.width),
+                                "Decimation": 1,
+                            }
+                        )
+                    metadata[group] = levels
+
+            return self.templates.TemplateResponse(
+                request,
+                name="chunks.html",
+                context={
+                    "geojson": geojson,
+                    "metadata": json.dumps(metadata),
+                    "grid_endpoint": factory.url_for(request, "chunk_grid"),
+                },
+                media_type="text/html",
+            )
+
+        @factory.router.get(
+            r"/chunk.geojson",
+            response_model_exclude_none=True,
+            response_class=GeoJSONResponse,
+        )
+        def chunk_grid(
+            group: Annotated[str, Query(description="Group")],
+            level: Annotated[int, Query(description="Multiscale Level")],
+            src_path=Depends(factory.path_dependency),
+        ):
+            """return geojson."""
+            with factory.reader(src_path) as src_dst:
+                if multiscales := src_dst.datatree[group].attrs.get("multiscales"):
+                    matrix = multiscales["tile_matrix_set"]["tileMatrices"][level]
+                    scale = matrix["id"]
+                    ds = src_dst.datatree[group][scale].to_dataset()
+                    blockysize = matrix["tileHeight"]
+                    blockxsize = matrix["tileWidth"]
+                    crs = CRS.from_user_input(multiscales["tile_matrix_set"]["crs"])
+
+                else:
+                    ds = src_dst.datatree[group].to_dataset()
+                    chunksizes = (
+                        ds.chunksizes
+                        if ds.chunksizes
+                        else (ds.rio.height, ds.rio.width)
+                    )
+                    blockysize = chunksizes[0]
+                    blockxsize = chunksizes[1]
+                    crs = ds.rio.crs or WGS84_CRS
+
+                transform = ds.rio.transform()
+                # try:
+                feats = []
+                winds = (
+                    windows.Window(col_off=col_off, row_off=row_off, width=w, height=h)
+                    for row_off, h in _dims(ds.rio.height, blockysize)
+                    for col_off, w in _dims(ds.rio.width, blockxsize)
+                )
+                for window in winds:
+                    fc = bbox_to_feature(windows.bounds(window, transform))
+                    for feat in fc.get("features", []):
+                        if crs != WGS84_CRS:
+                            geom = transform_geom(crs, WGS84_CRS, feat["geometry"])
+                        else:
+                            geom = feat["geometry"]
+
+                        feats.append(
+                            {
+                                "type": "Feature",
+                                "geometry": geom,
+                                "properties": {"window": str(window)},
+                            }
+                        )
+
+            return {"type": "FeatureCollection", "features": feats}

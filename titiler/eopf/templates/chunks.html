@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset='utf-8' />
+        <title>EoPF Chunk viz</title>
+        <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+
+        <script src='https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js'></script>
+        <link href='https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css' rel='stylesheet' />
+
+        <link href='https://api.mapbox.com/mapbox-assembly/v0.23.2/assembly.min.css' rel='stylesheet'>
+        <script src='https://api.mapbox.com/mapbox-assembly/v0.23.2/assembly.js'></script>
+
+        <style>
+            body { margin:0; padding:0; width:100%; height:100%;}
+            #map { position:absolute; top:0; bottom:0; width:100%; }
+            .loading-map {
+                position: absolute;
+                width: 100%;
+                height: 100%;
+                color: #FFF;
+                background-color: #000;
+                text-align: center;
+                opacity: 0.5;
+                font-size: 45px;
+            }
+            .loading-map.off{
+                opacity: 0;
+                -o-transition: all .5s ease;
+                -webkit-transition: all .5s ease;
+                -moz-transition: all .5s ease;
+                -ms-transition: all .5s ease;
+                transition: all ease .5s;
+                visibility:hidden;
+            }
+            .middle-center {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+            }
+
+            .middle-center * {
+                display: block;
+                padding: 5px;
+            }
+
+            #menu {
+              left: 0;
+              top: 0;
+              -o-transition: all .5s ease;
+              -webkit-transition: all .5s ease;
+              -moz-transition: all .5s ease;
+              -ms-transition: all .5s ease;
+              transition: all ease .5s;
+            }
+
+            @media(max-width: 767px) {
+              .mapboxgl-ctrl-attrib {
+                  font-size: 10px;
+              }
+            }
+
+        </style>
+    </head>
+
+    <body>
+
+    <div id='menu' class='px12 pt12 absolute z2 bg-white'>
+        <!-- <div class='txt-h5 mt6 mb6 color-black'>
+            Dataset Info
+        </div>
+        <div id='raster-size' class='txt-normal'></div> -->
+        <div class='txt-h5 mt6 mb6 color-black'>
+            Dataset Group
+        </div>
+        <div class='select-container'>
+            <select id='group-selector' class='select select--s select--stroke wmax-full color-black bg-white'>
+            </select>
+            <div class='select-arrow color-black'></div>
+        </div>
+
+        <div class='txt-h5 mt6 mb6 color-black'>
+            Multiscale Level
+        </div>
+        <div class='select-container mb6'>
+            <select id='ms-selector' class='select select--s select--stroke wmax-full color-black bg-white'>
+            </select>
+            <div class='select-arrow color-black'></div>
+        </div>
+
+        <!-- <div class='txt-h5 mt24 mb6 color-black'>
+            Decimation
+        </div> -->
+    </div>
+
+    <div id='map'>
+      <div id='loader' class="loading-map z3">
+        <div class="middle-center">
+          <div class="round animation-spin animation--infinite animation--speed-1">
+            <svg class='icon icon--l inline-block'><use xlink:href='#icon-satellite'/></svg>
+          </div>
+        </div>
+      </div>
+      <div class="zoom-info"><span id="zoom"></span></div>
+    </div>
+
+    <script>
+    const scope = {metadata: {{ metadata | safe }}}
+    const grid_endpoint = '{{ grid_endpoint }}'
+
+    var map = new maplibregl.Map({
+      container: 'map',
+      style: {
+        version: 8,
+        sources: {
+          'basemap': {
+            type: 'raster',
+            tiles: [
+              'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+            ],
+            tileSize: 256,
+            attribution:
+              '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          }
+        },
+        layers: [
+          {
+            'id': 'basemap',
+            'type': 'raster',
+            'source': 'basemap',
+            'minzoom': 0,
+            'maxzoom': 20
+          }
+        ]
+      },
+      center: [0, 0],
+      zoom: 4
+    })
+
+    const add_tile_grid = (group, level) => {
+        if (map.getLayer('tile-grid')) map.removeLayer('tile-grid')
+        if (map.getSource('tile-grid')) map.removeSource('tile-grid')
+
+        return fetch(`${grid_endpoint}?group=${group}&level=${level}`)
+            .then(res => {
+                if (res.ok) return res.json()
+                throw new Error('Network response was not ok.');
+            })
+            .then(data => {
+                map.addSource('tile-grid', {
+                    'type': 'geojson',
+                    'data': data
+                })
+
+                map.addLayer({
+                    id: 'tile-grid',
+                    type: 'line',
+                    source: 'tile-grid',
+                    layout: {
+                        'line-cap': 'round',
+                        'line-join': 'round'
+                    },
+                    paint: {
+                        'line-color': '#e40b34',
+                        'line-width': 0.5
+                    }
+                })
+            })
+            .catch(err => {
+                console.warn(err)
+            })
+    }
+
+    const update_viz = () => {
+        const group = document.getElementById('group-selector').selectedOptions[0].getAttribute("group")
+        const level = document.getElementById('ms-selector').selectedOptions[0].getAttribute("level")
+        add_tile_grid(group, level)
+    }
+
+    document.getElementById('group-selector').addEventListener('change', (e) => {
+        document.getElementById('ms-selector').innerHTML = ''
+        const group = document.getElementById('group-selector').selectedOptions[0].getAttribute("group")
+        scope.metadata[group].forEach((opt, idx) => {
+            const option = document.createElement('option')
+            option.setAttribute('level', opt.Level)
+            option.text = `Level: ${opt.Level}`
+            if (idx === 0) option.selected = "selected"
+            document.getElementById('ms-selector').appendChild(option);
+        });
+        update_viz()
+    })
+
+    document.getElementById('ms-selector').addEventListener('change', (e) => {
+        update_viz()
+    })
+
+    const geojson = {{ geojson | safe}}
+
+    map.on('load', () => {
+        map.addSource('aoi', {
+            'type': 'geojson',
+            'data': geojson
+        })
+        map.addLayer({
+            id: 'aoi-polygon',
+            type: 'line',
+            source: 'aoi',
+            layout: {
+                'line-cap': 'round',
+                'line-join': 'round'
+            },
+            paint: {
+                'line-color': '#000000',
+                'line-dasharray': [3, 3],
+                'line-width': 1
+            }
+        })
+
+        let crossing_dateline = false
+        let bounds = [...geojson.bbox]
+        // Bounds crossing dateline
+        if (bounds[0] > bounds[2]) {
+            crossing_dateline = true
+            bounds[0] = bounds[0] - 360
+        }
+        map.fitBounds(
+            [[bounds[0], bounds[1]], [bounds[2], bounds[3]]]
+        )
+
+        const groups = Object.keys(scope.metadata)
+        groups.forEach((opt, idx) => {
+            const option = document.createElement('option')
+            option.setAttribute('group', opt)
+            option.text = opt
+            if (idx === 0) option.selected = "selected"
+            document.getElementById('group-selector').appendChild(option);
+        });
+
+        scope.metadata[groups[0]].forEach((opt, idx) => {
+            const option = document.createElement('option')
+            option.setAttribute('level', opt.Level)
+            option.text = `Level: ${opt.Level}`
+            if (idx === 0) option.selected = "selected"
+            document.getElementById('ms-selector').appendChild(option);
+        });
+
+        update_viz()
+        document.getElementById('loader').classList.toggle('off')
+    })
+
+    </script>
+
+    </body>
+    </html>
