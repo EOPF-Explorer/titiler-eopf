@@ -1,6 +1,7 @@
 """test titiler-eopf optimized pyramid functionality"""
 
 import os
+
 import pytest
 import xarray
 
@@ -9,7 +10,7 @@ from titiler.eopf.reader import GeoZarrReader, MissingVariables
 DATA_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 OPTIMIZED_PYRAMID = os.path.join(
     DATA_DIR,
-    "eopf_geozarr", 
+    "eopf_geozarr",
     "optimized_pyramid.zarr",
 )
 
@@ -20,6 +21,7 @@ def create_optimized_pyramid_fixture():
     if not os.path.exists(OPTIMIZED_PYRAMID):
         # Import and run the fixture creation script
         from tests.create_multiscale_fixture import create_optimized_pyramid_fixture
+
         create_optimized_pyramid_fixture()
     return OPTIMIZED_PYRAMID
 
@@ -138,7 +140,7 @@ def test_info_method_robustness():
         assert len(info) == 10
 
         # All variables should have valid info
-        for var_name, var_info in info.items():
+        for _, var_info in info.items():
             assert var_info.width > 0
             assert var_info.height > 0
             assert var_info.crs is not None

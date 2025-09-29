@@ -308,22 +308,26 @@ class GeoZarrReader(BaseReader):
             if "multiscales" in group.attrs:
                 # Get all variables across all multiscale levels
                 all_vars = set()
-                for matrix in group.attrs["multiscales"]["tile_matrix_set"]["tileMatrices"]:
+                for matrix in group.attrs["multiscales"]["tile_matrix_set"][
+                    "tileMatrices"
+                ]:
                     scale = matrix["id"]
                     if scale in group:
                         scale_group = group[scale]
                         # Only include multidimensional data variables (not 0D attributes)
                         multidim_vars = {
-                            var for var, data_array in scale_group.data_vars.items()
+                            var
+                            for var, data_array in scale_group.data_vars.items()
                             if data_array.ndim > 0
                         }
                         all_vars.update(multidim_vars)
-                
+
                 variables.extend(f"{g}:{v}" for v in sorted(all_vars))
             else:
                 # Only include multidimensional data variables (not 0D attributes)
                 multidim_vars = [
-                    var for var, data_array in group.data_vars.items()
+                    var
+                    for var, data_array in group.data_vars.items()
                     if data_array.ndim > 0
                 ]
                 variables.extend(f"{g}:{v}" for v in multidim_vars)
@@ -454,21 +458,25 @@ class GeoZarrReader(BaseReader):
             if scale not in ds or variable not in ds[scale].data_vars:
                 # Find the scale that contains this variable, preferring finer resolutions
                 available_scales = []
-                for matrix in ds.attrs["multiscales"]["tile_matrix_set"]["tileMatrices"]:
+                for matrix in ds.attrs["multiscales"]["tile_matrix_set"][
+                    "tileMatrices"
+                ]:
                     scale_id = matrix["id"]
                     if scale_id in ds and variable in ds[scale_id].data_vars:
                         available_scales.append((scale_id, matrix["cellSize"]))
-                
+
                 if not available_scales:
                     raise MissingVariables(
                         f"Variable '{variable}' not found in any multiscale level of group '{group}'"
                     )
-                
+
                 # Sort by resolution (finer first) and take the first available
                 available_scales.sort(key=lambda x: x[1])
                 scale = available_scales[0][0]
-                
-                logging.info(f"Variable '{variable}' not available at requested scale, using scale '{scale}' instead")
+
+                logging.info(
+                    f"Variable '{variable}' not available at requested scale, using scale '{scale}' instead"
+                )
 
             # Select the multiscale group and variable
             da = ds[scale][variable]

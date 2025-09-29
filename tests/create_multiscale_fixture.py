@@ -4,15 +4,16 @@ Script to create a optimized pyramid test fixture that mimics the new S2 optimiz
 """
 
 import os
+
 import numpy as np
+import rioxarray  # noqa: F401
 import xarray as xr
 import zarr
-import rioxarray  # noqa: F401
-from zarr.codecs import BloscCodec
 from pyproj import CRS
+from zarr.codecs import BloscCodec
 
 
-def create_optimized_pyramid_fixture():
+def create_optimized_pyramid_fixture():  # noqa: C901
     """Create a optimized pyramid fixture with different variables at different scales."""
 
     fixture_path = "tests/fixtures/eopf_geozarr/optimized_pyramid.zarr"
@@ -28,7 +29,7 @@ def create_optimized_pyramid_fixture():
 
     # Define CRS and transform (similar to existing fixture)
     crs = CRS.from_epsg(32633)  # WGS 84 / UTM zone 33N
-    
+
     # Create compressor for encoding
     compressor = BloscCodec(cname="zstd", clevel=3, shuffle="shuffle", blocksize=0)
 
@@ -43,13 +44,13 @@ def create_optimized_pyramid_fixture():
                 chunks = (chunk_y, chunk_x)
             else:
                 chunks = (min(spatial_chunk, data_shape[-1]),)
-                
+
             encoding[var] = {"compressors": [compressor], "chunks": chunks}
-        
+
         # Add coordinate encoding
         for coord in ds.coords:
             encoding[coord] = {"compressors": None}
-            
+
         return encoding
 
     # Base spatial parameters
@@ -191,11 +192,11 @@ def create_optimized_pyramid_fixture():
             "y": y_da,
         }
     )
-    
+
     # Set CRS at dataset level
     level_0_ds = level_0_ds.rio.write_crs(crs)
     level_0_ds = level_0_ds.rio.set_spatial_dims(x_dim="x", y_dim="y")
-    
+
     # Set grid_mapping attributes
     level_0_ds.attrs["grid_mapping"] = "spatial_ref"
     for var in ["b02", "b03", "b04", "b08"]:
@@ -203,16 +204,16 @@ def create_optimized_pyramid_fixture():
 
     level_0_ds.attrs["pyramid_level"] = 0
     level_0_ds.attrs["resolution_meters"] = 10
-    
+
     # Create encoding and write level 0
     encoding_0 = create_encoding(level_0_ds)
     level_0_ds.to_zarr(
-        fixture_path, 
-        group="measurements/reflectance/0", 
+        fixture_path,
+        group="measurements/reflectance/0",
         mode="w",
         consolidated=True,
         zarr_format=3,
-        encoding=encoding_0
+        encoding=encoding_0,
     )
 
     # Level 1 (20m): All bands (native 20m + downsampled 10m)
@@ -232,11 +233,11 @@ def create_optimized_pyramid_fixture():
             "y": y_da,
         }
     )
-    
+
     # Set CRS at dataset level
     level_1_ds = level_1_ds.rio.write_crs(crs)
     level_1_ds = level_1_ds.rio.set_spatial_dims(x_dim="x", y_dim="y")
-    
+
     # Set grid_mapping attributes
     level_1_ds.attrs["grid_mapping"] = "spatial_ref"
     for var in ["b02", "b03", "b04", "b05", "b06", "b07", "b08", "b11", "b12", "b8a"]:
@@ -244,21 +245,20 @@ def create_optimized_pyramid_fixture():
 
     level_1_ds.attrs["pyramid_level"] = 1
     level_1_ds.attrs["resolution_meters"] = 20
-    
+
     # Create encoding and write level 1
     encoding_1 = create_encoding(level_1_ds)
     level_1_ds.to_zarr(
         fixture_path,
-        group="measurements/reflectance/1", 
+        group="measurements/reflectance/1",
         mode="a",
         consolidated=True,
         zarr_format=3,
-        encoding=encoding_1
+        encoding=encoding_1,
     )
 
     # Level 2 (60m): All bands
     print("Creating Level 2 (60m) with all bands")
-    level_2_group = reflectance_group.create_group("2")
 
     x_da, y_da = create_coord_arrays(base_x_60m, base_y_60m)
 
@@ -274,11 +274,11 @@ def create_optimized_pyramid_fixture():
             "y": y_da,
         }
     )
-    
+
     # Set CRS at dataset level
     level_2_ds = level_2_ds.rio.write_crs(crs)
     level_2_ds = level_2_ds.rio.set_spatial_dims(x_dim="x", y_dim="y")
-    
+
     # Set grid_mapping attributes
     level_2_ds.attrs["grid_mapping"] = "spatial_ref"
     for var in ["b02", "b03", "b04", "b05", "b06", "b07", "b08", "b11", "b12", "b8a"]:
@@ -291,11 +291,11 @@ def create_optimized_pyramid_fixture():
     encoding_2 = create_encoding(level_2_ds)
     level_2_ds.to_zarr(
         fixture_path,
-        group="measurements/reflectance/2", 
+        group="measurements/reflectance/2",
         mode="a",
         consolidated=True,
         zarr_format=3,
-        encoding=encoding_2
+        encoding=encoding_2,
     )
 
     # Level 3 (120m): All bands (downsampled from level 2)
@@ -315,11 +315,11 @@ def create_optimized_pyramid_fixture():
             "y": y_da,
         }
     )
-    
+
     # Set CRS at dataset level
     level_3_ds = level_3_ds.rio.write_crs(crs)
     level_3_ds = level_3_ds.rio.set_spatial_dims(x_dim="x", y_dim="y")
-    
+
     # Set grid_mapping attributes
     level_3_ds.attrs["grid_mapping"] = "spatial_ref"
     for var in ["b02", "b03", "b04", "b05", "b06", "b07", "b08", "b11", "b12", "b8a"]:
@@ -327,16 +327,16 @@ def create_optimized_pyramid_fixture():
 
     level_3_ds.attrs["pyramid_level"] = 3
     level_3_ds.attrs["resolution_meters"] = 120
-    
+
     # Create encoding and write level 3
     encoding_3 = create_encoding(level_3_ds)
     level_3_ds.to_zarr(
         fixture_path,
-        group="measurements/reflectance/3", 
+        group="measurements/reflectance/3",
         mode="a",
         consolidated=True,
         zarr_format=3,
-        encoding=encoding_3
+        encoding=encoding_3,
     )
 
     print(f"✅ Created optimized pyramid fixture at {fixture_path}")
