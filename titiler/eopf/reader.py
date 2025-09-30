@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 import re
 import warnings
 from functools import cache, cached_property
@@ -30,6 +31,13 @@ from rio_tiler.models import BandStatistics, ImageData, Info, PointData
 from rio_tiler.types import BBox
 from zarr.storage import ObjectStore
 
+try:
+    from obstore.auth.boto3 import Boto3CredentialProvider
+
+    HAS_BOTO3_PROVIDER = True
+except ImportError:
+    HAS_BOTO3_PROVIDER = False
+
 sel_methods = Literal["nearest", "pad", "ffill", "backfill", "bfill"]
 
 
@@ -53,8 +61,32 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
         src_path = str(Path(src_path).resolve())
         src_path = "file://" + src_path
 
-    store = obstore.store.from_url(src_path)
-    zarr_store = ObjectStore(store=store, read_only=True)
+    # Check if AWS_PROFILE is set and we're dealing with an S3 URL
+    aws_profile = os.environ.get("AWS_PROFILE")
+    if aws_profile and parsed.scheme == "s3" and HAS_BOTO3_PROVIDER:
+        # Use Boto3CredentialProvider for AWS profile support
+        from obstore.store import S3Store
+
+        # Extract bucket and key from S3 URL
+        bucket = parsed.netloc
+        key = parsed.path.lstrip("/")
+
+        store = S3Store(
+            bucket,
+            credential_provider=Boto3CredentialProvider(),
+            region=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
+            endpoint=os.environ.get("AWS_ENDPOINT_URL", None),
+            virtual_hosted_style_request=False,
+            prefix=key,
+        )
+
+        # Create the zarr store with the configured S3 store
+        zarr_store = ObjectStore(store=store, read_only=True)
+    else:
+        # Use the default obstore.store.from_url method
+        store = obstore.store.from_url(src_path)
+        zarr_store = ObjectStore(store=store, read_only=True)
+
     ds = xarray.open_datatree(
         zarr_store,
         decode_times=True,
