@@ -257,7 +257,7 @@ class EOPFChunkVizExtension(FactoryExtension):
                             )
 
                     else:
-                        ds = self.datatree[group]
+                        ds = src_dst.datatree[group]
                         chunksizes = ds.chunksizes
                         levels.append(
                             {
