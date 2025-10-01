@@ -12,8 +12,11 @@
             "args": [
                 "titiler.eopf.main:app",
                 "--reload",
-                "--port", "8000"
+                "--port", "8000",
+                "--log-level", "info",
+                "--access-log"
             ],
+            "console": "integratedTerminal",
             "jinja": true,
             "env": {
                 "PYTHONPATH": "${workspaceFolder}/.venv/bin",
@@ -29,8 +32,11 @@
             "args": [
                 "titiler.eopf.main:app",
                 "--reload",
-                "--port", "8000"
+                "--port", "8000",
+                "--log-level", "info",
+                "--access-log"
             ],
+            "console": "integratedTerminal",
             "jinja": true,
             "justMyCode": false,
             "env": {
