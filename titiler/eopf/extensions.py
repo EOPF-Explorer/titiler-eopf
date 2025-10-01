@@ -212,7 +212,7 @@ class EOPFChunkVizExtension(FactoryExtension):
 
     templates: Jinja2Templates = DEFAULT_TEMPLATES
 
-    def register(self, factory: TilerFactory):
+    def register(self, factory: TilerFactory):  # noqa: C901
         """Register endpoint to the tiler factory."""
 
         @factory.router.get(
@@ -258,15 +258,20 @@ class EOPFChunkVizExtension(FactoryExtension):
 
                     else:
                         ds = src_dst.datatree[group].to_dataset()
-                        chunksizes = ds.chunksizes
+                        preferred_chunks = ds.encoding.get("preferred_chunks", {})
+                        if {"x", "y"}.intersection(preferred_chunks):
+                            chunkxsize = preferred_chunks["x"]
+                            chunkysize = preferred_chunks["y"]
+                        else:
+                            chunkxsize = ds.rio.width
+                            chunkysize = ds.rio.height
+
                         levels.append(
                             {
                                 "Level": "0",
                                 "Width": ds.rio.width,
                                 "Height": ds.rio.height,
-                                "ChunkSize": (None, None)
-                                if chunksizes
-                                else (ds.rio.height, ds.rio.width),
+                                "ChunkSize": (chunkxsize, chunkysize),
                                 "Decimation": 1,
                             }
                         )
