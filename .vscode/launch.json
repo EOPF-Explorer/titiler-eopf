@@ -69,6 +69,10 @@ http://127.0.0.1:8000/collections/eopf_geozarr/items/S2C_MSIL2A_20250811T112131_
 NDVI
 http://127.0.0.1:8000/collections/eopf_geozarr/items/S2C_MSIL2A_20250811T112131_N0511_R037_T29TPF_20250811T152216/WebMercatorQuad/map.html?expression=%28%2Fmeasurements%2Freflectance%2Fr10m%3Ab08-%2Fmeasurements%2Freflectance%2Fr10m%3Ab04%29%2F%28%2Fmeasurements%2Freflectance%2Fr10m%3Ab08%2B%2Fmeasurements%2Freflectance%2Fr10m%3Ab04%29&rescale=-1,1&colormap_name=viridis
 
+optimized S2
+
+http://127.0.0.1:8000/collections/sentinel-2-l2a-opt/items/S2A_MSIL2A_20250908T100041_N0511_R122_T32TQM_20250908T115116/viewer
+
 S1
 
 http://127.0.0.1:8000/collections/eopf_geozarr/items/S1A_IW_GRDH_1SDV_20241124T180254_20241124T180319_056700_06F516_BA27/WebMercatorQuad/map.html?expression=%2FS01SIWGRD_20241124T180254_0025_A324_BA27_06F516_VV%2Fmeasurements%3Agrd%3B%2FS01SIWGRD_20241124T180254_0025_A324_BA27_06F516_VH%2Fmeasurements%3Agrd%3B%2FS01SIWGRD_20241124T180254_0025_A324_BA27_06F516_VV%2Fmeasurements%3Agrd/%2FS01SIWGRD_20241124T180254_0025_A324_BA27_06F516_VH%2Fmeasurements%3Agrd&rescale=0,219&rescale=0,219&rescale=0,1
