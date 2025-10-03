@@ -3,6 +3,7 @@
 Script to create a optimized pyramid test fixture that mimics the new S2 optimization structure.
 """
 
+import math
 import os
 
 import numpy as np
@@ -54,17 +55,17 @@ def create_optimized_pyramid_fixture():  # noqa: C901
         return encoding
 
     # Base spatial parameters
-    base_x_10m = np.linspace(500000, 510000, 100)  # 100m resolution at 10m pixel size
-    base_y_10m = np.linspace(4200000, 4190000, 100)
+    base_x_10m = np.arange(500000, 510000, 10).tolist()  # 10m pixel size
+    base_y_10m = np.arange(4200000, 4190000, -10).tolist()
 
-    base_x_20m = np.linspace(500000, 510000, 50)  # 200m resolution at 20m pixel size
-    base_y_20m = np.linspace(4200000, 4190000, 50)
+    base_x_20m = np.arange(500000, 510000, 20).tolist()  # 20m pixel size
+    base_y_20m = np.arange(4200000, 4190000, -20).tolist()
 
-    base_x_60m = np.linspace(500000, 510000, 17)  # ~600m resolution at 60m pixel size
-    base_y_60m = np.linspace(4200000, 4190000, 17)
+    base_x_60m = np.arange(500000, 510000, 60).tolist()  # 60m pixel size
+    base_y_60m = np.arange(4200000, 4190000, -60).tolist()
 
-    base_x_120m = np.linspace(500000, 510000, 8)  # ~1200m resolution at 120m pixel size
-    base_y_120m = np.linspace(4200000, 4190000, 8)
+    base_x_120m = np.arange(500000, 510000, 120).tolist()  # 120m pixel size
+    base_y_120m = np.arange(4200000, 4190000, -120).tolist()
 
     # Create root group with multiscales metadata
     root_attrs = {
@@ -75,26 +76,34 @@ def create_optimized_pyramid_fixture():  # noqa: C901
                     {
                         "id": "0",
                         "cellSize": 10.0,
-                        "matrixWidth": 100,
-                        "matrixHeight": 100,
+                        "matrixWidth": math.ceil(len(base_x_10m) // 256),
+                        "matrixHeight": math.ceil(len(base_y_10m) // 256),
+                        "tileWidth": 256,
+                        "tileHeight": 256,
                     },  # 10m
                     {
                         "id": "1",
                         "cellSize": 20.0,
-                        "matrixWidth": 50,
-                        "matrixHeight": 50,
+                        "matrixWidth": math.ceil(len(base_x_20m) // 256),
+                        "matrixHeight": math.ceil(len(base_y_20m) // 256),
+                        "tileWidth": 256,
+                        "tileHeight": 256,
                     },  # 20m
                     {
                         "id": "2",
                         "cellSize": 60.0,
-                        "matrixWidth": 17,
-                        "matrixHeight": 17,
+                        "matrixWidth": math.ceil(len(base_x_60m) // 256),
+                        "matrixHeight": math.ceil(len(base_y_60m) // 256),
+                        "tileWidth": 256,
+                        "tileHeight": 256,
                     },  # 60m
                     {
                         "id": "3",
                         "cellSize": 120.0,
-                        "matrixWidth": 8,
-                        "matrixHeight": 8,
+                        "matrixWidth": math.ceil(len(base_x_120m) // 256),
+                        "matrixHeight": math.ceil(len(base_y_120m) // 256),
+                        "tileWidth": 256,
+                        "tileHeight": 256,
                     },  # 120m
                 ],
             }

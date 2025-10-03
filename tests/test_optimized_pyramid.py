@@ -95,11 +95,11 @@ def test_variable_fallback_behavior():
         assert da.ndim == 2
 
         # The data should come from level 1 (20m resolution, 50x50 pixels)
-        assert da.shape == (50, 50)  # Level 1 dimensions
+        assert da.shape == (500, 500)  # Level 1 dimensions
 
         # Test accessing b02 (available at all levels) - should use finest scale (level 0)
         da_b02 = src._get_variable(group, "b02")
-        assert da_b02.shape == (100, 100)  # Level 0 dimensions
+        assert da_b02.shape == (1000, 1000)  # Level 0 dimensions
 
 
 def test_scale_specific_variable_access():
@@ -110,12 +110,12 @@ def test_scale_specific_variable_access():
         # Test accessing b02 (available at all levels) without spatial constraints
         # Should use finest available scale (level 0)
         da_b02 = src._get_variable(group, "b02")
-        assert da_b02.shape == (100, 100)  # Level 0 size
+        assert da_b02.shape == (1000, 1000)  # Level 0 size
 
         # Test accessing b05 (not available at level 0)
         # Should automatically use finest available scale (level 1)
         da_b05 = src._get_variable(group, "b05")
-        assert da_b05.shape == (50, 50)  # Level 1 size
+        assert da_b05.shape == (500, 500)  # Level 1 size
 
 
 def test_missing_variable_error():
@@ -243,10 +243,10 @@ def test_pyramid_level_selection_logic():
         # b02 is available at all scales (0,1,2,3)
         da_b02 = src._get_variable(group, "b02")
         # Should prefer finest scale (level 0) when no constraints given
-        assert da_b02.shape == (100, 100)  # Level 0 size
+        assert da_b02.shape == (1000, 1000)  # Level 0 size
 
         # For variables only available at coarser scales
         # b05 is only at levels 1,2,3 (not level 0)
         da_b05 = src._get_variable(group, "b05")
         # Should use finest available scale (level 1)
-        assert da_b05.shape == (50, 50)  # Level 1 size
+        assert da_b05.shape == (500, 500)  # Level 1 size
