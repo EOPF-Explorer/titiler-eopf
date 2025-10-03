@@ -1,5 +1,7 @@
 """titiler.eopf Application."""
 
+import logging
+import os
 from typing import Annotated, Literal, Optional
 
 import jinja2
@@ -28,6 +30,18 @@ from .extensions import (
 )
 from .factory import TilerFactory
 from .settings import ApiSettings
+
+# Configure logging
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, log_level),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()],
+)
+
+# Set up logger for this module
+logger = logging.getLogger(__name__)
+logger.info(f"Starting TiTiler EOPF application with log level: {log_level}")
 
 settings = ApiSettings()
 

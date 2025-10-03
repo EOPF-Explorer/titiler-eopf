@@ -336,15 +336,34 @@ class GeoZarrReader(BaseReader):
             # Select a group
             group = self.datatree[g]
 
-            # If a Group is a Multiscale group then we select the first scale
+            # If a Group is a Multiscale group then we collect variables from all scales
             if "multiscales" in group.attrs:
-                # Get id for the first multiscale group
-                scale = group.attrs["multiscales"]["tile_matrix_set"]["tileMatrices"][
-                    0
-                ]["id"]
-                group = group[scale]
+                # Get all variables across all multiscale levels
+                all_vars = set()
+                for matrix in group.attrs["multiscales"]["tile_matrix_set"][
+                    "tileMatrices"
+                ]:
+                    scale = matrix["id"]
+                    if scale in group:
+                        scale_group = group[scale]
+                        # Only include multidimensional data variables (not 0D attributes)
+                        all_vars.update(
+                            {
+                                var
+                                for var, data_array in scale_group.data_vars.items()
+                                if data_array.ndim > 0
+                            }
+                        )
 
-            variables.extend(f"{g}:{v}" for v in list(group.data_vars))
+                variables.extend(f"{g}:{v}" for v in sorted(all_vars))
+            else:
+                # Only include multidimensional data variables (not 0D attributes)
+                multidim_vars = [
+                    var
+                    for var, data_array in group.data_vars.items()
+                    if data_array.ndim > 0
+                ]
+                variables.extend(f"{g}:{v}" for v in multidim_vars)
 
         return variables
 
@@ -418,7 +437,7 @@ class GeoZarrReader(BaseReader):
 
         return self.tms.maxzoom
 
-    def _get_variable(
+    def _get_variable(  # noqa: C901
         self,
         group: str,
         variable: str,
@@ -467,6 +486,30 @@ class GeoZarrReader(BaseReader):
                 target_res = dst_transform.a
 
                 scale = get_multiscale_level(ds, target_res)  # type: ignore
+
+            # Check if variable exists at the selected scale, if not find the best available scale
+            if scale not in ds or variable not in ds[scale].data_vars:
+                # Find the scale that contains this variable, preferring finer resolutions
+                available_scales = []
+                for matrix in ds.attrs["multiscales"]["tile_matrix_set"][
+                    "tileMatrices"
+                ]:
+                    scale_id = matrix["id"]
+                    if scale_id in ds and variable in ds[scale_id].data_vars:
+                        available_scales.append((scale_id, matrix["cellSize"]))
+
+                if not available_scales:
+                    raise MissingVariables(
+                        f"Variable '{variable}' not found in any multiscale level of group '{group}'"
+                    )
+
+                # Sort by resolution (finer first) and take the first available
+                available_scales.sort(key=lambda x: x[1])
+                scale = available_scales[0][0]
+
+                logging.info(
+                    f"Variable '{variable}' not available at requested scale, using scale '{scale}' instead"
+                )
 
             # Select the multiscale group and variable
             da = ds[scale][variable]

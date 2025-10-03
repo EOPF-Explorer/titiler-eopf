@@ -12,8 +12,11 @@
             "args": [
                 "titiler.eopf.main:app",
                 "--reload",
-                "--port", "8000"
+                "--port", "8000",
+                "--log-level", "info",
+                "--access-log"
             ],
+            "console": "integratedTerminal",
             "jinja": true,
             "env": {
                 "PYTHONPATH": "${workspaceFolder}/.venv/bin",
@@ -29,8 +32,11 @@
             "args": [
                 "titiler.eopf.main:app",
                 "--reload",
-                "--port", "8000"
+                "--port", "8000",
+                "--log-level", "info",
+                "--access-log"
             ],
+            "console": "integratedTerminal",
             "jinja": true,
             "justMyCode": false,
             "env": {
@@ -68,6 +74,10 @@ http://127.0.0.1:8000/collections/eopf_geozarr/items/S2C_MSIL2A_20250811T112131_
 
 NDVI
 http://127.0.0.1:8000/collections/eopf_geozarr/items/S2C_MSIL2A_20250811T112131_N0511_R037_T29TPF_20250811T152216/WebMercatorQuad/map.html?expression=%28%2Fmeasurements%2Freflectance%2Fr10m%3Ab08-%2Fmeasurements%2Freflectance%2Fr10m%3Ab04%29%2F%28%2Fmeasurements%2Freflectance%2Fr10m%3Ab08%2B%2Fmeasurements%2Freflectance%2Fr10m%3Ab04%29&rescale=-1,1&colormap_name=viridis
+
+optimized S2
+
+http://127.0.0.1:8000/collections/sentinel-2-l2a-opt/items/S2A_MSIL2A_20250908T100041_N0511_R122_T32TQM_20250908T115116/viewer
 
 S1
 
