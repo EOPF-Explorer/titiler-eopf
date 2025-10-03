@@ -347,12 +347,13 @@ class GeoZarrReader(BaseReader):
                     if scale in group:
                         scale_group = group[scale]
                         # Only include multidimensional data variables (not 0D attributes)
-                        multidim_vars = {
-                            var
-                            for var, data_array in scale_group.data_vars.items()
-                            if data_array.ndim > 0
-                        }
-                        all_vars.update(multidim_vars)
+                        all_vars.update(
+                            {
+                                var
+                                for var, data_array in scale_group.data_vars.items()
+                                if data_array.ndim > 0
+                            }
+                        )
 
                 variables.extend(f"{g}:{v}" for v in sorted(all_vars))
             else:
@@ -436,7 +437,7 @@ class GeoZarrReader(BaseReader):
 
         return self.tms.maxzoom
 
-    def _get_variable(
+    def _get_variable(  # noqa: C901
         self,
         group: str,
         variable: str,
