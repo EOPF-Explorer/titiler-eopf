@@ -502,6 +502,7 @@ class GeoZarrReader(BaseReader):
                         default_dataset.rio.height,
                         default_dataset.rio.width,
                         dst_crs,
+                        # bounds is supposed to be in dst_crs
                         out_bounds=bounds,
                         out_max_size=max_size,
                         out_height=height,
@@ -731,19 +732,102 @@ class GeoZarrReader(BaseReader):
 
         return img
 
-    def part(  # type: ignore
+    def part(
         self,
-        *args: Any,
+        bbox: BBox,
+        dst_crs: CRS | None = None,
+        bounds_crs: CRS = WGS84_CRS,
         variables: List[str] | None = None,
         expression: str | None = None,
+        max_size: int | None = None,
+        height: int | None = None,
+        width: int | None = None,
         sel: List[str] | None = None,
         method: sel_methods | None = None,
         **kwargs: Any,
     ) -> ImageData:
         """Read part of a dataset."""
-        raise NotImplementedError
+        if max_size and width and height:
+            warnings.warn(
+                "'max_size' will be ignored with with 'height' and 'width' set.",
+                UserWarning,
+                stacklevel=1,
+            )
+            max_size = None
 
-    def preview(  # type: ignore
+        dst_crs = dst_crs or bounds_crs
+
+        bounds_in_dst_crs = (
+            transform_bounds(bounds_crs, dst_crs, *bbox, densify_pts=21)
+            if dst_crs != bounds_crs
+            else bbox
+        )
+
+        img_stack: List[ImageData] = []
+
+        if variables and expression:
+            warnings.warn(
+                "Both expression and assets passed; expression will overwrite assets parameter.",
+                ExpressionMixingWarning,
+                stacklevel=2,
+            )
+
+        if expression:
+            variables = self.parse_expression(expression)
+
+        if not variables:
+            raise MissingVariables(
+                "`variables` must be passed via `expression` or `variables` options."
+            )
+
+        for gv in variables:
+            group, variable = gv.split(":") if ":" in gv else ("/", gv)
+            with XarrayReader(
+                self._get_variable(
+                    group,
+                    variable,
+                    sel=sel,
+                    method=method,
+                    max_size=max_size,
+                    height=height,
+                    width=width,
+                    bounds=bounds_in_dst_crs,
+                    dst_crs=dst_crs,
+                ),
+                tms=self.tms,
+            ) as da:
+                img = da.part(
+                    bbox,
+                    dst_crs=dst_crs,
+                    bounds_crs=bounds_crs,
+                    max_size=max_size,
+                    height=height,
+                    width=width,
+                    **kwargs,
+                )
+                if expression:
+                    if len(img.band_names) > 1:
+                        raise ValueError("Can't use `expression` for multidim dataset")
+                    img.band_names = [self._variable_idx[gv]]
+
+                img_stack.append(img)
+
+        img = ImageData.create_from_list(img_stack)
+
+        if expression:
+            # edit expression to avoid forbiden characters
+            expression = self._convert_expression_to_index(expression)
+            img = img.apply_expression(expression)
+            # transform expression back
+            img.band_names = [
+                self._convert_expression_from_index(b) for b in img.band_names
+            ]
+
+        img.assets = [self.input]
+
+        return img
+
+    def preview(
         self,
         *args: Any,
         variables: List[str] | None = None,

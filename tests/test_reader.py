@@ -176,15 +176,46 @@ def test_statistics():
 def test_preview():
     """test preview method."""
     with GeoZarrReader(SENTINEL_2) as src:
-        with pytest.raises(NotImplementedError):
-            src.preview(variables=["/measurements/reflectance/r60m:b02"])
+        img = src.preview(
+            variables=["/measurements/reflectance/r60m:b02"], max_size=128
+        )
+        assert img.array.shape == (1, 128, 128)
+
+        img = src.preview(
+            variables=["/measurements/reflectance/r60m:b02"],
+            max_size=128,
+            dst_crs="epsg:4326",
+        )
+        assert img.array.shape == (1, 103, 128)
 
 
-# def test_part():
-#     """test part method."""
-#     with GeoZarrReader(SENTINEL_2) as src:
-#         with pytest.raises(NotImplementedError):
-#             src.part(*bbox, variables=["/measurements/reflectance/r60m:b02"])
+def test_part():
+    """test part method."""
+    # list(tms.bounds(2219, 1580, 12))
+    bbox = [
+        1673053.675105922,
+        4569099.802774707,
+        1682837.6147264242,
+        4578883.742395209,
+    ]
+    with GeoZarrReader(SENTINEL_2) as src:
+        _ = src.part(
+            bbox,
+            bounds_crs="epsg:3857",
+            dst_crs="epsg:3857",
+            variables=["/measurements/reflectance/r60m:b02"],
+            width=256,
+            height=256,
+        )
+        # Cannot compart Part/Tile at the moment
+        #
+        # img_tile = src.tile(
+        #     2219,
+        #     1580,
+        #     12,
+        #     variables=["/measurements/reflectance/r60m:b02"],
+        # )
+        # numpy.testing.assert_array_equal(img.array, img_tile.array)
 
 
 # def test_feature():
