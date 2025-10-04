@@ -112,6 +112,32 @@ def test_scale_specific_variable_access():
         da_b02 = src._get_variable(group, "b02")
         assert da_b02.shape == (1000, 1000)  # Level 0 size
 
+        # should select a level close to 800px
+        da_b02 = src._get_variable(group, "b02", width=800, height=800)
+        assert da_b02.shape == (1000, 1000)  # Level 0 size
+
+        # should select a level close to 600px
+        da_b02 = src._get_variable(group, "b02", width=600, height=600)
+        assert da_b02.shape == (500, 500)  # Level 1 size
+
+        # should select a level close to 600px
+        da_b02 = src._get_variable(group, "b02", width=600)
+        assert da_b02.shape == (500, 500)  # Level 1 size
+
+        # should select a level close to 600px
+        da_b02 = src._get_variable(group, "b02", height=600)
+        assert da_b02.shape == (500, 500)  # Level 1 size
+
+        # should select a level close to 600px
+        da_b02 = src._get_variable(group, "b02", max_size=600)
+        assert da_b02.shape == (500, 500)  # Level 1 size
+
+        # When just bounds we select the higher level
+        da_b02 = src._get_variable(
+            group, "b02", bounds=(500100, 4190100, 509900, 4190900)
+        )
+        assert da_b02.shape == (1000, 1000)  # Level 0 size
+
         # Test accessing b05 (not available at level 0)
         # Should automatically use finest available scale (level 1)
         da_b05 = src._get_variable(group, "b05")
