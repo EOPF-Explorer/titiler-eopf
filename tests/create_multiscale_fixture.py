@@ -76,34 +76,34 @@ def create_optimized_pyramid_fixture():  # noqa: C901
                     {
                         "id": "0",
                         "cellSize": 10.0,
-                        "matrixWidth": math.ceil(len(base_x_10m) // 256),
-                        "matrixHeight": math.ceil(len(base_y_10m) // 256),
-                        "tileWidth": 256,
-                        "tileHeight": 256,
+                        "matrixWidth": math.ceil(len(base_x_10m) / 64),
+                        "matrixHeight": math.ceil(len(base_y_10m) / 64),
+                        "tileWidth": 64,
+                        "tileHeight": 64,
                     },  # 10m
                     {
                         "id": "1",
                         "cellSize": 20.0,
-                        "matrixWidth": math.ceil(len(base_x_20m) // 256),
-                        "matrixHeight": math.ceil(len(base_y_20m) // 256),
-                        "tileWidth": 256,
-                        "tileHeight": 256,
+                        "matrixWidth": math.ceil(len(base_x_20m) / 64),
+                        "matrixHeight": math.ceil(len(base_y_20m) / 64),
+                        "tileWidth": 64,
+                        "tileHeight": 64,
                     },  # 20m
                     {
                         "id": "2",
                         "cellSize": 60.0,
-                        "matrixWidth": math.ceil(len(base_x_60m) // 256),
-                        "matrixHeight": math.ceil(len(base_y_60m) // 256),
-                        "tileWidth": 256,
-                        "tileHeight": 256,
+                        "matrixWidth": math.ceil(len(base_x_60m) / 64),
+                        "matrixHeight": math.ceil(len(base_y_60m) / 64),
+                        "tileWidth": 64,
+                        "tileHeight": 64,
                     },  # 60m
                     {
                         "id": "3",
                         "cellSize": 120.0,
-                        "matrixWidth": math.ceil(len(base_x_120m) // 256),
-                        "matrixHeight": math.ceil(len(base_y_120m) // 256),
-                        "tileWidth": 256,
-                        "tileHeight": 256,
+                        "matrixWidth": math.ceil(len(base_x_120m) / 64),
+                        "matrixHeight": math.ceil(len(base_y_120m) / 64),
+                        "tileWidth": 64,
+                        "tileHeight": 64,
                     },  # 120m
                 ],
             }

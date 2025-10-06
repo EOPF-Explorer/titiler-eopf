@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import math
 import os
 import re
 import warnings
@@ -15,8 +16,11 @@ from urllib.parse import urlparse
 import attr
 import obstore
 import xarray
+from affine import Affine
 from morecantile import Tile, TileMatrixSet
+from rasterio import windows
 from rasterio.crs import CRS
+from rasterio.transform import array_bounds, from_bounds
 from rasterio.warp import calculate_default_transform, transform_bounds
 from rio_tiler.constants import WEB_MERCATOR_TMS, WGS84_CRS
 from rio_tiler.errors import (
@@ -28,6 +32,7 @@ from rio_tiler.errors import (
 from rio_tiler.io.base import BaseReader
 from rio_tiler.io.xarray import XarrayReader
 from rio_tiler.models import BandStatistics, ImageData, Info, PointData
+from rio_tiler.reader import _get_width_height, _missing_size
 from rio_tiler.types import BBox
 from zarr.storage import ObjectStore
 
@@ -99,6 +104,7 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
 
 def get_multiscale_level(
     dt: xarray.DataTree,
+    variable: str,
     target_res: float,
     zoom_level_strategy: Literal["AUTO", "LOWER", "UPPER"] = "AUTO",
 ) -> str:
@@ -106,6 +112,7 @@ def get_multiscale_level(
     ms_resolutions = [
         (mt["id"], mt["cellSize"])
         for mt in dt.attrs["multiscales"]["tile_matrix_set"]["tileMatrices"]
+        if variable in dt[mt["id"]].data_vars
     ]
     if len(ms_resolutions) == 1:
         return ms_resolutions[0][0]
@@ -458,61 +465,84 @@ class GeoZarrReader(BaseReader):
                 UserWarning,
                 stacklevel=2,
             )
+            max_size = None
 
-        ds = self.datatree[group]
-        if "multiscales" in ds.attrs:
-            # Default to first scale
-            scale = ds.attrs["multiscales"]["tile_matrix_set"]["tileMatrices"][0]["id"]
+        dt = self.datatree[group]
+        if "multiscales" in dt.attrs:
             ms_crs = CRS.from_user_input(
-                ds.attrs["multiscales"]["tile_matrix_set"]["crs"]
+                dt.attrs["multiscales"]["tile_matrix_set"]["crs"]
             )
 
-            # TODO: handle Max-Size and single width/height
-            # TODO: handle when no reprojection
-            # if max_size:
-            #     height, width = _get_width_height(max_size, max_height, max_width)
-            # elif _missing_size(width, height):
-            #     ratio = max_height / max_width
-            #     if width:
-            #         height = math.ceil(width * ratio)
-            #     else:
-            #         width = math.ceil(height / ratio)
-
-            if all([bounds, height, width, dst_crs]):
-                # Get the output resolution in the datatree CRS
-                dst_transform, _, _ = calculate_default_transform(
-                    dst_crs, ms_crs, width, height, *bounds
-                )
-                target_res = dst_transform.a
-
-                scale = get_multiscale_level(ds, target_res)  # type: ignore
-
-            # Check if variable exists at the selected scale, if not find the best available scale
-            if scale not in ds or variable not in ds[scale].data_vars:
-                # Find the scale that contains this variable, preferring finer resolutions
-                available_scales = []
-                for matrix in ds.attrs["multiscales"]["tile_matrix_set"][
-                    "tileMatrices"
-                ]:
-                    scale_id = matrix["id"]
-                    if scale_id in ds and variable in ds[scale_id].data_vars:
-                        available_scales.append((scale_id, matrix["cellSize"]))
-
-                if not available_scales:
-                    raise MissingVariables(
-                        f"Variable '{variable}' not found in any multiscale level of group '{group}'"
+            # NOTE: Default Scale (where variable is present)
+            # This assume, the tile_matrix_set are ordered from higher resolution To lower resolution
+            try:
+                scale = next(
+                    (
+                        mt["id"]
+                        for mt in dt.attrs["multiscales"]["tile_matrix_set"][
+                            "tileMatrices"
+                        ]
+                        if variable in dt[mt["id"]].data_vars
                     )
-
-                # Sort by resolution (finer first) and take the first available
-                available_scales.sort(key=lambda x: x[1])
-                scale = available_scales[0][0]
-
-                logging.info(
-                    f"Variable '{variable}' not available at requested scale, using scale '{scale}' instead"
                 )
+            except StopIteration as e:
+                raise MissingVariables(
+                    f"Variable '{variable}' not found in any multiscale level of group '{group}'"
+                ) from e
+
+            if any([bounds, height, width, max_size]):
+                default_dataset = self.datatree[group][scale].to_dataset()
+
+                # Get Target expected resolution in Dataset CRS
+                # 1. Reprojection
+                if dst_crs and dst_crs != ms_crs:
+                    dst_transform = calculate_output_transform(
+                        ms_crs,
+                        default_dataset.rio.bounds(),
+                        default_dataset.rio.height,
+                        default_dataset.rio.width,
+                        dst_crs,
+                        # bounds is supposed to be in dst_crs
+                        out_bounds=bounds,
+                        out_max_size=max_size,
+                        out_height=height,
+                        out_width=width,
+                    )
+                    target_res = dst_transform.a
+
+                # 2. No Reprojection
+                else:
+                    # If no bounds we assume the full dataset bounds
+                    bounds = bounds or default_dataset.rio.bounds()
+
+                    window = windows.from_bounds(
+                        *bounds, transform=default_dataset.rio.transform()
+                    )
+                    if max_size:
+                        height, width = _get_width_height(
+                            max_size, round(window.height), round(window.width)
+                        )
+
+                    elif _missing_size(width, height):
+                        ratio = window.height / window.width
+                        if width:
+                            height = math.ceil(width * ratio)
+                        else:
+                            width = math.ceil(height / ratio)
+
+                    height = height or max(1, round(window.height))
+                    width = width or max(1, round(window.width))
+
+                    target_res = from_bounds(*bounds, height=height, width=width).a
+
+                scale = get_multiscale_level(dt, variable, target_res)  # type: ignore
 
             # Select the multiscale group and variable
-            da = ds[scale][variable]
+            da = dt[scale][variable]
+
+            logging.warning(
+                f"Selecting Group {group} with scale {scale} and variable {variable}"
+            )
 
             # NOTE: Make sure the multiscale levels have the same CRS
             # ref: https://github.com/EOPF-Explorer/data-model/issues/12
@@ -520,7 +550,7 @@ class GeoZarrReader(BaseReader):
 
         else:
             # Select Variable (xarray.DataArray)
-            da = ds[variable]
+            da = dt[variable]
 
         if sel:
             _idx: Dict[str, List] = {}
@@ -702,30 +732,184 @@ class GeoZarrReader(BaseReader):
 
         return img
 
-    def part(  # type: ignore
+    def part(
         self,
-        *args: Any,
+        bbox: BBox,
+        dst_crs: CRS | None = None,
+        bounds_crs: CRS = WGS84_CRS,
         variables: List[str] | None = None,
         expression: str | None = None,
+        max_size: int | None = None,
+        height: int | None = None,
+        width: int | None = None,
         sel: List[str] | None = None,
         method: sel_methods | None = None,
         **kwargs: Any,
     ) -> ImageData:
         """Read part of a dataset."""
-        raise NotImplementedError
+        if max_size and width and height:
+            warnings.warn(
+                "'max_size' will be ignored with with 'height' and 'width' set.",
+                UserWarning,
+                stacklevel=1,
+            )
+            max_size = None
 
-    def preview(  # type: ignore
+        dst_crs = dst_crs or bounds_crs
+
+        bounds_in_dst_crs = (
+            transform_bounds(bounds_crs, dst_crs, *bbox, densify_pts=21)
+            if dst_crs != bounds_crs
+            else bbox
+        )
+
+        img_stack: List[ImageData] = []
+
+        if variables and expression:
+            warnings.warn(
+                "Both expression and assets passed; expression will overwrite assets parameter.",
+                ExpressionMixingWarning,
+                stacklevel=2,
+            )
+
+        if expression:
+            variables = self.parse_expression(expression)
+
+        if not variables:
+            raise MissingVariables(
+                "`variables` must be passed via `expression` or `variables` options."
+            )
+
+        for gv in variables:
+            group, variable = gv.split(":") if ":" in gv else ("/", gv)
+            with XarrayReader(
+                self._get_variable(
+                    group,
+                    variable,
+                    sel=sel,
+                    method=method,
+                    max_size=max_size,
+                    height=height,
+                    width=width,
+                    bounds=bounds_in_dst_crs,
+                    dst_crs=dst_crs,
+                ),
+                tms=self.tms,
+            ) as da:
+                img = da.part(
+                    bbox,
+                    dst_crs=dst_crs,
+                    bounds_crs=bounds_crs,
+                    max_size=max_size,
+                    height=height,
+                    width=width,
+                    **kwargs,
+                )
+                if expression:
+                    if len(img.band_names) > 1:
+                        raise ValueError("Can't use `expression` for multidim dataset")
+                    img.band_names = [self._variable_idx[gv]]
+
+                img_stack.append(img)
+
+        img = ImageData.create_from_list(img_stack)
+
+        if expression:
+            # edit expression to avoid forbiden characters
+            expression = self._convert_expression_to_index(expression)
+            img = img.apply_expression(expression)
+            # transform expression back
+            img.band_names = [
+                self._convert_expression_from_index(b) for b in img.band_names
+            ]
+
+        img.assets = [self.input]
+
+        return img
+
+    def preview(
         self,
         *args: Any,
         variables: List[str] | None = None,
         expression: str | None = None,
-        max_size: int = 1024,
+        max_size: int | None = 1024,
+        height: int | None = None,
+        width: int | None = None,
         sel: List[str] | None = None,
         method: sel_methods | None = None,
+        dst_crs: CRS | None = None,
         **kwargs: Any,
     ) -> ImageData:
         """Return a preview of a dataset."""
-        raise NotImplementedError
+        if max_size and width and height:
+            warnings.warn(
+                "'max_size' will be ignored with with 'height' and 'width' set.",
+                UserWarning,
+                stacklevel=1,
+            )
+            max_size = None
+
+        img_stack: List[ImageData] = []
+
+        if variables and expression:
+            warnings.warn(
+                "Both expression and assets passed; expression will overwrite assets parameter.",
+                ExpressionMixingWarning,
+                stacklevel=2,
+            )
+
+        if expression:
+            variables = self.parse_expression(expression)
+
+        if not variables:
+            raise MissingVariables(
+                "`variables` must be passed via `expression` or `variables` options."
+            )
+
+        for gv in variables:
+            group, variable = gv.split(":") if ":" in gv else ("/", gv)
+            with XarrayReader(
+                self._get_variable(
+                    group,
+                    variable,
+                    sel=sel,
+                    method=method,
+                    max_size=max_size,
+                    height=height,
+                    width=width,
+                    dst_crs=dst_crs,
+                ),
+                tms=self.tms,
+            ) as da:
+                img = da.preview(
+                    *args,
+                    max_size=max_size,
+                    height=height,
+                    width=width,
+                    dst_crs=dst_crs,
+                    **kwargs,
+                )
+                if expression:
+                    if len(img.band_names) > 1:
+                        raise ValueError("Can't use `expression` for multidim dataset")
+                    img.band_names = [self._variable_idx[gv]]
+
+                img_stack.append(img)
+
+        img = ImageData.create_from_list(img_stack)
+
+        if expression:
+            # edit expression to avoid forbiden characters
+            expression = self._convert_expression_to_index(expression)
+            img = img.apply_expression(expression)
+            # transform expression back
+            img.band_names = [
+                self._convert_expression_from_index(b) for b in img.band_names
+            ]
+
+        img.assets = [self.input]
+
+        return img
 
     def point(  # type: ignore
         self,
@@ -793,3 +977,68 @@ class GeoZarrReader(BaseReader):
     ) -> ImageData:
         """Read part of a dataset defined by a geojson feature."""
         raise NotImplementedError
+
+
+def calculate_output_transform(
+    crs: CRS,
+    bounds: BBox,
+    height: int,
+    width: int,
+    out_crs: CRS,
+    *,
+    out_bounds: BBox | None = None,
+    out_max_size: int | None = None,
+    out_height: int | None = None,
+    out_width: int | None = None,
+) -> Affine:
+    """Calculate Reprojected Dataset transform."""
+    # 1. get the `whole` reprojected dataset transfrom, shape and bounds
+    dst_transform, dst_width, dst_height = calculate_default_transform(
+        crs,
+        out_crs,
+        width,
+        height,
+        *bounds,
+    )
+
+    # If no bounds we assume the full dataset bounds
+    out_bounds = out_bounds or array_bounds(dst_height, dst_width, dst_transform)
+
+    # output Bounds
+    w, s, e, n = out_bounds
+
+    # adjust dataset virtual output shape/transform
+    dst_width = max(1, round((e - w) / dst_transform.a))
+    dst_height = max(1, round((s - n) / dst_transform.e))
+
+    # Output Transform in Output CRS
+    dst_transform = from_bounds(w, s, e, n, dst_width, dst_height)
+
+    # 2. adjust output size based on max_size if
+    # - not input width/height
+    # - max_size < dst_width and dst_height
+    if out_max_size:
+        out_height, out_width = _get_width_height(out_max_size, dst_height, dst_width)
+
+    elif out_height or out_width:
+        if not out_height or not out_width:
+            # get the size's ratio of the reprojected dataset
+            ratio = dst_height / dst_width
+            if out_width:
+                out_height = math.ceil(out_width * ratio)
+            else:
+                out_width = math.ceil(out_height / ratio)
+
+    out_height = out_height or dst_height
+    out_width = out_width or dst_width
+
+    # Get the transform in the Dataset CRS
+    transform, _, _ = calculate_default_transform(
+        out_crs,
+        crs,
+        out_width,
+        out_height,
+        *out_bounds,
+    )
+
+    return transform

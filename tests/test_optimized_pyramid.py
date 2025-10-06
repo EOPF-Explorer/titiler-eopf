@@ -15,17 +15,6 @@ OPTIMIZED_PYRAMID = os.path.join(
 )
 
 
-@pytest.fixture(scope="session", autouse=True)
-def create_optimized_pyramid_fixture():
-    """Ensure the optimized pyramid fixture exists before running tests."""
-    if not os.path.exists(OPTIMIZED_PYRAMID):
-        # Import and run the fixture creation script
-        from tests.create_multiscale_fixture import create_optimized_pyramid_fixture
-
-        create_optimized_pyramid_fixture()
-    return OPTIMIZED_PYRAMID
-
-
 def test_optimized_pyramid_structure():
     """test that optimized pyramid fixture has expected structure."""
     with GeoZarrReader(OPTIMIZED_PYRAMID) as src:
@@ -112,10 +101,133 @@ def test_scale_specific_variable_access():
         da_b02 = src._get_variable(group, "b02")
         assert da_b02.shape == (1000, 1000)  # Level 0 size
 
+        # should select a level close to 800px
+        da_b02 = src._get_variable(group, "b02", width=800, height=800)
+        assert da_b02.shape == (1000, 1000)  # Level 0 size
+
+        # should select a level close to 600px
+        da_b02 = src._get_variable(group, "b02", width=600, height=600)
+        assert da_b02.shape == (500, 500)  # Level 1 size
+
+        # should select a level close to 600px
+        da_b02 = src._get_variable(group, "b02", width=600)
+        assert da_b02.shape == (500, 500)  # Level 1 size
+
+        # should select a level close to 600px
+        da_b02 = src._get_variable(group, "b02", height=600)
+        assert da_b02.shape == (500, 500)  # Level 1 size
+
+        # should select a level close to 600px
+        da_b02 = src._get_variable(group, "b02", max_size=600)
+        assert da_b02.shape == (500, 500)  # Level 1 size
+
+        # When just bounds, we select the higher level
+        da_b02 = src._get_variable(
+            group, "b02", bounds=(500100, 4190100, 509900, 4190900)
+        )
+        assert da_b02.shape == (1000, 1000)  # Level 0 size
+
         # Test accessing b05 (not available at level 0)
         # Should automatically use finest available scale (level 1)
         da_b05 = src._get_variable(group, "b05")
         assert da_b05.shape == (500, 500)  # Level 1 size
+
+
+def test_scale_specific_variable_access_reproj():
+    """test accessing variables with explicit scale constraints and reprojection."""
+    with GeoZarrReader(OPTIMIZED_PYRAMID) as src:
+        group = "/measurements/reflectance"
+
+        # Test accessing b02 (available at all levels) without spatial constraints
+        # Should use finest available scale (level 0)
+        da_b02 = src._get_variable(group, "b02", dst_crs="epsg:4326")
+        assert da_b02.shape == (1000, 1000)  # Level 0 size
+
+        # should select a level close to 800px
+        da_b02 = src._get_variable(
+            group, "b02", width=800, height=800, dst_crs="epsg:4326"
+        )
+        assert da_b02.shape == (1000, 1000)  # Level 0 size
+
+        # should select a level close to 600px
+        da_b02 = src._get_variable(
+            group, "b02", width=600, height=600, dst_crs="epsg:4326"
+        )
+        assert da_b02.shape == (500, 500)  # Level 1 size
+
+        # should select a level close to 600px
+        da_b02 = src._get_variable(group, "b02", width=600, dst_crs="epsg:4326")
+        assert da_b02.shape == (500, 500)  # Level 1 size
+
+        # should select a level close to 600px
+        da_b02 = src._get_variable(group, "b02", height=500, dst_crs="epsg:4326")
+        assert da_b02.shape == (500, 500)  # Level 1 size
+
+        # should select a level close to 600px
+        da_b02 = src._get_variable(group, "b02", max_size=600, dst_crs="epsg:4326")
+        assert da_b02.shape == (500, 500)  # Level 1 size
+
+        # tms = morecantile.tms.get("WebMercatorQuad")
+        # list(tms.xy_bounds(2219, 1580, 12))
+        bounds = (
+            1673053.675105922,
+            4569099.802774707,
+            1682837.6147264242,
+            4578883.742395209,
+        )
+
+        # When just bounds, we select the higher level
+        da_b02 = src._get_variable(
+            group,
+            "b02",
+            bounds=bounds,
+            dst_crs="epsg:3857",
+        )
+        assert da_b02.shape == (1000, 1000)
+
+        da_b02 = src._get_variable(
+            group,
+            "b02",
+            bounds=bounds,
+            dst_crs="epsg:3857",
+            width=1024,
+            height=1024,
+        )
+        # output resolution is 9.55462853564677m (epsg:3857)
+        assert da_b02.shape == (1000, 1000)
+
+        da_b02 = src._get_variable(
+            group,
+            "b02",
+            bounds=bounds,
+            dst_crs="epsg:3857",
+            width=256,
+            height=256,
+        )
+        # output resolution is 38.21851414258708 (epsg:3857)
+        assert da_b02.shape == (500, 500)
+
+        da_b02 = src._get_variable(
+            group,
+            "b02",
+            bounds=bounds,
+            dst_crs="epsg:3857",
+            width=128,
+            height=128,
+        )
+        # output resolution is 76.43702828517416 (epsg:3857)
+        assert da_b02.shape == (167, 167)
+
+        da_b02 = src._get_variable(
+            group,
+            "b02",
+            bounds=bounds,
+            dst_crs="epsg:3857",
+            width=64,
+            height=64,
+        )
+        # output resolution is 152.87405657034833 (epsg:3857)
+        assert da_b02.shape == (84, 84)
 
 
 def test_missing_variable_error():
