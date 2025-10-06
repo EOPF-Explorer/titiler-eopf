@@ -63,7 +63,10 @@ class DatasetMetadataExtension(FactoryExtension):
         def dataset_metadata_dict(src_path=Depends(factory.path_dependency)):
             """Returns the full Xarray dataset as a dictionary."""
             with factory.reader(src_path) as ds:
-                return ds.datatree.to_dict(data=False)
+                return {
+                    k: g.to_dataset().to_dict(data=False)
+                    for k, g in ds.datatree.subtree_with_keys
+                }
 
         @factory.router.get(
             "/dataset/groups",

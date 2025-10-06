@@ -1,0 +1,10 @@
+{
+  "attributes": {
+    "grid_mapping": "spatial_ref",
+    "pyramid_level": 2,
+    "resolution_meters": 60
+  },
+  "zarr_format": 3,
+  "consolidated_metadata": null,
+  "node_type": "group"
+}

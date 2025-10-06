@@ -15,17 +15,6 @@ OPTIMIZED_PYRAMID = os.path.join(
 )
 
 
-@pytest.fixture(scope="session", autouse=True)
-def create_optimized_pyramid_fixture():
-    """Ensure the optimized pyramid fixture exists before running tests."""
-    if not os.path.exists(OPTIMIZED_PYRAMID):
-        # Import and run the fixture creation script
-        from tests.create_multiscale_fixture import create_optimized_pyramid_fixture
-
-        create_optimized_pyramid_fixture()
-    return OPTIMIZED_PYRAMID
-
-
 def test_optimized_pyramid_structure():
     """test that optimized pyramid fixture has expected structure."""
     with GeoZarrReader(OPTIMIZED_PYRAMID) as src:

@@ -1,0 +1,46 @@
+{
+  "attributes": {
+    "multiscales": {
+      "tile_matrix_set": {
+        "crs": "EPSG:32633",
+        "tileMatrices": [
+          {
+            "id": "0",
+            "cellSize": 10.0,
+            "matrixWidth": 16,
+            "matrixHeight": 16,
+            "tileWidth": 64,
+            "tileHeight": 64
+          },
+          {
+            "id": "1",
+            "cellSize": 20.0,
+            "matrixWidth": 8,
+            "matrixHeight": 8,
+            "tileWidth": 64,
+            "tileHeight": 64
+          },
+          {
+            "id": "2",
+            "cellSize": 60.0,
+            "matrixWidth": 3,
+            "matrixHeight": 3,
+            "tileWidth": 64,
+            "tileHeight": 64
+          },
+          {
+            "id": "3",
+            "cellSize": 120.0,
+            "matrixWidth": 2,
+            "matrixHeight": 2,
+            "tileWidth": 64,
+            "tileHeight": 64
+          }
+        ]
+      }
+    }
+  },
+  "zarr_format": 3,
+  "consolidated_metadata": null,
+  "node_type": "group"
+}

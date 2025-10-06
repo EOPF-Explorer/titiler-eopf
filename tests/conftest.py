@@ -1,8 +1,10 @@
 """titiler.eopf tests configuration."""
 
 import os
+from typing import Any
 
 import pytest
+from rasterio.io import MemoryFile
 from starlette.testclient import TestClient
 
 
@@ -28,3 +30,10 @@ def app(set_env) -> TestClient:
     from titiler.eopf.main import app
 
     return TestClient(app)
+
+
+def parse_img(content: bytes) -> dict[Any, Any]:
+    """Read tile image and return metadata."""
+    with MemoryFile(content) as mem:
+        with mem.open() as dst:
+            return dst.profile

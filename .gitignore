@@ -208,4 +208,3 @@ __marimo__/
 
 dev_notebooks/
 .vscode/launch.json
-tests/fixtures/eopf_geozarr/optimized_pyramid.zarr
