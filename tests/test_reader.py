@@ -191,7 +191,7 @@ def test_preview():
 
 def test_part():
     """test part method."""
-    # list(tms.bounds(2219, 1580, 12))
+    # list(tms.xy_bounds(2219, 1580, 12))
     bbox = [
         1673053.675105922,
         4569099.802774707,
@@ -199,7 +199,7 @@ def test_part():
         4578883.742395209,
     ]
     with GeoZarrReader(SENTINEL_2) as src:
-        _ = src.part(
+        img = src.part(
             bbox,
             bounds_crs="epsg:3857",
             dst_crs="epsg:3857",
@@ -207,19 +207,38 @@ def test_part():
             width=256,
             height=256,
         )
-        # Cannot compart Part/Tile at the moment
-        #
-        # img_tile = src.tile(
-        #     2219,
-        #     1580,
-        #     12,
-        #     variables=["/measurements/reflectance/r60m:b02"],
-        # )
-        # numpy.testing.assert_array_equal(img.array, img_tile.array)
+
+        img_tile = src.tile(
+            2219,
+            1580,
+            12,
+            variables=["/measurements/reflectance/r60m:b02"],
+        )
+        numpy.testing.assert_array_equal(img.array, img_tile.array)
 
 
-# def test_feature():
-#     """test feature method."""
-#     with GeoZarrReader(SENTINEL_2) as src:
-#         with pytest.raises(NotImplementedError):
-#             src.feature(feat, variables=["/measurements/reflectance/r60m:b02"])
+def test_feature():
+    """test feature method."""
+    # list(tms.xy_bounds(2219, 1580, 12))
+    # Polygon.from_bounds(*b).model_dump(exclude_none=True)
+    feat = {
+        "type": "Polygon",
+        "coordinates": [
+            [
+                (15.029296874999856, 37.926867601481426),
+                (15.117187499999853, 37.926867601481426),
+                (15.117187499999853, 37.996162679728194),
+                (15.029296874999856, 37.996162679728194),
+                (15.029296874999856, 37.926867601481426),
+            ]
+        ],
+    }
+    with GeoZarrReader(SENTINEL_2) as src:
+        img = src.feature(feat, variables=["/measurements/reflectance/r60m:b02"])
+
+    assert list(img.bounds) == [
+        15.029296874999856,
+        37.926867601481426,
+        15.117187499999853,
+        37.996162679728194,
+    ]

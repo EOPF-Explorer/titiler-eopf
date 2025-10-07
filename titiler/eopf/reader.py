@@ -20,6 +20,7 @@ from affine import Affine
 from morecantile import Tile, TileMatrixSet
 from rasterio import windows
 from rasterio.crs import CRS
+from rasterio.features import bounds as featureBounds
 from rasterio.transform import array_bounds, from_bounds
 from rasterio.warp import calculate_default_transform, transform_bounds
 from rio_tiler.constants import WEB_MERCATOR_TMS, WGS84_CRS
@@ -459,7 +460,7 @@ class GeoZarrReader(BaseReader):
         dst_crs: CRS | None = None,
     ) -> xarray.DataArray:
         """Get DataArray from xarray Dataset."""
-        if max_size and width and height:
+        if max_size and (width or height):
             warnings.warn(
                 "'max_size' will be ignored with with 'height' and 'width' set.",
                 UserWarning,
@@ -747,14 +748,6 @@ class GeoZarrReader(BaseReader):
         **kwargs: Any,
     ) -> ImageData:
         """Read part of a dataset."""
-        if max_size and width and height:
-            warnings.warn(
-                "'max_size' will be ignored with with 'height' and 'width' set.",
-                UserWarning,
-                stacklevel=1,
-            )
-            max_size = None
-
         dst_crs = dst_crs or bounds_crs
 
         bounds_in_dst_crs = (
@@ -841,14 +834,6 @@ class GeoZarrReader(BaseReader):
         **kwargs: Any,
     ) -> ImageData:
         """Return a preview of a dataset."""
-        if max_size and width and height:
-            warnings.warn(
-                "'max_size' will be ignored with with 'height' and 'width' set.",
-                UserWarning,
-                stacklevel=1,
-            )
-            max_size = None
-
         img_stack: List[ImageData] = []
 
         if variables and expression:
@@ -968,15 +953,94 @@ class GeoZarrReader(BaseReader):
 
     def feature(  # type: ignore
         self,
-        *args: Any,
+        shape: Dict,
+        shape_crs: CRS = WGS84_CRS,
         variables: List[str] | None = None,
         expression: str | None = None,
         sel: List[str] | None = None,
+        max_size: int | None = 1024,
+        height: int | None = None,
+        width: int | None = None,
         method: sel_methods | None = None,
+        dst_crs: CRS | None = None,
         **kwargs: Any,
     ) -> ImageData:
         """Read part of a dataset defined by a geojson feature."""
-        raise NotImplementedError
+
+        dst_crs = dst_crs or shape_crs
+
+        # Get BBOX of the polygon
+        bbox = featureBounds(shape)
+
+        bounds_in_dst_crs = (
+            transform_bounds(shape_crs, dst_crs, *bbox, densify_pts=21)
+            if dst_crs != shape_crs
+            else bbox
+        )
+
+        img_stack: List[ImageData] = []
+
+        if variables and expression:
+            warnings.warn(
+                "Both expression and assets passed; expression will overwrite assets parameter.",
+                ExpressionMixingWarning,
+                stacklevel=2,
+            )
+
+        if expression:
+            variables = self.parse_expression(expression)
+
+        if not variables:
+            raise MissingVariables(
+                "`variables` must be passed via `expression` or `variables` options."
+            )
+
+        for gv in variables:
+            group, variable = gv.split(":") if ":" in gv else ("/", gv)
+            with XarrayReader(
+                self._get_variable(
+                    group,
+                    variable,
+                    sel=sel,
+                    method=method,
+                    max_size=max_size,
+                    height=height,
+                    width=width,
+                    bounds=bounds_in_dst_crs,
+                    dst_crs=dst_crs,
+                ),
+                tms=self.tms,
+            ) as da:
+                img = da.feature(
+                    shape,
+                    dst_crs=dst_crs,
+                    shape_crs=shape_crs,
+                    max_size=max_size,
+                    height=height,
+                    width=width,
+                    **kwargs,
+                )
+                if expression:
+                    if len(img.band_names) > 1:
+                        raise ValueError("Can't use `expression` for multidim dataset")
+                    img.band_names = [self._variable_idx[gv]]
+
+                img_stack.append(img)
+
+        img = ImageData.create_from_list(img_stack)
+
+        if expression:
+            # edit expression to avoid forbiden characters
+            expression = self._convert_expression_to_index(expression)
+            img = img.apply_expression(expression)
+            # transform expression back
+            img.band_names = [
+                self._convert_expression_from_index(b) for b in img.band_names
+            ]
+
+        img.assets = [self.input]
+
+        return img
 
 
 def calculate_output_transform(
