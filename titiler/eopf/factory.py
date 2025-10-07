@@ -54,11 +54,9 @@ class TilerFactory(BaseTilerFactory):
     # Tile/Tilejson/WMTS Dependencies  (Not used in titiler.xarray)
     tile_dependency: Type[DefaultDependency] = DefaultDependency
 
+    add_ogc_maps: bool = field(default=True)
+    add_part: bool = field(default=True)
     add_preview: bool = field(default=True)
-
-    # endpoints disabled by default
-    add_ogc_maps: bool = field(init=False, default=False)
-    add_part: bool = field(init=False, default=False)
 
     def register_routes(self):
         """This Method register routes to the router."""
