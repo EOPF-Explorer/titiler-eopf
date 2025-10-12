@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import math
 import os
+import pickle
 import re
 import warnings
 from functools import cache, cached_property
@@ -36,6 +36,18 @@ from rio_tiler.reader import _get_width_height, _missing_size
 from rio_tiler.types import BBox
 from zarr.storage import ObjectStore
 
+from .cache import RedisCache
+from .settings import CacheSettings
+
+logger = logging.getLogger(__name__)
+
+try:
+    import redis
+
+except ImportError:  # pragma: nocover
+    redis = None  # type: ignore
+
+
 try:
     from obstore.auth.boto3 import Boto3CredentialProvider
 
@@ -44,6 +56,8 @@ except ImportError:
     HAS_BOTO3_PROVIDER = False
 
 sel_methods = Literal["nearest", "pad", "ffill", "backfill", "bfill"]
+
+cache_settings = CacheSettings()
 
 
 class MissingVariables(RioTilerError):
@@ -66,40 +80,55 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
         src_path = str(Path(src_path).resolve())
         src_path = "file://" + src_path
 
-    # Check if AWS_PROFILE is set and we're dealing with an S3 URL
-    aws_profile = os.environ.get("AWS_PROFILE")
-    if aws_profile and parsed.scheme == "s3" and HAS_BOTO3_PROVIDER:
-        # Use Boto3CredentialProvider for AWS profile support
-        from obstore.store import S3Store
+    def _open_dataset(src_path: str) -> xarray.DataTree:
+        # Check if AWS_PROFILE is set and we're dealing with an S3 URL
+        aws_profile = os.environ.get("AWS_PROFILE")
+        if aws_profile and parsed.scheme == "s3" and HAS_BOTO3_PROVIDER:
+            # Use Boto3CredentialProvider for AWS profile support
+            from obstore.store import S3Store
 
-        # Extract bucket and key from S3 URL
-        bucket = parsed.netloc
-        key = parsed.path.lstrip("/")
+            # Extract bucket and key from S3 URL
+            bucket = parsed.netloc
+            key = parsed.path.lstrip("/")
 
-        store = S3Store(
-            bucket,
-            credential_provider=Boto3CredentialProvider(),
-            region=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
-            endpoint=os.environ.get("AWS_ENDPOINT_URL", None),
-            virtual_hosted_style_request=False,
-            prefix=key,
+            store = S3Store(
+                bucket,
+                credential_provider=Boto3CredentialProvider(),
+                region=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
+                endpoint=os.environ.get("AWS_ENDPOINT_URL", None),
+                virtual_hosted_style_request=False,
+                prefix=key,
+            )
+
+            # Create the zarr store with the configured S3 store
+            zarr_store = ObjectStore(store=store, read_only=True)
+        else:
+            # Use the default obstore.store.from_url method
+            store = obstore.store.from_url(src_path)
+            zarr_store = ObjectStore(store=store, read_only=True)
+
+        return xarray.open_datatree(
+            zarr_store,
+            decode_times=True,
+            decode_coords="all",
+            consolidated=True,
+            engine="zarr",
         )
 
-        # Create the zarr store with the configured S3 store
-        zarr_store = ObjectStore(store=store, read_only=True)
+    if cache_settings.enable and cache_settings.host:
+        pool = RedisCache.get_instance(cache_settings.host)
+        cache_client = redis.Redis(connection_pool=pool)
+        if data_bytes := cache_client.get(src_path):
+            logger.info(f"Cache - found dataset in Cache {src_path}")
+            dt = pickle.loads(data_bytes)
+        else:
+            dt = _open_dataset(src_path)
+            logger.info(f"Cache - adding dataset in Cache {src_path}")
+            cache_client.set(src_path, pickle.dumps(dt), ex=300)
     else:
-        # Use the default obstore.store.from_url method
-        store = obstore.store.from_url(src_path)
-        zarr_store = ObjectStore(store=store, read_only=True)
+        dt = _open_dataset(src_path)
 
-    ds = xarray.open_datatree(
-        zarr_store,
-        decode_times=True,
-        decode_coords="all",
-        consolidated=True,
-        engine="zarr",
-    )
-    return ds
+    return dt
 
 
 def get_multiscale_level(
@@ -241,17 +270,13 @@ class GeoZarrReader(BaseReader):
     opener: Callable[..., xarray.DataTree] = attr.ib(default=open_dataset)
     opener_options: Dict = attr.ib(factory=dict)
 
-    _ctx_stack: contextlib.ExitStack = attr.ib(init=False, factory=contextlib.ExitStack)
-
     groups: List[str] = attr.ib(init=False)
     variables: List[str] = attr.ib(init=False)
 
     def __attrs_post_init__(self):
         """Set bounds and CRS."""
         if not self.datatree:
-            self.datatree = self._ctx_stack.enter_context(
-                self.opener(self.input, **self.opener_options)
-            )
+            self.datatree = self.opener(self.input, **self.opener_options)
 
         self.groups = self._get_groups()
         self.variables = self._get_variables()
@@ -297,14 +322,6 @@ class GeoZarrReader(BaseReader):
             self.maxzoom = (
                 self.maxzoom if self.maxzoom is not None else self.tms.maxzoom
             )
-
-    def close(self):
-        """Close xarray dataset."""
-        self._ctx_stack.close()
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        """Support using with Context Managers."""
-        self.close()
 
     def _get_groups(self) -> List[str]:
         """return groups within the datatree."""
@@ -540,8 +557,8 @@ class GeoZarrReader(BaseReader):
             # Select the multiscale group and variable
             da = dt[scale][variable]
 
-            logging.warning(
-                f"Selecting Group {group} with scale {scale} and variable {variable}"
+            logger.info(
+                f"Multiscale - selecting group {group} with scale {scale} and variable {variable}"
             )
 
             # NOTE: Make sure the multiscale levels have the same CRS
@@ -630,7 +647,7 @@ class GeoZarrReader(BaseReader):
                 ) as da:
                     return da.info()
             except Exception as e:
-                logging.warning(f"Failed to get info for variable '{group_var}': {e!s}")
+                logger.info(f"Failed to get info for variable '{group_var}': {e!s}")
                 return None
 
         # Build result dictionary, skipping variables that failed
