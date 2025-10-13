@@ -67,10 +67,6 @@
     <body>
 
     <div id='menu' class='px12 pt12 absolute z2 bg-white'>
-        <!-- <div class='txt-h5 mt6 mb6 color-black'>
-            Dataset Info
-        </div>
-        <div id='raster-size' class='txt-normal'></div> -->
         <div class='txt-h5 mt6 mb6 color-black'>
             Dataset Group
         </div>
@@ -79,7 +75,6 @@
             </select>
             <div class='select-arrow color-black'></div>
         </div>
-
         <div class='txt-h5 mt6 mb6 color-black'>
             Multiscale Level
         </div>
@@ -88,10 +83,16 @@
             </select>
             <div class='select-arrow color-black'></div>
         </div>
-
-        <!-- <div class='txt-h5 mt24 mb6 color-black'>
-            Decimation
-        </div> -->
+        <div class='txt-h5 mt6 mb6 color-black'>
+            Metadata
+        </div>
+        <div class='mb6 mx6'>
+            <div id='group-shape' class='txt-s'></div> 
+            <div id='chunk-shape' class='txt-s'></div> 
+            <div id='resolutions' class='txt-s'></div> 
+            <div id='decimation' class='txt-s'></div> 
+        </div>
+        
     </div>
 
     <div id='map'>
@@ -175,6 +176,13 @@
     const update_viz = () => {
         const group = document.getElementById('group-selector').selectedOptions[0].getAttribute("group")
         const level = document.getElementById('ms-selector').selectedOptions[0].getAttribute("level")
+        
+        const metadata = scope.metadata[group][level]
+        document.getElementById('group-shape').innerText = `Pixel Size: (${metadata.Width}, ${metadata.Height})`
+        document.getElementById('chunk-shape').innerText = `Chunk xSize: (${metadata.ChunkSize[0]}, ${metadata.ChunkSize[1]})`
+        document.getElementById('resolutions').innerText = `Resolutions: (${metadata.Resolutions[0]}, ${metadata.Resolutions[1]})`
+        document.getElementById('decimation').innerText = `Decimation: ${metadata.Decimation}`
+
         add_tile_grid(group, level)
     }
 

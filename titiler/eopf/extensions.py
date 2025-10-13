@@ -249,13 +249,17 @@ class EOPFChunkVizExtension(FactoryExtension):
                         raw_res = None
                         for mat in multiscales["tile_matrix_set"]["tileMatrices"]:
                             raw_res = mat["cellSize"] if raw_res is None else raw_res
+                            decimation = mat["cellSize"] / raw_res
                             levels.append(
                                 {
                                     "Level": mat["id"],
                                     "Width": mat["tileWidth"] * mat["matrixWidth"],
                                     "Height": mat["tileHeight"] * mat["matrixHeight"],
                                     "ChunkSize": (mat["tileWidth"], mat["tileHeight"]),
-                                    "Decimation": mat["cellSize"] / raw_res,
+                                    "Decimation": None
+                                    if decimation == 1
+                                    else decimation,
+                                    "Resolutions": (mat["cellSize"], mat["cellSize"]),
                                 }
                             )
 
@@ -275,7 +279,8 @@ class EOPFChunkVizExtension(FactoryExtension):
                                 "Width": ds.rio.width,
                                 "Height": ds.rio.height,
                                 "ChunkSize": (chunkxsize, chunkysize),
-                                "Decimation": 1,
+                                "Decimation": None,
+                                "Resolutions": ds.rio.resolution(),
                             }
                         )
                     metadata[group] = levels
