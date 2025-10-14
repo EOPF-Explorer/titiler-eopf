@@ -10,7 +10,7 @@ from fastapi import Depends, Query
 from geojson_pydantic.features import Feature
 from rasterio import windows
 from rasterio.crs import CRS
-from rasterio.warp import transform_geom
+from rasterio.warp import calculate_default_transform, transform_geom
 from rio_tiler.constants import WGS84_CRS
 from starlette.requests import Request
 from starlette.responses import HTMLResponse
@@ -247,19 +247,39 @@ class EOPFChunkVizExtension(FactoryExtension):
                     levels = []
                     if multiscales := src_dst.datatree[group].attrs.get("multiscales"):
                         raw_res = None
+
+                        scale = src_dst.datatree[group].attrs["multiscales"][
+                            "tile_matrix_set"
+                        ]["tileMatrices"][0]["id"]
+                        ds = src_dst.datatree[group][scale].to_dataset()
+                        crs = CRS.from_user_input(multiscales["tile_matrix_set"]["crs"])
+                        bounds = ds.rio.bounds()
+                        width = ds.rio.width
+                        height = ds.rio.height
+
                         for mat in multiscales["tile_matrix_set"]["tileMatrices"]:
                             raw_res = mat["cellSize"] if raw_res is None else raw_res
                             decimation = mat["cellSize"] / raw_res
+
+                            dst_affine, _, _ = calculate_default_transform(
+                                crs,
+                                src_dst.tms.rasterio_crs,
+                                math.ceil(width / decimation),
+                                math.ceil(height / decimation),
+                                *bounds,
+                            )
+                            resolution = max(abs(dst_affine[0]), abs(dst_affine[4]))
+                            zoom = src_dst.tms.zoom_for_res(resolution)
+
                             levels.append(
                                 {
                                     "Level": mat["id"],
-                                    "Width": mat["tileWidth"] * mat["matrixWidth"],
-                                    "Height": mat["tileHeight"] * mat["matrixHeight"],
+                                    "Width": math.ceil(width / decimation),
+                                    "Height": math.ceil(height / decimation),
                                     "ChunkSize": (mat["tileWidth"], mat["tileHeight"]),
-                                    "Decimation": None
-                                    if decimation == 1
-                                    else decimation,
-                                    "Resolutions": (mat["cellSize"], mat["cellSize"]),
+                                    "Decimation": decimation,
+                                    "MercatorZoom": zoom,
+                                    "MercatorResolution": resolution,
                                 }
                             )
 
@@ -273,14 +293,25 @@ class EOPFChunkVizExtension(FactoryExtension):
                             chunkxsize = ds.rio.width
                             chunkysize = ds.rio.height
 
+                        dst_affine, _, _ = calculate_default_transform(
+                            ds.rio.crs,
+                            src_dst.tms.rasterio_crs,
+                            ds.rio.width,
+                            ds.rio.height,
+                            *ds.rio.bounds(),
+                        )
+                        resolution = max(abs(dst_affine[0]), abs(dst_affine[4]))
+                        zoom = src_dst.tms.zoom_for_res(resolution)
+
                         levels.append(
                             {
                                 "Level": "0",
                                 "Width": ds.rio.width,
                                 "Height": ds.rio.height,
                                 "ChunkSize": (chunkxsize, chunkysize),
-                                "Decimation": None,
-                                "Resolutions": ds.rio.resolution(),
+                                "Decimation": 1,
+                                "MercatorZoom": zoom,
+                                "MercatorResolution": resolution,
                             }
                         )
                     metadata[group] = levels
