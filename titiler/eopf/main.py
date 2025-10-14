@@ -16,7 +16,7 @@ from starlette_cramjam.middleware import CompressionMiddleware
 
 from titiler.core.errors import DEFAULT_STATUS_CODES, add_exception_handlers
 from titiler.core.factory import AlgorithmFactory, ColorMapFactory, TMSFactory
-from titiler.core.middleware import CacheControlMiddleware
+from titiler.core.middleware import CacheControlMiddleware, TotalTimeMiddleware
 from titiler.core.models.OGC import Conformance, Landing
 from titiler.core.resources.enums import MediaType
 from titiler.core.utils import accept_media_type, create_html_response, update_openapi
@@ -151,6 +151,10 @@ app.add_middleware(
     cachecontrol=settings.cachecontrol,
     exclude_path={r"/_mgmt*"},
 )
+
+if settings.debug:
+    print(settings.debug)
+    app.add_middleware(TotalTimeMiddleware)
 
 
 # Health Check Endpoints

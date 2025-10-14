@@ -280,6 +280,13 @@ class EOPFChunkVizExtension(FactoryExtension):
                                     "Decimation": decimation,
                                     "MercatorZoom": zoom,
                                     "MercatorResolution": resolution,
+                                    "Variables": list(
+                                        {
+                                            var
+                                            for var, data_array in ds.data_vars.items()
+                                            if data_array.ndim > 0
+                                        }
+                                    ),
                                 }
                             )
 
@@ -312,6 +319,13 @@ class EOPFChunkVizExtension(FactoryExtension):
                                 "Decimation": 1,
                                 "MercatorZoom": zoom,
                                 "MercatorResolution": resolution,
+                                "Variables": list(
+                                    {
+                                        var
+                                        for var, data_array in ds.data_vars.items()
+                                        if data_array.ndim > 0
+                                    }
+                                ),
                             }
                         )
                     metadata[group] = levels
@@ -323,6 +337,14 @@ class EOPFChunkVizExtension(FactoryExtension):
                     "geojson": geojson,
                     "metadata": json.dumps(metadata),
                     "grid_endpoint": factory.url_for(request, "chunk_grid"),
+                    "tile_endpoint": factory.url_for(
+                        request,
+                        "tile",
+                        z="${z}",
+                        x="${x}",
+                        y="${y}",
+                        tileMatrixSetId="WebMercatorQuad",
+                    ),
                 },
                 media_type="text/html",
             )

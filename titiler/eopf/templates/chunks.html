@@ -109,9 +109,7 @@
 
     <script>
     const scope = {metadata: {{ metadata | safe }}}
-    const grid_endpoint = '{{ grid_endpoint }}'
     const geojson = {{ geojson | safe}}
-
 
     /** copy of spherical-mercator.js **/
     var SphericalMercator = (function(){
@@ -426,7 +424,7 @@
         if (map.getLayer('tile-grid')) map.removeLayer('tile-grid')
         if (map.getSource('tile-grid')) map.removeSource('tile-grid')
 
-        return fetch(`${grid_endpoint}?group=${group}&level=${level}`)
+        return fetch(`{{ grid_endpoint }}?group=${group}&level=${level}`)
             .then(res => {
                 if (res.ok) return res.json()
                 throw new Error('Network response was not ok.');
@@ -550,6 +548,47 @@
                 map.getCanvas().style.cursor = 'inherit'
                 map.setFilter('mercator-grid-h', ['in', 'quadkey', ''])
             }
+        })
+
+        map.on('click', 'mercator-grid', (e) => {
+            let props = e.features[0].properties
+            document.getElementById('loader').classList.toggle('off')
+
+            const group = document.getElementById('group-selector').selectedOptions[0].getAttribute("group")
+            const level = document.getElementById('ms-selector').selectedOptions[0].getAttribute("level")
+            const metadata = scope.metadata[group][level]
+            const variable_name = `${group}:${metadata.Variables[0]}`
+
+            // the tile_endpoint contains ${z}, ${x}, ${y}
+            const x = props.x
+            const y = props.y
+            const z = props.z
+            fetch(`{{ tile_endpoint }}?variables=${variable_name}`)
+                .then(res => {
+                    if (res.ok) return res.headers
+                    throw new Error('Network response was not ok.');
+                })
+                .then(data => {
+                    console.log(data)
+                    let html = `<div>tile (${z}-${x}-${y})</div>`
+                    html += '<table>'
+                    const timing = data.get("server-timing")
+                    if (timing) {
+                        const dataread = timing.split('=')[1]
+                        html += `<tr><td class="align-l">Time (ms)</td><td class="px3 align-r">${dataread}</td></tr>`
+                    }
+                    html += '</table>'
+                    new maplibregl.Popup()
+                        .setLngLat(e.lngLat)
+                        .setHTML(html)
+                        .addTo(map)
+                })
+                .catch (err => {
+                    console.warn(err)
+                })
+                .then(() => {
+                    document.getElementById('loader').classList.toggle('off')
+                })
         })
 
         update_viz()
