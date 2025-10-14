@@ -10,7 +10,7 @@ from fastapi import Depends, Query
 from geojson_pydantic.features import Feature
 from rasterio import windows
 from rasterio.crs import CRS
-from rasterio.warp import transform_geom
+from rasterio.warp import calculate_default_transform, transform_geom
 from rio_tiler.constants import WGS84_CRS
 from starlette.requests import Request
 from starlette.responses import HTMLResponse
@@ -247,15 +247,46 @@ class EOPFChunkVizExtension(FactoryExtension):
                     levels = []
                     if multiscales := src_dst.datatree[group].attrs.get("multiscales"):
                         raw_res = None
+
+                        scale = src_dst.datatree[group].attrs["multiscales"][
+                            "tile_matrix_set"
+                        ]["tileMatrices"][0]["id"]
+                        ds = src_dst.datatree[group][scale].to_dataset()
+                        crs = CRS.from_user_input(multiscales["tile_matrix_set"]["crs"])
+                        bounds = ds.rio.bounds()
+                        width = ds.rio.width
+                        height = ds.rio.height
+
                         for mat in multiscales["tile_matrix_set"]["tileMatrices"]:
                             raw_res = mat["cellSize"] if raw_res is None else raw_res
+                            decimation = mat["cellSize"] / raw_res
+
+                            dst_affine, _, _ = calculate_default_transform(
+                                crs,
+                                src_dst.tms.rasterio_crs,
+                                math.ceil(width / decimation),
+                                math.ceil(height / decimation),
+                                *bounds,
+                            )
+                            resolution = max(abs(dst_affine[0]), abs(dst_affine[4]))
+                            zoom = src_dst.tms.zoom_for_res(resolution)
+
                             levels.append(
                                 {
                                     "Level": mat["id"],
-                                    "Width": mat["tileWidth"] * mat["matrixWidth"],
-                                    "Height": mat["tileHeight"] * mat["matrixHeight"],
+                                    "Width": math.ceil(width / decimation),
+                                    "Height": math.ceil(height / decimation),
                                     "ChunkSize": (mat["tileWidth"], mat["tileHeight"]),
-                                    "Decimation": mat["cellSize"] / raw_res,
+                                    "Decimation": decimation,
+                                    "MercatorZoom": zoom,
+                                    "MercatorResolution": resolution,
+                                    "Variables": list(
+                                        {
+                                            var
+                                            for var, data_array in ds.data_vars.items()
+                                            if data_array.ndim > 0
+                                        }
+                                    ),
                                 }
                             )
 
@@ -269,6 +300,16 @@ class EOPFChunkVizExtension(FactoryExtension):
                             chunkxsize = ds.rio.width
                             chunkysize = ds.rio.height
 
+                        dst_affine, _, _ = calculate_default_transform(
+                            ds.rio.crs,
+                            src_dst.tms.rasterio_crs,
+                            ds.rio.width,
+                            ds.rio.height,
+                            *ds.rio.bounds(),
+                        )
+                        resolution = max(abs(dst_affine[0]), abs(dst_affine[4]))
+                        zoom = src_dst.tms.zoom_for_res(resolution)
+
                         levels.append(
                             {
                                 "Level": "0",
@@ -276,6 +317,15 @@ class EOPFChunkVizExtension(FactoryExtension):
                                 "Height": ds.rio.height,
                                 "ChunkSize": (chunkxsize, chunkysize),
                                 "Decimation": 1,
+                                "MercatorZoom": zoom,
+                                "MercatorResolution": resolution,
+                                "Variables": list(
+                                    {
+                                        var
+                                        for var, data_array in ds.data_vars.items()
+                                        if data_array.ndim > 0
+                                    }
+                                ),
                             }
                         )
                     metadata[group] = levels
@@ -287,6 +337,14 @@ class EOPFChunkVizExtension(FactoryExtension):
                     "geojson": geojson,
                     "metadata": json.dumps(metadata),
                     "grid_endpoint": factory.url_for(request, "chunk_grid"),
+                    "tile_endpoint": factory.url_for(
+                        request,
+                        "tile",
+                        z="${z}",
+                        x="${x}",
+                        y="${y}",
+                        tileMatrixSetId="WebMercatorQuad",
+                    ),
                 },
                 media_type="text/html",
             )
