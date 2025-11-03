@@ -1,5 +1,7 @@
 """ "titiler.eopf cache."""
 
+from __future__ import annotations
+
 try:
     import redis
 
