@@ -1,6 +1,8 @@
 """API settings."""
 
-from pydantic import AnyUrl, ValidationInfo, field_validator
+from typing import Self
+
+from pydantic import AnyUrl, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -59,3 +61,22 @@ class DataStoreSettings(BaseSettings):
         raise ValueError(
             "Either 'url' must be provided or both 'scheme' and 'host' must be provided"
         )
+
+
+class CacheSettings(BaseSettings):
+    """Redis Cache Settings"""
+
+    host: str | None = None
+    enable: bool = False
+
+    model_config = SettingsConfigDict(
+        env_prefix="TITILER_EOPF_CACHE_", env_file=".env", extra="ignore"
+    )
+
+    @model_validator(mode="after")
+    def check_cache_settings(self) -> Self:
+        """Check if cache is disabled."""
+        if self.enable and not self.host:
+            raise ValueError("Redis CACHE_HOST must be set when cache is enabled")
+
+        return self

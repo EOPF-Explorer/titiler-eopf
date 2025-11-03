@@ -38,5 +38,11 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
       - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL}
+      - TITILER_EOPF_CACHE_HOST=cache
     volumes:
       - ./:/data
+
+  cache:
+    image: redis:latest
+    ports:
+      - 6379:6379

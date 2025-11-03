@@ -33,6 +33,9 @@ dependencies = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
+cache = [
+    "redis",
+]
 dev = [
     "pre-commit",
     "boto3",
@@ -42,6 +45,7 @@ test = [
     "pytest-cov",
     "pytest-asyncio",
     "httpx",
+    "fakeredis",
 ]
 
 [project.urls]

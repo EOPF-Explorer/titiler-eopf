@@ -26,3 +26,4 @@ repos:
         additional_dependencies:
         - types-attrs
         - pydantic~=2.0
+        - types-redis
