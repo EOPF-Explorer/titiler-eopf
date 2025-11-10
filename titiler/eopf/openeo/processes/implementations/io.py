@@ -2,8 +2,7 @@
 
 from typing import Dict, Optional
 
-from titiler.eopf.reader import GeoZarrReader
-
+from ....reader import GeoZarrReader
 from .data_model import LazyZarrRasterStack
 
 __all__ = ["load_zarr"]

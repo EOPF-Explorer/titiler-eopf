@@ -122,7 +122,14 @@ factory_args = {
 if tile_store:
     factory_args["tile_store"] = tile_store
 
-endpoints = EndpointsFactory(**factory_args)
+endpoints = EndpointsFactory(
+    **factory_args,
+    load_nodes_ids=[
+        "load_collection",
+        "load_collection_and_reduce",
+        "load_zarr",
+    ],
+)
 app.include_router(endpoints.router)
 app.endpoints = endpoints
 

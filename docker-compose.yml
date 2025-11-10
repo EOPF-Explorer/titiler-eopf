@@ -42,6 +42,15 @@ services:
     volumes:
       - ./:/data
 
+  openeo:
+    platform: linux/amd64
+    image: mundialis/openeo-web-editor:latest
+    ports:
+      - "8080:80"
+    env_file:
+      - path: .env
+        required: false
+
   cache:
     image: redis:latest
     ports:

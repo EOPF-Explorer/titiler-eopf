@@ -2,7 +2,7 @@
 name = "titiler.eopf"
 description = "TiTiler application for EOPF datasets"
 readme = "README.md"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11,<3.13"
 license = {file = "LICENSE"}
 authors = [
     {name = "Vincent Sarago", email = "vincent@developmentseed.com"},
@@ -57,6 +57,9 @@ dev = [
 ]
 server = [
     "uvicorn[standard]",
+]
+notebook = [
+    "ipython",
 ]
 
 [project.urls]
