@@ -27,10 +27,14 @@
 
 ## Installation
 
+We recommand using [`uv`](https://docs.astral.sh/uv) as project manager for development.
+
+See https://docs.astral.sh/uv/getting-started/installation/ for installation 
+
 ```bash
 git clone https://github.com/EOPF-Explorer/titiler-eopf.git
 cd titiler-eopf
-python -m pip install -e .
+uv sync
 ```
 
 ## Configuration
@@ -59,9 +63,8 @@ http://127.0.0.1:8000/collections/sentinel-2/items/S2A_MSIL2A_20250704T094051_N0
 ## Launch
 
 ```
-python -m pip install uvicorn
-
-TITILER_EOPF_STORE_URL=s3://my-bucket/data/ uvicorn titiler.eopf.main:app --port 8000
+export TITILER_EOPF_STORE_URL=s3://my-bucket/data/ 
+uv run --group server uvicorn titiler.eopf.main:app --host 127.0.0.1 --port 8080
 ```
 
 ### Using Docker

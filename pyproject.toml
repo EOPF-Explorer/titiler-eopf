@@ -55,13 +55,6 @@ dev = [
     "boto3",
     "titiler-openeo@git+https://github.com/sentinel-hub/titiler-openeo.git",
 ]
-docs = [
-    "mkdocs>=1.6.1",
-    "mkdocs-jupyter~=0.24.0",
-    "mkdocs-material[imaging]>=9.6.14",
-    "griffe-inherited-docstrings>=1.1.1",
-    "mkdocstrings[python]>=0.29.1",
-]
 server = [
     "uvicorn[standard]",
 ]
