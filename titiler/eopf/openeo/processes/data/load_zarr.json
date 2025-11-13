@@ -1,0 +1,128 @@
+{
+  "id": "load_zarr",
+  "summary": "Load data from a Zarr store",
+  "description": "Loads data from a Zarr store. Supports local file paths and remote URLs (HTTP, HTTPS, S3). Each variable in the Zarr store becomes accessible as a separate band in the returned data cube.",
+  "categories": [
+    "cubes",
+    "import"
+  ],
+  "experimental": true,
+  "parameters": [
+    {
+      "name": "url",
+      "description": "The URL or path to the Zarr store. Supports local file paths, HTTP/HTTPS URLs, and S3 URLs (e.g., 's3://bucket/path/to/dataset.zarr'). Authentication details such as API keys or tokens may need to be included in the URL or configured via environment variables.",
+      "schema": {
+        "title": "URL",
+        "type": "string",
+        "format": "uri"
+      }
+    },
+
+    {
+      "name": "spatial_extent",
+      "description": "Limits the data to load to the specified bounding box or polygons.\n\nFor raster data, the process loads the pixel into the data cube if the point at the pixel center intersects with the bounding box or any of the polygons (as defined in the Simple Features standard by the OGC).\n\nSet this parameter to `null` to set no limit for the spatial extent. Be careful with this when loading large datasets!",
+      "schema": [
+        {
+          "title": "Bounding Box",
+          "type": "object",
+          "subtype": "bounding-box",
+          "required": [
+            "west",
+            "south",
+            "east",
+            "north"
+          ],
+          "properties": {
+            "west": {
+              "description": "West (lower left corner, coordinate axis 1).",
+              "type": "number"
+            },
+            "south": {
+              "description": "South (lower left corner, coordinate axis 2).",
+              "type": "number"
+            },
+            "east": {
+              "description": "East (upper right corner, coordinate axis 1).",
+              "type": "number"
+            },
+            "north": {
+              "description": "North (upper right corner, coordinate axis 2).",
+              "type": "number"
+            },
+            "crs": {
+              "description": "Coordinate reference system of the extent, specified as as [EPSG code](http://www.epsg-registry.org/) or [WKT2 CRS string](http://docs.opengeospatial.org/is/18-010r7/18-010r7.html). Defaults to `4326` (EPSG code 4326) unless the client explicitly requests a different coordinate reference system.",
+              "anyOf": [
+                {
+                  "title": "EPSG Code",
+                  "type": "integer",
+                  "subtype": "epsg-code",
+                  "minimum": 1000,
+                  "examples": [
+                    3857
+                  ]
+                },
+                {
+                  "title": "WKT2",
+                  "type": "string",
+                  "subtype": "wkt2-definition"
+                }
+              ],
+              "default": 4326
+            }
+          }
+        },
+        {
+            "name": "width",
+            "description": "The width of the output image in pixels. If only width is provided, height will be calculated to maintain the aspect ratio. Defaults to 1024 to prevent loading in native resolution.",
+            "schema": {
+                "type": "number",
+                "minimum": 1
+            },
+            "default": 1024,
+            "optional": true
+        },
+        {
+            "name": "height",
+            "description": "The height of the output image in pixels. If only height is provided, width will be calculated to maintain the aspect ratio.",
+            "schema": {
+                "type": "number",
+                "minimum": 1
+            },
+            "optional": true
+        },
+        {
+          "title": "No filter",
+          "description": "Don't filter spatially. All data is included in the data cube.",
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "optional": true
+    },
+    {
+      "name": "options",
+      "description": "Additional reading options for the Zarr store. Supported options include: `sel` (array of dimension selections in format 'dimension=value', e.g., ['time=2020-01-01']), `method` (selection method: 'nearest', 'pad', 'ffill', 'backfill', or 'bfill'), and `variables` (list of variables to load).",
+      "schema": {
+        "type": "object",
+        "subtype": "input-format-options"
+      },
+      "default": {},
+      "optional": true
+    }
+  ],
+  "returns": {
+    "description": "A data cube for further processing. Each variable in the Zarr store is accessible as a separate band, with keys in the format 'group:variable' (e.g., 'measurements:red').",
+    "schema": {
+      "type": "object",
+      "subtype": "datacube"
+    }
+  },
+  "exceptions": {
+    "FormatUnsuitable": {
+      "message": "Data can't be loaded as a Zarr store."
+    },
+    "MissingVariables": {
+      "message": "The specified variable could not be found in the Zarr store."
+    }
+  }
+}

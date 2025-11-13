@@ -2,7 +2,7 @@
 name = "titiler.eopf"
 description = "TiTiler application for EOPF datasets"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.13"
 license = {file = "LICENSE"}
 authors = [
     {name = "Vincent Sarago", email = "vincent@developmentseed.com"},
@@ -33,19 +33,38 @@ dependencies = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
+openeo = [
+    "titiler-openeo@git+https://github.com/sentinel-hub/titiler-openeo.git",
+    "duckdb",
+    "sqlalchemy>=2.0.0",
+    "psycopg2-binary",
+    "cryptography",
+    "httpx",
+]
 cache = [
     "redis",
 ]
+
+[dependency-groups]
 dev = [
-    "pre-commit",
-    "boto3",
-]
-test = [
     "pytest",
     "pytest-cov",
     "pytest-asyncio",
     "httpx",
     "fakeredis",
+    "duckdb",
+    "sqlalchemy>=2.0.0",
+    "cryptography",
+    "pre-commit",
+    "bump-my-version",
+    "boto3",
+    "titiler-openeo@git+https://github.com/sentinel-hub/titiler-openeo.git",
+]
+server = [
+    "uvicorn[standard]",
+]
+notebook = [
+    "ipython",
 ]
 
 [project.urls]
@@ -56,16 +75,20 @@ Source = "https://github.com/EOPF-Explorer/titiler-eopf"
 Changelog = "https://github.com/EOPF-Explorer/titiler-eopf/CHANGELOG.md"
 
 [build-system]
-requires = ["pdm-pep517"]
-build-backend = "pdm.pep517.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.pdm.version]
-source = "file"
+[tool.hatch.version]
 path = "titiler/eopf/__init__.py"
 
-[tool.pdm.build]
-includes = ["titiler/eopf"]
-excludes = ["tests/", "**/.mypy_cache", "**/.DS_Store"]
+[tool.hatch.build.targets.sdist]
+only-include = ["titiler/"]
+
+[tool.hatch.build.targets.wheel]
+only-include = ["titiler/"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.coverage.run]
 branch = true
