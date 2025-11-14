@@ -7,10 +7,11 @@ from pathlib import Path
 
 from openeo_pg_parser_networkx.process_registry import Process
 
+from titiler.openeo.processes import PROCESS_SPECIFICATIONS as OpenEOSpecifications
 from titiler.openeo.processes import process_registry
 
 json_path = Path(__file__).parent / "data"
-PROCESS_SPECIFICATIONS = {}
+EOPF_OPENEO_SPECIFICATIONS = {}
 for f in (json_path).glob("*.json"):
     spec_json = json.load(open(f))
     process_name = spec_json["id"]
@@ -18,7 +19,9 @@ for f in (json_path).glob("*.json"):
     # if spec_json["id"] in dir(builtins) or keyword.iskeyword(spec_json["id"]):
     #     process_name = "_" + spec_json["id"]
 
-    PROCESS_SPECIFICATIONS[process_name] = spec_json
+    EOPF_OPENEO_SPECIFICATIONS[process_name] = spec_json
+
+PROCESS_SPECIFICATIONS = {**OpenEOSpecifications, **EOPF_OPENEO_SPECIFICATIONS}
 
 PROCESS_IMPLEMENTATIONS = [
     func
@@ -27,6 +30,7 @@ PROCESS_IMPLEMENTATIONS = [
         inspect.isfunction,
     )
 ]
+
 for func in PROCESS_IMPLEMENTATIONS:
     process_registry[func.__name__] = Process(
         spec=PROCESS_SPECIFICATIONS[func.__name__], implementation=func
