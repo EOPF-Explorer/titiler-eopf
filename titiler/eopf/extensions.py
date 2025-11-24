@@ -376,8 +376,7 @@ class EOPFChunkVizExtension(FactoryExtension):
                             f"Level '{level}' not found in multiscale matrices"
                         )
 
-                    scale = matrix["id"]
-                    ds = src_dst.datatree[group][scale].to_dataset()
+                    ds = src_dst.datatree[group][level].to_dataset()
                     blockysize = matrix["tileHeight"]
                     blockxsize = matrix["tileWidth"]
                     crs = CRS.from_user_input(multiscales["tile_matrix_set"]["crs"])
