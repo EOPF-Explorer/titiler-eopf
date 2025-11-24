@@ -356,24 +356,25 @@ class EOPFChunkVizExtension(FactoryExtension):
         )
         def chunk_grid(
             group: Annotated[str, Query(description="Group")],
-            level: Annotated[str | int, Query(description="Multiscale Level (index or key)")],
+            level: Annotated[str, Query(description="Multiscale Level (matrix ID)")],
             src_path=Depends(factory.path_dependency),
         ):
             """return geojson."""
             with factory.reader(src_path) as src_dst:
                 if multiscales := src_dst.datatree[group].attrs.get("multiscales"):
-                    # Support both integer index and string key for level
-                    if isinstance(level, int):
-                        matrix = multiscales["tile_matrix_set"]["tileMatrices"][level]
-                    else:
-                        # Find matrix by id
-                        matrix = next(
-                            (m for m in multiscales["tile_matrix_set"]["tileMatrices"]
-                             if m["id"] == level),
-                            None
+                    # Find matrix by id
+                    matrix = next(
+                        (
+                            m
+                            for m in multiscales["tile_matrix_set"]["tileMatrices"]
+                            if m["id"] == level
+                        ),
+                        None,
+                    )
+                    if matrix is None:
+                        raise ValueError(
+                            f"Level '{level}' not found in multiscale matrices"
                         )
-                        if matrix is None:
-                            raise ValueError(f"Level '{level}' not found in multiscale matrices")
 
                     scale = matrix["id"]
                     ds = src_dst.datatree[group][scale].to_dataset()
