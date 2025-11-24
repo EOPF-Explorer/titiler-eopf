@@ -356,15 +356,27 @@ class EOPFChunkVizExtension(FactoryExtension):
         )
         def chunk_grid(
             group: Annotated[str, Query(description="Group")],
-            level: Annotated[int, Query(description="Multiscale Level")],
+            level: Annotated[str, Query(description="Multiscale Level (matrix ID)")],
             src_path=Depends(factory.path_dependency),
         ):
             """return geojson."""
             with factory.reader(src_path) as src_dst:
                 if multiscales := src_dst.datatree[group].attrs.get("multiscales"):
-                    matrix = multiscales["tile_matrix_set"]["tileMatrices"][level]
-                    scale = matrix["id"]
-                    ds = src_dst.datatree[group][scale].to_dataset()
+                    # Find matrix by id
+                    matrix = next(
+                        (
+                            m
+                            for m in multiscales["tile_matrix_set"]["tileMatrices"]
+                            if m["id"] == level
+                        ),
+                        None,
+                    )
+                    if matrix is None:
+                        raise ValueError(
+                            f"Level '{level}' not found in multiscale matrices"
+                        )
+
+                    ds = src_dst.datatree[group][level].to_dataset()
                     blockysize = matrix["tileHeight"]
                     blockxsize = matrix["tileWidth"]
                     crs = CRS.from_user_input(multiscales["tile_matrix_set"]["crs"])

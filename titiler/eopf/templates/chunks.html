@@ -474,7 +474,7 @@
         scope.metadata[group].forEach((opt, idx) => {
             const option = document.createElement('option')
             option.setAttribute('level', opt.Level)
-            option.text = `Level: ${opt.Level}`
+            option.text = `Level: "${opt.Level}"`
             if (idx === 0) option.selected = "selected"
             document.getElementById('ms-selector').appendChild(option);
         });
