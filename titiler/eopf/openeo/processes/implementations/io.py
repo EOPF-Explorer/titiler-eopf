@@ -118,13 +118,12 @@ class STACReader(SimpleSTACReader):
 
     def _get_reader(self, asset_info: AssetInfo) -> Tuple[Type[BaseReader], Dict]:
         """Get Asset Reader."""
-        asset_type = asset_info.get("media_type", None)
-        if (
-            asset_type
-            and asset_type in ["application/x-zarr", "application/vnd+zarr"]
-            and not asset_info["url"].startswith("vrt://")
-        ):
-            return GeoZarrReader, asset_info.get("reader_options", {})
+        if asset_type := asset_info.get("media_type", None):
+            if asset_type.split(";")[0] in [
+                "application/x-zarr",
+                "application/vnd+zarr",
+            ] and not asset_info["url"].startswith("vrt://"):
+                return GeoZarrReader, asset_info.get("reader_options", {})
 
         return self.reader, asset_info.get("reader_options", {})
 
