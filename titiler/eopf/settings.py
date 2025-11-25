@@ -1,9 +1,8 @@
 """API settings."""
 
-from typing import Self
-
 from pydantic import AnyUrl, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing_extensions import Self
 
 
 class ApiSettings(BaseSettings):
