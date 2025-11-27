@@ -40,7 +40,6 @@ openeo = [
     "psycopg2-binary",
     "cryptography",
     "httpx",
-    "openeo"
 ]
 cache = [
     "redis",
