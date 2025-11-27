@@ -131,6 +131,7 @@ class STACReader(SimpleSTACReader):
             if asset_type.split(";")[0] in [
                 "application/x-zarr",
                 "application/vnd+zarr",
+                "application/vnd.zarr",
             ] and not asset_info["url"].startswith("vrt://"):
                 return GeoZarrReader, asset_info.get("reader_options", {})
 
@@ -253,12 +254,13 @@ class STACReader(SimpleSTACReader):
         # We fall back to `indexes` if provided
         indexes = kwargs.pop("indexes", None)
 
-        def _reader(asset: str, *args: Any, **kwargs: Any) -> ImageData:
-            idx = asset_indexes.get(asset) or indexes
+        def _reader(asset_name: str, *args: Any, **kwargs: Any) -> ImageData:
+            idx = asset_indexes.get(asset_name) or indexes
 
             # Parse Asset `{asset}|{variable}`
-            variable = asset.split("|")[1] if "|" in asset else None
-            asset = asset.split("|")[0]
+            variable = asset_name.split("|")[1] if "|" in asset_name else None
+            asset = asset_name.split("|")[0]
+
             read_options = {**kwargs, "variables": [variable]} if variable else kwargs
 
             # TODO: Parse Asset `{asset}|{bidx}` ? for COG
@@ -309,9 +311,9 @@ class STACReader(SimpleSTACReader):
                             raise AssetAsBandError(
                                 "Can't use `asset_as_band` for multibands asset"
                             )
-                        data.band_names = [asset]
+                        data.band_names = [asset_name]
                     else:
-                        data.band_names = [f"{asset}_{n}" for n in data.band_names]
+                        data.band_names = [f"{asset_name}_{n}" for n in data.band_names]
 
                     return data
 
