@@ -10,7 +10,7 @@ import re
 import warnings
 from functools import cache, cached_property
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Union
+from typing import Any, Callable, Dict, List, Literal, Tuple, Union
 from urllib.parse import urlparse
 
 import attr
@@ -274,6 +274,8 @@ class GeoZarrReader(BaseReader):
     groups: List[str] = attr.ib(init=False)
     variables: List[str] = attr.ib(init=False)
 
+    _zoom_cache: Dict[str, Tuple[int, int]] = attr.ib(init=False, factory=dict)
+
     def __attrs_post_init__(self):
         """Set bounds and CRS."""
         if not self.datatree:
@@ -422,45 +424,41 @@ class GeoZarrReader(BaseReader):
         resolution = max(abs(transform[0]), abs(transform[4]))
         return self.tms.zoom_for_res(resolution)
 
-    # TODO: add cache
+    def _zoom_datasets(self, group: str) -> Tuple[xarray.Dataset, xarray.Dataset]:
+        """Return (coarsest, finest) datasets for zoom inference."""
+        dt_group = self.datatree[group]
+        if "multiscales" in dt_group.attrs:
+            matrices = dt_group.attrs["multiscales"]["tile_matrix_set"]["tileMatrices"]
+            finest = dt_group[matrices[0]["id"]].to_dataset()
+            coarsest = dt_group[matrices[-1]["id"]].to_dataset()
+            return coarsest, finest
+
+        ds = dt_group.to_dataset()
+        return ds, ds
+
+    def _safe_zoom(self, dataset: xarray.Dataset, fallback: int) -> int:
+        try:
+            return self._get_zoom(dataset)
+        except Exception:  # noqa: BLE001
+            return fallback
+
+    def _zoom_pair(self, group: str) -> Tuple[int, int]:
+        if group not in self._zoom_cache:
+            coarse, fine = self._zoom_datasets(group)
+            self._zoom_cache[group] = (
+                self._safe_zoom(coarse, self.tms.minzoom),
+                self._safe_zoom(fine, self.tms.maxzoom),
+            )
+
+        return self._zoom_cache[group]
+
     def get_minzoom(self, group: str) -> int:
         """Get MinZoom for a Group."""
-        if "multiscales" in self.datatree[group].attrs:
-            # Select the last level (should be the lowest/coarsest resolution)
-            scale = self.datatree[group].attrs["multiscales"]["tile_matrix_set"][
-                "tileMatrices"
-            ][-1]["id"]
-            ds = self.datatree[group][scale].to_dataset()
-        else:
-            ds = self.datatree[group].to_dataset()
+        return self._zoom_pair(group)[0]
 
-        try:
-            return self._get_zoom(ds)
-        except:  # noqa
-            print("error", ds)
-            pass
-
-        return self.tms.minzoom
-
-    # TODO: add cache
     def get_maxzoom(self, group: str) -> int:
         """Get MaxZoom for a Group."""
-        if "multiscales" in self.datatree[group].attrs:
-            # Select the first level (should be the highest/finest resolution)
-            scale = self.datatree[group].attrs["multiscales"]["tile_matrix_set"][
-                "tileMatrices"
-            ][0]["id"]
-            ds = self.datatree[group][scale].to_dataset()
-        else:
-            ds = self.datatree[group].to_dataset()
-
-        try:
-            return self._get_zoom(ds)
-        except:  # noqa
-            print("error", ds)
-            pass
-
-        return self.tms.maxzoom
+        return self._zoom_pair(group)[1]
 
     def _get_variable(  # noqa: C901
         self,
@@ -666,10 +664,55 @@ class GeoZarrReader(BaseReader):
         expression: str | None = None,
         sel: List[str] | None = None,
         method: sel_methods | None = None,
+        max_size: int | None = 1024,
+        height: int | None = None,
+        width: int | None = None,
+        dst_crs: CRS | None = None,
+        categorical: bool = False,
+        categories: List[float] | None = None,
+        percentiles: List[int] | None = None,
+        hist_options: Dict | None = None,
+        coverage: Any | None = None,
         **kwargs: Any,
     ) -> Dict[str, Dict[str, BandStatistics]]:
         """Return statistics from a dataset."""
-        raise NotImplementedError
+        if variables and expression:
+            warnings.warn(
+                "Both expression and assets passed; expression will overwrite assets parameter.",
+                ExpressionMixingWarning,
+                stacklevel=2,
+            )
+
+        if expression:
+            variables = self.parse_expression(expression)
+
+        if not variables:
+            raise MissingVariables(
+                "`variables` must be passed via `expression` or `variables` options."
+            )
+
+        image = self.preview(
+            *args,
+            variables=variables,
+            expression=expression,
+            max_size=max_size,
+            height=height,
+            width=width,
+            sel=sel,
+            method=method,
+            dst_crs=dst_crs,
+            **kwargs,
+        )
+
+        stats = image.statistics(
+            categorical=categorical,
+            categories=categories,
+            percentiles=percentiles,
+            hist_options=hist_options,
+            coverage=coverage,
+        )
+
+        return {band: {band: stat} for band, stat in stats.items()}
 
     def tile(  # type: ignore
         self,

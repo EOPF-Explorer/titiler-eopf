@@ -38,7 +38,58 @@ from titiler.openeo.settings import ProcessingSettings
 from ....reader import GeoZarrReader
 from .data_model import LazyZarrRasterStack
 
-__all__ = ["load_zarr", "LoadCollection"]
+__all__ = [
+    "load_zarr",
+    "LoadCollection",
+    "_split_asset_identifier",
+    "_preferred_asset_href",
+]
+
+
+def _split_asset_identifier(
+    asset_name: str,
+) -> tuple[str, str | None, tuple[int, ...] | None]:
+    """Return (asset, variable, bidx) parsed from ``asset|suffix`` expressions."""
+
+    asset, sep, suffix = asset_name.partition("|")
+    asset = asset.strip()
+    suffix = suffix.strip()
+
+    if not sep or not suffix:
+        return asset, None, None
+
+    if suffix.startswith("bidx="):
+        values = suffix.split("=", 1)[1]
+        indexes = tuple(int(idx.strip()) for idx in values.split(",") if idx.strip())
+        return asset, None, indexes or None
+
+    return asset, suffix, None
+
+
+def _preferred_asset_href(asset_info: AssetInfo) -> str:
+    """Return the best href for an asset, preferring cloud-native alternates when available."""
+
+    uri = asset_info["url"]
+    alternate = (asset_info.get("metadata") or {}).get("alternate")
+    if not isinstance(alternate, dict):
+        return uri
+
+    hrefs = [
+        entry["href"]
+        for entry in alternate.values()
+        if isinstance(entry, dict) and isinstance(entry.get("href"), str)
+    ]
+    if not hrefs:
+        return uri
+
+    preferred_schemes = ("s3://", "gs://", "az://", "r2://")
+    for scheme in preferred_schemes:
+        for href in hrefs:
+            if href.startswith(scheme):
+                return href
+
+    return hrefs[0]
+
 
 processing_settings = ProcessingSettings()
 
@@ -255,25 +306,17 @@ class STACReader(SimpleSTACReader):
         indexes = kwargs.pop("indexes", None)
 
         def _reader(asset_name: str, *args: Any, **kwargs: Any) -> ImageData:
-            idx = asset_indexes.get(asset_name) or indexes
+            asset, variable, inline_indexes = _split_asset_identifier(asset_name)
 
-            # Parse Asset `{asset}|{variable}`
-            variable = asset_name.split("|")[1] if "|" in asset_name else None
-            asset = asset_name.split("|")[0]
+            idx = asset_indexes.get(asset_name) or asset_indexes.get(asset) or indexes
+            if inline_indexes:
+                idx = inline_indexes[0] if len(inline_indexes) == 1 else inline_indexes
 
             read_options = {**kwargs, "variables": [variable]} if variable else kwargs
 
-            # TODO: Parse Asset `{asset}|{bidx}` ? for COG
-
             asset_info = self._get_asset_info(asset)
             reader, options = self._get_reader(asset_info)
-            uri = asset_info["url"]
-
-            # TODO: add s3 alternate in STAC Items
-            uri = uri.replace(
-                "https://esa-zarr-sentinel-explorer-fra.s3.de.io.cloud.ovh.net/",
-                "s3://esa-zarr-sentinel-explorer-fra/",
-            )
+            uri = _preferred_asset_href(asset_info)
 
             with self.ctx(**asset_info.get("env", {})):
                 with reader(

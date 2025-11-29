@@ -25,13 +25,15 @@ PROCESS_SPECIFICATIONS = {**OpenEOSpecifications, **EOPF_OPENEO_SPECIFICATIONS}
 
 PROCESS_IMPLEMENTATIONS = [
     func
-    for _, func in inspect.getmembers(
+    for name, func in inspect.getmembers(
         importlib.import_module("titiler.eopf.openeo.processes.implementations"),
         inspect.isfunction,
     )
+    if not name.startswith("_") and name in PROCESS_SPECIFICATIONS
 ]
 
 for func in PROCESS_IMPLEMENTATIONS:
-    process_registry[func.__name__] = Process(
-        spec=PROCESS_SPECIFICATIONS[func.__name__], implementation=func
+    name = func.__name__
+    process_registry[name] = Process(
+        spec=PROCESS_SPECIFICATIONS[name], implementation=func
     )

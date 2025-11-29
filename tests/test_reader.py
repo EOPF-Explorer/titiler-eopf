@@ -169,8 +169,10 @@ def test_point():
 def test_statistics():
     """test statistics method."""
     with GeoZarrReader(SENTINEL_2) as src:
-        with pytest.raises(NotImplementedError):
-            src.statistics(variables=["/measurements/reflectance/r60m:b02"])
+        stats = src.statistics(variables=["/measurements/reflectance/r60m:b02"])
+        assert "b02" in stats
+        band_stats = stats["b02"]["b02"]
+        assert band_stats.min <= band_stats.max
 
 
 def test_preview():
