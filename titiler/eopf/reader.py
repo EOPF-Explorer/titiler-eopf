@@ -2,28 +2,34 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 import os
 import pickle
 import re
+import sys
 import time
 import warnings
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Callable, Dict, Hashable, List, Literal, Tuple, Union
+from typing import Any, Callable, Dict, Hashable, Iterable, List, Literal, Tuple, Union
 from urllib.parse import ParseResult, urlparse
 
 import attr
 import obstore
+import redis
 import xarray
 from affine import Affine
+from cachetools import TTLCache  # type: ignore[import-untyped]
 from morecantile import Tile, TileMatrixSet
 from rasterio import windows
 from rasterio.crs import CRS
 from rasterio.features import bounds as featureBounds
 from rasterio.transform import array_bounds, from_bounds
 from rasterio.warp import calculate_default_transform, transform_bounds
+from redis import Redis as RedisType
+from redis.exceptions import RedisError
 from rio_tiler.constants import WEB_MERCATOR_TMS, WGS84_CRS
 from rio_tiler.errors import (
     ExpressionMixingWarning,
@@ -43,12 +49,6 @@ from .settings import CacheSettings
 
 logger = logging.getLogger(__name__)
 
-try:
-    import redis
-
-except ImportError:  # pragma: nocover
-    redis = None  # type: ignore
-
 
 try:
     from obstore.auth.boto3 import Boto3CredentialProvider
@@ -60,11 +60,180 @@ except ImportError:
 sel_methods = Literal["nearest", "pad", "ffill", "backfill", "bfill"]
 
 cache_settings = CacheSettings()
-DATASET_CACHE_TTL_SECONDS = 300
+DATASET_CACHE_TTL_SECONDS = cache_settings.dataset_ttl_seconds
+DATASET_CACHE_MAX_ITEMS = cache_settings.dataset_max_items
 
-DatasetCacheKey = Tuple[str, Tuple[Tuple[str, Hashable], ...]]
-LocalCacheEntry = Tuple[xarray.DataTree, float]
-_LOCAL_DATASET_CACHE: Dict[DatasetCacheKey, LocalCacheEntry] = {}
+DatasetCacheKey = str
+
+
+def _now() -> float:
+    return time.monotonic()
+
+
+class DatasetCache:
+    """Cache GeoZarr datatrees locally and optionally in Redis."""
+
+    def __init__(self, ttl_seconds: int, max_items: int | None) -> None:
+        """Initialize cache with TTL + optional size cap."""
+
+        self._ttl = max(0, ttl_seconds)
+        self._redis_client: RedisType | None = None
+        self._local: TTLCache | None = (
+            TTLCache(maxsize=(max_items or sys.maxsize), ttl=self._ttl, timer=_now)
+            if self._ttl
+            else None
+        )
+
+    @property
+    def ttl(self) -> int:
+        """Return the configured TTL in seconds."""
+
+        return self._ttl
+
+    @property
+    def local_cache(self) -> TTLCache | None:
+        """Expose the in-process cache for tests and instrumentation."""
+
+        return self._local
+
+    def _redis(self) -> RedisType | None:
+        if self._redis_client is not None:
+            return self._redis_client
+        if not (self._ttl and cache_settings.enable and cache_settings.host):
+            return None
+        pool = RedisCache.get_instance(cache_settings.host)
+        self._redis_client = redis.Redis(connection_pool=pool)
+        return self._redis_client
+
+    def get(self, cache_key: DatasetCacheKey) -> xarray.DataTree | None:
+        """Return a cached datatree if available."""
+
+        if self._local is None:
+            return None
+
+        if dt := self._local.get(cache_key):
+            logger.info("Cache - local hit %s", cache_key)
+            return dt
+
+        cache_client = self._redis()
+        if not cache_client:
+            return None
+
+        try:
+            payload = cache_client.get(cache_key)
+        except RedisError as exc:  # pragma: nocover - network failures
+            logger.warning("Cache - Redis get failed for %s: %s", cache_key, exc)
+            return None
+
+        if not payload:
+            return None
+
+        try:
+            dataset = pickle.loads(payload)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Cache - could not deserialize %s, purging entry: %s",
+                cache_key,
+                exc,
+            )
+            self._delete_redis_keys(cache_client, [cache_key])
+            return None
+
+        logger.info("Cache - Redis hit %s", cache_key)
+        self._local[cache_key] = dataset
+        return dataset
+
+    def set(self, cache_key: DatasetCacheKey, data: xarray.DataTree) -> None:
+        """Store a datatree in local cache and Redis (if configured)."""
+
+        if self._local is None:
+            return
+
+        self._local[cache_key] = data
+
+        cache_client = self._redis()
+        if not cache_client:
+            return
+
+        try:
+            payload = pickle.dumps(data)
+            cache_client.set(cache_key, payload, ex=self._ttl)
+        except (RedisError, pickle.PickleError, TypeError) as exc:
+            logger.warning("Cache - Redis set failed for %s: %s", cache_key, exc)
+
+    def invalidate(
+        self, normalized_path: str, cache_key: DatasetCacheKey | None = None
+    ) -> None:
+        """Drop cached datasets for a path, optionally scoped to a single key."""
+
+        if self._local is not None:
+            targets = [cache_key] if cache_key else self._local_keys(normalized_path)
+            for key in filter(None, targets):
+                self._local.pop(key, None)
+
+        cache_client = self._redis()
+        if not cache_client:
+            return
+
+        if cache_key:
+            self._delete_redis_keys(cache_client, [cache_key])
+        else:
+            self._delete_dataset_keys(cache_client, normalized_path)
+
+    def clear_local(self) -> None:
+        """Remove every entry from the local cache."""
+
+        if self._local is not None:
+            self._local.clear()
+
+    def _delete_dataset_keys(
+        self, cache_client: RedisType, normalized_path: str
+    ) -> None:
+        scan_iter = getattr(cache_client, "scan_iter", None)
+        if not callable(scan_iter):
+            fallback_keys = self._local_keys(normalized_path)
+            if fallback_keys:
+                self._delete_redis_keys(cache_client, fallback_keys)
+            else:
+                self._delete_redis_keys(cache_client, [normalized_path])
+            return
+
+        pattern = f"{normalized_path}*"
+        try:
+            keys = list(scan_iter(match=pattern))
+        except RedisError as exc:  # pragma: nocover - best effort cleanup
+            logger.warning("Cache - Redis scan failed for %s: %s", normalized_path, exc)
+            return
+
+        if keys:
+            self._delete_redis_keys(cache_client, keys)
+
+    @staticmethod
+    def _delete_redis_keys(
+        cache_client: RedisType, keys: Iterable[bytes | str]
+    ) -> None:
+        targets = tuple(keys)
+        if not targets:
+            return
+        try:
+            cache_client.delete(*targets)
+        except RedisError as exc:  # pragma: nocover - best effort cleanup
+            logger.warning("Cache - Redis delete failed for %s: %s", targets, exc)
+
+    def _local_keys(self, normalized_path: str) -> List[DatasetCacheKey]:
+        """Return a snapshot of local cache keys for a dataset."""
+
+        if self._local is None:
+            return []
+        return [
+            key for key in list(self._local.keys()) if key.startswith(normalized_path)
+        ]
+
+
+DATASET_CACHE = DatasetCache(
+    DATASET_CACHE_TTL_SECONDS,
+    DATASET_CACHE_MAX_ITEMS,
+)
 
 
 def _make_hashable(value: Any) -> Hashable:
@@ -72,23 +241,31 @@ def _make_hashable(value: Any) -> Hashable:
         return value
     if isinstance(value, dict):
         return tuple(
-            sorted((k, _make_hashable(v)) for k, v in value.items())
+            (key, _make_hashable(value[key])) for key in sorted(value.keys(), key=repr)
         )
     if isinstance(value, (list, tuple)):
         return tuple(_make_hashable(v) for v in value)
     if isinstance(value, set):
-        return tuple(sorted(_make_hashable(v) for v in value))
+        return tuple(sorted((_make_hashable(v) for v in value), key=repr))
     return repr(value)
 
 
 def _dataset_cache_key(src_path: str, kwargs: Dict[str, Any]) -> DatasetCacheKey:
+    """Build a deterministic cache key for a dataset path + kwargs."""
+
+    if not kwargs:
+        return src_path
+
     normalized_kwargs = tuple(
-        sorted((k, _make_hashable(v)) for k, v in kwargs.items())
+        (key, _make_hashable(kwargs[key])) for key in sorted(kwargs.keys())
     )
-    return (src_path, normalized_kwargs)
+    digest = hashlib.sha1(repr(normalized_kwargs).encode("utf-8")).hexdigest()
+    return f"{src_path}#{digest}"
 
 
 def _normalize_src_path(src_path: str) -> Tuple[str, ParseResult]:
+    """Return an absolute path (file:// when needed) plus parsed result."""
+
     parsed = urlparse(src_path)
     if parsed.scheme:
         return src_path, parsed
@@ -98,90 +275,12 @@ def _normalize_src_path(src_path: str) -> Tuple[str, ParseResult]:
     return normalized, urlparse(normalized)
 
 
-def _now() -> float:
-    return time.monotonic()
-
-
-def _redis_client() -> redis.Redis | None:  # type: ignore[name-defined]
-    if cache_settings.enable and cache_settings.host and redis:  # type: ignore[possibly-undefined]
-        pool = RedisCache.get_instance(cache_settings.host)
-        return redis.Redis(connection_pool=pool)
-    return None
-
-
-def _local_cache_get(cache_key: DatasetCacheKey) -> xarray.DataTree | None:
-    if entry := _LOCAL_DATASET_CACHE.get(cache_key):
-        data, expires_at = entry
-        if expires_at > _now():
-            return data
-        _LOCAL_DATASET_CACHE.pop(cache_key, None)
-    return None
-
-
-def _local_cache_set(cache_key: DatasetCacheKey, data: xarray.DataTree) -> None:
-    _LOCAL_DATASET_CACHE[cache_key] = (data, _now() + DATASET_CACHE_TTL_SECONDS)
-
-
-def _redis_cache_get(
-    cache_client: redis.Redis | None, normalized_path: str
-) -> xarray.DataTree | None:
-    if cache_client and (data_bytes := cache_client.get(normalized_path)):
-        logger.info("Cache - found dataset in Redis %s", normalized_path)
-        return pickle.loads(data_bytes)
-    return None
-
-
-def _redis_cache_set(
-    cache_client: redis.Redis | None, normalized_path: str, data: xarray.DataTree
-) -> None:
-    if cache_client:
-        logger.info("Cache - adding dataset in Redis %s", normalized_path)
-        cache_client.set(
-            normalized_path,
-            pickle.dumps(data),
-            ex=DATASET_CACHE_TTL_SECONDS,
-        )
-
-
-def _cached_dataset(
-    cache_key: DatasetCacheKey,
-    normalized_path: str,
-    cache_client: redis.Redis | None,
-) -> xarray.DataTree | None:
-    if dt := _local_cache_get(cache_key):
-        logger.info("Cache - found dataset in local cache %s", normalized_path)
-        return dt
-
-    if dt := _redis_cache_get(cache_client, normalized_path):
-        _local_cache_set(cache_key, dt)
-        return dt
-
-    return None
-
-
-def _store_dataset(
-    cache_key: DatasetCacheKey,
-    normalized_path: str,
-    cache_client: redis.Redis | None,
-    data: xarray.DataTree,
-) -> None:
-    _local_cache_set(cache_key, data)
-    _redis_cache_set(cache_client, normalized_path, data)
-
-
 def invalidate_open_dataset_cache(src_path: str, **kwargs: Any) -> None:
-    """Remove a dataset from both local and Redis caches."""
+    """Remove dataset caches for the given path (and options if provided)."""
 
     normalized_path, _ = _normalize_src_path(src_path)
-    keys_to_delete = [
-        key for key in list(_LOCAL_DATASET_CACHE) if key[0] == normalized_path
-    ]
-    for key in keys_to_delete:
-        _LOCAL_DATASET_CACHE.pop(key, None)
-
-    cache_client = _redis_client()
-    if cache_client:
-        cache_client.delete(normalized_path)
+    cache_key = _dataset_cache_key(normalized_path, kwargs) if kwargs else None
+    DATASET_CACHE.invalidate(normalized_path, cache_key)
 
 
 class MissingVariables(RioTilerError):
@@ -201,8 +300,7 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
     normalized_path, parsed = _normalize_src_path(src_path)
     cache_key = _dataset_cache_key(normalized_path, kwargs)
 
-    cache_client = _redis_client()
-    if dt := _cached_dataset(cache_key, normalized_path, cache_client):
+    if dt := DATASET_CACHE.get(cache_key):
         return dt
 
     def _open_dataset(path: str, path_info: ParseResult) -> xarray.DataTree:
@@ -241,7 +339,7 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
         )
 
     dt = _open_dataset(normalized_path, parsed)
-    _store_dataset(cache_key, normalized_path, cache_client, dt)
+    DATASET_CACHE.set(cache_key, dt)
 
     return dt
 
@@ -505,7 +603,6 @@ class GeoZarrReader(BaseReader):
                                 if data_array.ndim > 0
                             }
                         )
-
                 variables.extend(f"{g}:{v}" for v in sorted(all_vars))
             else:
                 # Only include multidimensional data variables (not 0D attributes)
@@ -515,7 +612,6 @@ class GeoZarrReader(BaseReader):
                     if data_array.ndim > 0
                 ]
                 variables.extend(f"{g}:{v}" for v in multidim_vars)
-
         return variables
 
     def get_bounds(self, group: str, crs: CRS = WGS84_CRS) -> BBox:
@@ -723,6 +819,91 @@ class GeoZarrReader(BaseReader):
     def _variable_idx(self) -> Dict[str, str]:
         return {v: f"Var{ix}" for ix, v in enumerate(self.variables)}
 
+    def _prepare_variables(
+        self, variables: List[str] | None, expression: str | None
+    ) -> List[str]:
+        if variables and expression:
+            warnings.warn(
+                "Both expression and assets passed; expression will overwrite assets parameter.",
+                ExpressionMixingWarning,
+                stacklevel=2,
+            )
+
+        if expression:
+            variables = self.parse_expression(expression)
+
+        if not variables:
+            raise MissingVariables(
+                "`variables` must be passed via `expression` or `variables` options."
+            )
+
+        return variables
+
+    def _iter_group_variables(
+        self, variables: Iterable[str]
+    ) -> Iterable[Tuple[str, Tuple[str, str]]]:
+        for gv in variables:
+            if ":" in gv:
+                group, variable = gv.split(":", 1)
+            else:
+                group, variable = "/", gv
+            yield gv, (group, variable)
+
+    def _apply_expression(
+        self, data: ImageData | PointData, expression: str | None
+    ) -> ImageData | PointData:
+        if not expression:
+            return data
+
+        expr = self._convert_expression_to_index(expression)
+        data = data.apply_expression(expr)
+        data.band_names = [
+            self._convert_expression_from_index(b) for b in data.band_names
+        ]
+        return data
+
+    def _render_image_stack(
+        self,
+        variables: List[str] | None,
+        expression: str | None,
+        builder: Callable[[str, str], ImageData],
+    ) -> ImageData:
+        stack: List[ImageData] = []
+        prepared = self._prepare_variables(variables, expression)
+        for gv, (group, variable) in self._iter_group_variables(prepared):
+            img = builder(group, variable)
+            if expression:
+                if len(img.band_names) > 1:
+                    raise ValueError("Can't use `expression` for multidim dataset")
+                img.band_names = [self._variable_idx[gv]]
+            stack.append(img)
+
+        image = ImageData.create_from_list(stack)
+        image = self._apply_expression(image, expression)
+        image.assets = [self.input]
+        return image
+
+    def _render_point_stack(
+        self,
+        variables: List[str] | None,
+        expression: str | None,
+        builder: Callable[[str, str], PointData],
+    ) -> PointData:
+        stack: List[PointData] = []
+        prepared = self._prepare_variables(variables, expression)
+        for gv, (group, variable) in self._iter_group_variables(prepared):
+            point = builder(group, variable)
+            if expression:
+                if len(point.band_names) > 1:
+                    raise ValueError("Can't use `expression` for multidim dataset")
+                point.band_names = [self._variable_idx[gv]]
+            stack.append(point)
+
+        data = PointData.create_from_list(stack)
+        data = self._apply_expression(data, expression)
+        data.assets = [self.input]
+        return data
+
     def parse_expression(self, expression: str) -> List[str]:
         """Parse rio-tiler band math expression."""
         input_assets = "|".join(re.escape(key) for key in self.variables)
@@ -855,25 +1036,7 @@ class GeoZarrReader(BaseReader):
         tile_bounds = tuple(self.tms.xy_bounds(Tile(x=tile_x, y=tile_y, z=tile_z)))
         dst_crs = self.tms.rasterio_crs
 
-        img_stack: List[ImageData] = []
-
-        if variables and expression:
-            warnings.warn(
-                "Both expression and assets passed; expression will overwrite assets parameter.",
-                ExpressionMixingWarning,
-                stacklevel=2,
-            )
-
-        if expression:
-            variables = self.parse_expression(expression)
-
-        if not variables:
-            raise MissingVariables(
-                "`variables` must be passed via `expression` or `variables` options."
-            )
-
-        for gv in variables:
-            group, variable = gv.split(":") if ":" in gv else ("/", gv)
+        def build(group: str, variable: str) -> ImageData:
             with XarrayReader(
                 self._get_variable(
                     group,
@@ -887,7 +1050,7 @@ class GeoZarrReader(BaseReader):
                 ),
                 tms=self.tms,
             ) as da:
-                img = da.tile(
+                return da.tile(
                     tile_x,
                     tile_y,
                     tile_z,
@@ -895,27 +1058,8 @@ class GeoZarrReader(BaseReader):
                     tilesize=tilesize,
                     **kwargs,
                 )
-                if expression:
-                    if len(img.band_names) > 1:
-                        raise ValueError("Can't use `expression` for multidim dataset")
-                    img.band_names = [self._variable_idx[gv]]
 
-                img_stack.append(img)
-
-        img = ImageData.create_from_list(img_stack)
-
-        if expression:
-            # edit expression to avoid forbiden characters
-            expression = self._convert_expression_to_index(expression)
-            img = img.apply_expression(expression)
-            # transform expression back
-            img.band_names = [
-                self._convert_expression_from_index(b) for b in img.band_names
-            ]
-
-        img.assets = [self.input]
-
-        return img
+        return self._render_image_stack(variables, expression, build)
 
     def part(
         self,
@@ -940,25 +1084,7 @@ class GeoZarrReader(BaseReader):
             else bbox
         )
 
-        img_stack: List[ImageData] = []
-
-        if variables and expression:
-            warnings.warn(
-                "Both expression and assets passed; expression will overwrite assets parameter.",
-                ExpressionMixingWarning,
-                stacklevel=2,
-            )
-
-        if expression:
-            variables = self.parse_expression(expression)
-
-        if not variables:
-            raise MissingVariables(
-                "`variables` must be passed via `expression` or `variables` options."
-            )
-
-        for gv in variables:
-            group, variable = gv.split(":") if ":" in gv else ("/", gv)
+        def build(group: str, variable: str) -> ImageData:
             with XarrayReader(
                 self._get_variable(
                     group,
@@ -973,7 +1099,7 @@ class GeoZarrReader(BaseReader):
                 ),
                 tms=self.tms,
             ) as da:
-                img = da.part(
+                return da.part(
                     bbox,
                     dst_crs=dst_crs,
                     bounds_crs=bounds_crs,
@@ -982,27 +1108,8 @@ class GeoZarrReader(BaseReader):
                     width=width,
                     **kwargs,
                 )
-                if expression:
-                    if len(img.band_names) > 1:
-                        raise ValueError("Can't use `expression` for multidim dataset")
-                    img.band_names = [self._variable_idx[gv]]
 
-                img_stack.append(img)
-
-        img = ImageData.create_from_list(img_stack)
-
-        if expression:
-            # edit expression to avoid forbiden characters
-            expression = self._convert_expression_to_index(expression)
-            img = img.apply_expression(expression)
-            # transform expression back
-            img.band_names = [
-                self._convert_expression_from_index(b) for b in img.band_names
-            ]
-
-        img.assets = [self.input]
-
-        return img
+        return self._render_image_stack(variables, expression, build)
 
     def preview(
         self,
@@ -1018,25 +1125,8 @@ class GeoZarrReader(BaseReader):
         **kwargs: Any,
     ) -> ImageData:
         """Return a preview of a dataset."""
-        img_stack: List[ImageData] = []
 
-        if variables and expression:
-            warnings.warn(
-                "Both expression and assets passed; expression will overwrite assets parameter.",
-                ExpressionMixingWarning,
-                stacklevel=2,
-            )
-
-        if expression:
-            variables = self.parse_expression(expression)
-
-        if not variables:
-            raise MissingVariables(
-                "`variables` must be passed via `expression` or `variables` options."
-            )
-
-        for gv in variables:
-            group, variable = gv.split(":") if ":" in gv else ("/", gv)
+        def build(group: str, variable: str) -> ImageData:
             with XarrayReader(
                 self._get_variable(
                     group,
@@ -1050,7 +1140,7 @@ class GeoZarrReader(BaseReader):
                 ),
                 tms=self.tms,
             ) as da:
-                img = da.preview(
+                return da.preview(
                     *args,
                     max_size=max_size,
                     height=height,
@@ -1058,27 +1148,8 @@ class GeoZarrReader(BaseReader):
                     dst_crs=dst_crs,
                     **kwargs,
                 )
-                if expression:
-                    if len(img.band_names) > 1:
-                        raise ValueError("Can't use `expression` for multidim dataset")
-                    img.band_names = [self._variable_idx[gv]]
 
-                img_stack.append(img)
-
-        img = ImageData.create_from_list(img_stack)
-
-        if expression:
-            # edit expression to avoid forbiden characters
-            expression = self._convert_expression_to_index(expression)
-            img = img.apply_expression(expression)
-            # transform expression back
-            img.band_names = [
-                self._convert_expression_from_index(b) for b in img.band_names
-            ]
-
-        img.assets = [self.input]
-
-        return img
+        return self._render_image_stack(variables, expression, build)
 
     def point(  # type: ignore
         self,
@@ -1090,50 +1161,15 @@ class GeoZarrReader(BaseReader):
         **kwargs: Any,
     ) -> PointData:
         """Read a pixel value from a dataset."""
-        pts_stack: List[PointData] = []
 
-        if variables and expression:
-            warnings.warn(
-                "Both expression and assets passed; expression will overwrite assets parameter.",
-                ExpressionMixingWarning,
-                stacklevel=2,
-            )
-
-        if expression:
-            variables = self.parse_expression(expression)
-
-        if not variables:
-            raise MissingVariables(
-                "`variables` must be passed via `expression` or `variables` options."
-            )
-
-        for gv in variables:
-            group, variable = gv.split(":") if ":" in gv else ("/", gv)
+        def build(group: str, variable: str) -> PointData:
             with XarrayReader(
                 self._get_variable(group, variable, sel=sel, method=method),
                 tms=self.tms,
             ) as da:
-                pt = da.point(*args, **kwargs)
-                if expression:
-                    if len(pt.band_names) > 1:
-                        raise ValueError("Can't use `expression` for multidim dataset")
-                    pt.band_names = [self._variable_idx[gv]]
+                return da.point(*args, **kwargs)
 
-                pts_stack.append(pt)
-
-        pt = PointData.create_from_list(pts_stack)
-        if expression:
-            # edit expression to avoid forbiden characters
-            expression = self._convert_expression_to_index(expression)
-            pt = pt.apply_expression(expression)
-            # transform expression back
-            pt.band_names = [
-                self._convert_expression_from_index(b) for b in pt.band_names
-            ]
-
-        pt.assets = [self.input]
-
-        return pt
+        return self._render_point_stack(variables, expression, build)
 
     def feature(  # type: ignore
         self,
@@ -1162,25 +1198,7 @@ class GeoZarrReader(BaseReader):
             else bbox
         )
 
-        img_stack: List[ImageData] = []
-
-        if variables and expression:
-            warnings.warn(
-                "Both expression and assets passed; expression will overwrite assets parameter.",
-                ExpressionMixingWarning,
-                stacklevel=2,
-            )
-
-        if expression:
-            variables = self.parse_expression(expression)
-
-        if not variables:
-            raise MissingVariables(
-                "`variables` must be passed via `expression` or `variables` options."
-            )
-
-        for gv in variables:
-            group, variable = gv.split(":") if ":" in gv else ("/", gv)
+        def build(group: str, variable: str) -> ImageData:
             with XarrayReader(
                 self._get_variable(
                     group,
@@ -1195,7 +1213,7 @@ class GeoZarrReader(BaseReader):
                 ),
                 tms=self.tms,
             ) as da:
-                img = da.feature(
+                return da.feature(
                     shape,
                     dst_crs=dst_crs,
                     shape_crs=shape_crs,
@@ -1204,27 +1222,8 @@ class GeoZarrReader(BaseReader):
                     width=width,
                     **kwargs,
                 )
-                if expression:
-                    if len(img.band_names) > 1:
-                        raise ValueError("Can't use `expression` for multidim dataset")
-                    img.band_names = [self._variable_idx[gv]]
 
-                img_stack.append(img)
-
-        img = ImageData.create_from_list(img_stack)
-
-        if expression:
-            # edit expression to avoid forbiden characters
-            expression = self._convert_expression_to_index(expression)
-            img = img.apply_expression(expression)
-            # transform expression back
-            img.band_names = [
-                self._convert_expression_from_index(b) for b in img.band_names
-            ]
-
-        img.assets = [self.input]
-
-        return img
+        return self._render_image_stack(variables, expression, build)
 
 
 def calculate_output_transform(

@@ -22,6 +22,7 @@ classifiers = [
 ]
 dependencies = [
     "orjson",   
+    "cachetools>=5.3,<7",
     "titiler.core>=0.24,<0.25",
     "titiler.xarray>=0.24,<0.25",
     "rio-tiler>=7.9,<8.0",

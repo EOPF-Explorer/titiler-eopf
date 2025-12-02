@@ -5,6 +5,7 @@ import os
 import numpy
 import pytest
 import xarray
+from cachetools import TTLCache
 from rio_tiler.errors import ExpressionMixingWarning
 
 from titiler.eopf import reader as reader_module
@@ -254,15 +255,44 @@ def test_feature():
 def test_invalidate_open_dataset_cache_clears_local_cache():
     """Ensure manual cache eviction removes local entries."""
 
-    reader_module._LOCAL_DATASET_CACHE.clear()
+    cache = reader_module.DATASET_CACHE
+    if cache.local_cache is None:
+        pytest.skip("Local cache disabled")
+
+    cache.clear_local()
     invalidate_open_dataset_cache(SENTINEL_2)
 
     reader_module.open_dataset(SENTINEL_2)
-    assert reader_module._LOCAL_DATASET_CACHE
+    assert len(cache.local_cache) > 0  # type: ignore[arg-type]
 
     invalidate_open_dataset_cache(SENTINEL_2)
-    assert not reader_module._LOCAL_DATASET_CACHE
-    reader_module._LOCAL_DATASET_CACHE.clear()
+    assert len(cache.local_cache) == 0  # type: ignore[arg-type]
+    cache.clear_local()
+
+
+def test_invalidate_with_kwargs_removes_specific_cache_key():
+    """Cache invalidation can target a single key when kwargs differ."""
+
+    cache = reader_module.DATASET_CACHE
+    local_cache = cache.local_cache
+    if local_cache is None:
+        pytest.skip("Local cache disabled")
+
+    cache.clear_local()
+    normalized = reader_module._normalize_src_path("fake://path")[0]
+    key_plain = reader_module._dataset_cache_key(normalized, {})
+    key_kwargs = reader_module._dataset_cache_key(normalized, {"foo": "bar"})
+
+    local_cache[key_plain] = object()
+    local_cache[key_kwargs] = object()
+
+    invalidate_open_dataset_cache(normalized, foo="bar")
+    assert key_kwargs not in local_cache
+    assert key_plain in local_cache
+
+    invalidate_open_dataset_cache(normalized)
+    assert key_plain not in local_cache
+    cache.clear_local()
 
 
 def test_reader_failure_triggers_cache_invalidation(monkeypatch):
@@ -286,26 +316,84 @@ def test_reader_failure_triggers_cache_invalidation(monkeypatch):
     assert calls[0][0] == SENTINEL_2
 
 
-def test_local_dataset_cache_respects_ttl(monkeypatch):
+def test_local_dataset_cache_respects_ttl():
     """Expired entries should be discarded before reuse."""
 
-    reader_module._LOCAL_DATASET_CACHE.clear()
+    cache = reader_module.DATASET_CACHE
+    if cache.local_cache is None:
+        pytest.skip("Local cache disabled")
+
+    cache.clear_local()
 
     current = {"value": 0.0}
 
-    def fake_now() -> float:
+    def fake_timer() -> float:
         return current["value"]
 
-    monkeypatch.setattr(reader_module, "_now", fake_now)
-    monkeypatch.setattr(reader_module, "DATASET_CACHE_TTL_SECONDS", 1)
+    original_ttl = cache.ttl
+    original_local = cache.local_cache
+    cache._ttl = 1
+    cache._local = TTLCache(1, 1, timer=fake_timer)
 
-    first = reader_module.open_dataset(SENTINEL_2)
-    cache_key = next(iter(reader_module._LOCAL_DATASET_CACHE))
-    first_expiry = reader_module._LOCAL_DATASET_CACHE[cache_key][1]
-    assert first_expiry == pytest.approx(1)
+    try:
+        first = reader_module.open_dataset(SENTINEL_2)
+        current["value"] = 2
+        second = reader_module.open_dataset(SENTINEL_2)
+        assert second is not first
+    finally:
+        cache._ttl = original_ttl
+        cache._local = original_local
+        cache.clear_local()
 
-    current["value"] = 2
-    second = reader_module.open_dataset(SENTINEL_2)
-    assert second is not first
 
-    reader_module._LOCAL_DATASET_CACHE.clear()
+def test_dataset_cache_can_be_disabled():
+    """Setting TTL to zero should bypass both caches."""
+
+    cache = reader_module.DATASET_CACHE
+    cache.clear_local()
+    original_ttl = cache.ttl
+    original_local = cache.local_cache
+    original_client = cache._redis_client
+
+    cache._ttl = 0
+    cache._local = None
+    cache._redis_client = None
+
+    try:
+        first = reader_module.open_dataset(SENTINEL_2)
+        assert cache.local_cache is None
+
+        second = reader_module.open_dataset(SENTINEL_2)
+        assert cache.local_cache is None
+        assert second is not first
+    finally:
+        cache._ttl = original_ttl
+        cache._local = original_local
+        cache._redis_client = original_client
+        cache.clear_local()
+
+
+def test_redis_cache_handles_corrupt_entries():
+    """Corrupted Redis bytes should be dropped without raising."""
+
+    class FakeRedis:
+        def __init__(self):
+            self.deleted = []
+
+        def get(self, key):  # type: ignore[no-untyped-def]
+            return b"not a pickle"
+
+        def delete(self, *keys):  # type: ignore[no-untyped-def]
+            self.deleted.extend(keys)
+
+    fake_client = FakeRedis()
+    cache = reader_module.DATASET_CACHE
+    cache.clear_local()
+    cache._redis_client = fake_client
+
+    cache_key = reader_module._dataset_cache_key("fake://path", {})
+    result = cache.get(cache_key)
+    assert result is None
+    assert fake_client.deleted == [cache_key]
+
+    cache._redis_client = None

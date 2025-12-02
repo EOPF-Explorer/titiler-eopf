@@ -1,6 +1,12 @@
 """API settings."""
 
-from pydantic import AnyUrl, ValidationInfo, field_validator, model_validator
+from pydantic import (
+    AnyUrl,
+    PositiveInt,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing_extensions import Self
 
@@ -67,10 +73,19 @@ class CacheSettings(BaseSettings):
 
     host: str | None = None
     enable: bool = False
+    dataset_ttl_seconds: int = 300
+    dataset_max_items: PositiveInt | None = None
 
     model_config = SettingsConfigDict(
         env_prefix="TITILER_EOPF_CACHE_", env_file=".env", extra="ignore"
     )
+
+    @field_validator("dataset_ttl_seconds")
+    def validate_dataset_ttl(cls, value: int) -> int:
+        """Validate dataset_ttl_seconds."""
+        if value < 0:
+            raise ValueError("dataset_ttl_seconds must be non-negative")
+        return value
 
     @model_validator(mode="after")
     def check_cache_settings(self) -> Self:
