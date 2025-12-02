@@ -7,7 +7,12 @@ import pytest
 import xarray
 from rio_tiler.errors import ExpressionMixingWarning
 
-from titiler.eopf.reader import GeoZarrReader, MissingVariables
+from titiler.eopf import reader as reader_module
+from titiler.eopf.reader import (
+    GeoZarrReader,
+    MissingVariables,
+    invalidate_open_dataset_cache,
+)
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 SENTINEL_2 = os.path.join(
@@ -244,3 +249,63 @@ def test_feature():
         15.117187499999853,
         37.996162679728194,
     ]
+
+
+def test_invalidate_open_dataset_cache_clears_local_cache():
+    """Ensure manual cache eviction removes local entries."""
+
+    reader_module._LOCAL_DATASET_CACHE.clear()
+    invalidate_open_dataset_cache(SENTINEL_2)
+
+    reader_module.open_dataset(SENTINEL_2)
+    assert reader_module._LOCAL_DATASET_CACHE
+
+    invalidate_open_dataset_cache(SENTINEL_2)
+    assert not reader_module._LOCAL_DATASET_CACHE
+    reader_module._LOCAL_DATASET_CACHE.clear()
+
+
+def test_reader_failure_triggers_cache_invalidation(monkeypatch):
+    """GeoZarrReader failures should drop cached datatrees."""
+
+    calls = []
+
+    def fake_invalidate(src_path: str, **kwargs: object) -> None:
+        calls.append((src_path, kwargs))
+
+    def boom(self):  # type: ignore[no-untyped-def]
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(reader_module, "invalidate_open_dataset_cache", fake_invalidate)
+    monkeypatch.setattr(reader_module.GeoZarrReader, "_get_groups", boom)
+
+    with pytest.raises(RuntimeError):
+        reader_module.GeoZarrReader(SENTINEL_2)
+
+    assert len(calls) == 1
+    assert calls[0][0] == SENTINEL_2
+
+
+def test_local_dataset_cache_respects_ttl(monkeypatch):
+    """Expired entries should be discarded before reuse."""
+
+    reader_module._LOCAL_DATASET_CACHE.clear()
+
+    current = {"value": 0.0}
+
+    def fake_now() -> float:
+        return current["value"]
+
+    monkeypatch.setattr(reader_module, "_now", fake_now)
+    monkeypatch.setattr(reader_module, "DATASET_CACHE_TTL_SECONDS", 1)
+
+    first = reader_module.open_dataset(SENTINEL_2)
+    cache_key = next(iter(reader_module._LOCAL_DATASET_CACHE))
+    first_expiry = reader_module._LOCAL_DATASET_CACHE[cache_key][1]
+    assert first_expiry == pytest.approx(1)
+
+    current["value"] = 2
+    second = reader_module.open_dataset(SENTINEL_2)
+    assert second is not first
+
+    reader_module._LOCAL_DATASET_CACHE.clear()
