@@ -2,7 +2,7 @@ ARG PYTHON_VERSION=3.12
 
 FROM python:${PYTHON_VERSION}
 RUN apt update && apt upgrade -y \
-  && apt install curl -y \
+  && apt install curl libgdal-dev -y \
   && rm -rf /var/lib/apt/lists/*
 
 RUN python -m pip install -U pip
