@@ -1,55 +1,96 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "TiTiler EOPF Local",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "uvicorn",
-            "args": [
-                "titiler.eopf.main:app",
-                "--reload",
-                "--port", "8000",
-                "--log-level", "info",
-                "--access-log"
-            ],
-            "console": "integratedTerminal",
-            "jinja": true,
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}/.venv/bin",
-                "LOG_LEVEL": "INFO",
-                "TITILER_EOPF_STORE_URL": "file:///home/emathot/Workspace/eopf-explorer/data-model/tests-output/",
-            },
-        },
-        {
-            "name": "TiTiler EOPF S3",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "uvicorn",
-            "args": [
-                "titiler.eopf.main:app",
-                "--reload",
-                "--port", "8000",
-                "--log-level", "info",
-                "--access-log"
-            ],
-            "console": "integratedTerminal",
-            "jinja": true,
-            "justMyCode": false,
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}/.venv/bin",
-                "LOG_LEVEL": "INFO",
-                "AWS_PROFILE": "eopf-explorer",
-                "AWS_DEFAULT_REGION": "de",
-                "AWS_ENDPOINT_URL": "https://s3.de.io.cloud.ovh.net/",
-                "AWS_EC2_METADATA_DISABLED": "true",
-                "TITILER_EOPF_STORE_URL": "s3://esa-zarr-sentinel-explorer-fra/tests-output/"
-            },
-        }
-    ]
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "TiTiler EOPF Local",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "titiler.eopf.main:app",
+        "--reload",
+        "--port",
+        "8081",
+        "--log-level",
+        "info",
+        "--access-log"
+      ],
+      "console": "integratedTerminal",
+      "jinja": true,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/.venv/bin",
+        "LOG_LEVEL": "INFO",
+        "TITILER_EOPF_STORE_URL": "file:///home/emathot/Workspace/eopf-explorer/data-model/tests-output/"
+      }
+    },
+    {
+      "name": "TiTiler EOPF S3",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "titiler.eopf.main:app",
+        "--reload",
+        "--port",
+        "8081",
+        "--log-level",
+        "info",
+        "--access-log"
+      ],
+      "console": "integratedTerminal",
+      "jinja": true,
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/.venv/bin",
+        "LOG_LEVEL": "INFO",
+        "AWS_PROFILE": "eopf-explorer",
+        "AWS_DEFAULT_REGION": "de",
+        "AWS_ENDPOINT_URL": "https://s3.de.io.cloud.ovh.net/",
+        "AWS_EC2_METADATA_DISABLED": "true",
+        "TITILER_EOPF_STORE_URL": "s3://esa-zarr-sentinel-explorer-fra/tests-output/"
+      }
+    },
+    {
+      "name": "TiTiler EOPF openEO S3",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "titiler.eopf.openeo.main:app",
+        "--reload",
+        "--port",
+        "8081",
+        "--log-level",
+        "info",
+        "--access-log"
+      ],
+      "console": "integratedTerminal",
+      "jinja": true,
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/.venv/bin",
+        "LOG_LEVEL": "INFO",
+        "AWS_PROFILE": "eopf-explorer",
+        "AWS_DEFAULT_REGION": "de",
+        "AWS_ENDPOINT_URL": "https://s3.de.io.cloud.ovh.net/",
+        "AWS_EC2_METADATA_DISABLED": "true",
+        "TITILER_EOPF_STORE_URL": "s3://esa-zarr-sentinel-explorer-fra/tests-output/",
+        "TITILER_OPENEO_STAC_API_URL": "http://api.explorer.eopf.copernicus.eu/stac/",
+        "TITILER_OPENEO_SERVICE_STORE_URL": "services/eopf-explorer.json",
+        "TITILER_OPENEO_API_DEBUG": "true",
+        "TITILER_OPENEO_AUTH_METHOD": "oidc",
+        "TITILER_OPENEO_AUTH_OIDC_CLIENT_ID": "cdse-public",
+        "TITILER_OPENEO_AUTH_OIDC_WK_URL": "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/.well-known/openid-configuration",
+        "TITILER_OPENEO_AUTH_OIDC_REDIRECT_URL": "http://localhost:8080/", // openEO editor login URL
+        "TITILER_OPENEO_AUTH_OIDC_SCOPES": "openid profile email",
+        "TITILER_OPENEO_AUTH_OIDC_NAME_CLAIM": "preferred_username",
+        "TITILER_OPENEO_PROCESSING_MAX_ITEMS": "100",
+      }
+    }
+  ]
 }
 
 /* Some urls for testing:
