@@ -34,7 +34,7 @@ dynamic = ["version"]
 
 [project.optional-dependencies]
 openeo = [
-    "titiler-openeo@git+https://github.com/sentinel-hub/titiler-openeo.git@bbox",
+    "titiler-openeo@git+https://github.com/sentinel-hub/titiler-openeo.git@v0.6.1",
     "duckdb",
     "sqlalchemy>=2.0.0",
     "psycopg2-binary",
@@ -58,7 +58,7 @@ dev = [
     "pre-commit",
     "bump-my-version",
     "boto3",
-    "titiler-openeo@git+https://github.com/sentinel-hub/titiler-openeo.git@bbox",
+    "titiler-openeo@git+https://github.com/sentinel-hub/titiler-openeo.git@v0.6.1",
 ]
 server = [
     "uvicorn[standard]",
