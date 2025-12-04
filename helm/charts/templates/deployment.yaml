@@ -47,7 +47,7 @@ spec:
               value: "true"
           {{- end }}
           {{- if and .Values.redis.auth.enabled (or .Values.redis.auth.password .Values.redis.auth.existingSecret) }}
-            - name: REDIS_PASSWORD
+            - name: TITILER_EOPF_CACHE_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ if .Values.redis.auth.existingSecret }}{{ .Values.redis.auth.existingSecret }}{{ else }}{{ include "titiler-eopf.redis.fullname" . }}{{ end }}

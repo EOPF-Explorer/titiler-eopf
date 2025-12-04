@@ -2,9 +2,12 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-12-04
+
 ### Added
 
 * Ability to deploy redis via chart or to bring your own redis deployment (#43)
+* Updated titiler-openeo dependency to use v0.6.1 (#44)
 
 ## [0.2.0] - 2025-12-04
 
