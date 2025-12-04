@@ -102,3 +102,32 @@ affinity: {}
 securityContext: {}
 
 podSecurityContext: {}
+
+redis:
+  enabled: false
+
+  image:
+    repository: redis
+    tag: "8.4.0-alpine"
+    pullPolicy: IfNotPresent
+
+  service:
+    port: 6379
+    type: ClusterIP
+    annotations: {}
+
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  persistence:
+    enabled: false
+    size: 1Gi
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+
+  auth:
+    enabled: false
+    password: ""
