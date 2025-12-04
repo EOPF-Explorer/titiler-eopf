@@ -142,6 +142,6 @@ redis:
 
   auth:
     enabled: false
-    password: "" # Only use when deploying redis via this chart, otherwise, use `existingSecret` for external redis usages
+    password: ""  # Only use when deploying redis via this chart, otherwise, use `existingSecret` for external redis usages
     existingSecret: ""
     existingSecretKey: "redis-password"
