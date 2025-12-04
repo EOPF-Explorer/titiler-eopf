@@ -1,15 +1,59 @@
 """test titiler-eopf reader"""
 
 import os
+from contextlib import contextmanager
 
 import numpy
 import pytest
 import xarray
 from rio_tiler.errors import ExpressionMixingWarning
 
+from titiler.eopf import reader as reader_module
+from titiler.eopf.dataset_cache import (
+    DATASET_CACHE,
+    DatasetCache,
+    build_dataset_cache_key,
+    invalidate_open_dataset_cache,
+    normalize_src_path,
+)
 from titiler.eopf.reader import GeoZarrReader, MissingVariables
+from titiler.eopf.settings import CacheSettings
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
+
+
+_TEST_TIMER_STATE = {"value": 0.0}
+
+
+def stateful_timer() -> float:
+    """Return the overrideable timer value for dataset cache tests."""
+
+    return _TEST_TIMER_STATE["value"]
+
+
+@contextmanager
+def override_cache(cache, **attrs):
+    """Temporarily override cache attributes during a test."""
+    originals = {name: getattr(cache, name) for name in attrs}
+    try:
+        for name, value in attrs.items():
+            setattr(cache, name, value)
+        yield cache
+    finally:
+        for name, value in originals.items():
+            setattr(cache, name, value)
+
+
+@pytest.fixture()
+def dataset_cache():
+    """Yield a clean dataset cache instance for each test."""
+    cache = DATASET_CACHE
+    cache.clear_local()
+    yield cache
+    cache.clear_local()
+    cache.reset_redis()
+
+
 SENTINEL_2 = os.path.join(
     DATA_DIR,
     "eopf_geozarr",
@@ -242,3 +286,169 @@ def test_feature():
         15.117187499999853,
         37.996162679728194,
     ]
+
+
+def test_cache_invalidation_filters_matching_keys(dataset_cache):
+    """Only cache entries related to the supplied path/kwargs should be purged."""
+
+    cache = dataset_cache
+    local_cache = cache.local_cache
+    if local_cache is None:
+        pytest.skip("Local cache disabled")
+
+    normalized = normalize_src_path("fake://path")[0]
+    key_plain = build_dataset_cache_key(normalized, {})
+    key_kwargs = build_dataset_cache_key(normalized, {"foo": "bar"})
+
+    local_cache[key_plain] = object()
+    local_cache[key_kwargs] = object()
+
+    invalidate_open_dataset_cache(normalized, foo="bar")
+    assert key_kwargs not in local_cache
+    assert key_plain in local_cache
+
+    invalidate_open_dataset_cache(normalized)
+    assert key_plain not in local_cache
+
+
+def test_reader_failure_triggers_cache_invalidation(monkeypatch):
+    """GeoZarrReader failures should drop cached datatrees."""
+
+    calls = []
+
+    def fake_invalidate(src_path: str, **kwargs: object) -> None:  # type: ignore[no-untyped-def]
+        calls.append((src_path, kwargs))
+
+    def boom(self):  # type: ignore[no-untyped-def]
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(reader_module, "invalidate_open_dataset_cache", fake_invalidate)
+    monkeypatch.setattr(reader_module.GeoZarrReader, "_get_groups", boom)
+
+    with pytest.raises(RuntimeError):
+        reader_module.GeoZarrReader(SENTINEL_2)
+
+    assert len(calls) == 1
+    assert calls[0][0] == SENTINEL_2
+
+
+def test_dataset_cache_timer_from_settings(monkeypatch):
+    """dataset_timer_path should resolve callable strings."""
+
+    monkeypatch.setenv(
+        "TITILER_EOPF_CACHE_DATASET_TIMER_PATH", "tests.test_reader.stateful_timer"
+    )
+    cache = DatasetCache.from_settings(CacheSettings())
+    if cache.local_cache is None:
+        pytest.skip("Local cache disabled")
+
+    assert cache.timer is stateful_timer
+
+
+def test_local_dataset_cache_respects_ttl(dataset_cache):
+    """Expired entries should be discarded before reuse."""
+
+    cache = dataset_cache
+    if cache.local_cache is None:
+        pytest.skip("Local cache disabled")
+
+    cache.clear_local()
+    original_timer = cache.timer
+    _TEST_TIMER_STATE["value"] = 0.0
+    cache.set_timer(stateful_timer)
+
+    try:
+        first = reader_module.open_dataset(SENTINEL_2)
+        _TEST_TIMER_STATE["value"] = cache.ttl + 1
+        second = reader_module.open_dataset(SENTINEL_2)
+    finally:
+        cache.set_timer(original_timer)
+        _TEST_TIMER_STATE["value"] = 0.0
+        cache.clear_local()
+
+    assert second is not first
+
+
+def test_dataset_cache_can_be_disabled(dataset_cache):
+    """Setting TTL to zero should bypass both caches."""
+
+    cache = dataset_cache
+
+    with override_cache(cache, _ttl=0, _local=None, _redis_client=None):
+        first = reader_module.open_dataset(SENTINEL_2)
+        assert cache.local_cache is None
+
+        second = reader_module.open_dataset(SENTINEL_2)
+        assert cache.local_cache is None
+        assert second is not first
+
+
+def test_redis_cache_handles_corrupt_entries(dataset_cache):
+    """Corrupted Redis bytes should be dropped without raising."""
+
+    class FakeRedis:
+        def __init__(self):
+            self.deleted = []
+
+        def get(self, key):  # type: ignore[no-untyped-def]
+            return b"not a pickle"
+
+        def delete(self, *keys):  # type: ignore[no-untyped-def]
+            self.deleted.extend(keys)
+
+    fake_client = FakeRedis()
+    cache = dataset_cache
+
+    with override_cache(cache, _redis_client=fake_client):
+        cache_key = build_dataset_cache_key("fake://path", {})
+        result = cache.get(cache_key)
+        assert result is None
+        assert fake_client.deleted == [cache_key]
+
+
+def test_dataset_cache_applies_ttl_jitter(monkeypatch):
+    """Jitter should spread expirations to avoid thundering herds."""
+
+    cache = DatasetCache(
+        ttl_seconds=60,
+        ttl_jitter_seconds=5,
+        max_items=16,
+        enable_redis=False,
+        redis_host=None,
+        redis_port=6379,
+        redis_username=None,
+        redis_password=None,
+        redis_db=0,
+        redis_ssl=False,
+    )
+
+    monkeypatch.setattr(
+        "titiler.eopf.dataset_cache.random.randint",
+        lambda lower, upper: lower,
+    )
+    assert cache._redis_ttl() == cache.ttl - 5
+
+    monkeypatch.setattr(
+        "titiler.eopf.dataset_cache.random.randint",
+        lambda lower, upper: upper,
+    )
+    assert cache._redis_ttl() == cache.ttl + 5
+
+    tiny_ttl_cache = DatasetCache(
+        ttl_seconds=2,
+        ttl_jitter_seconds=5,
+        max_items=16,
+        enable_redis=False,
+        redis_host=None,
+        redis_port=6379,
+        redis_username=None,
+        redis_password=None,
+        redis_db=0,
+        redis_ssl=False,
+    )
+
+    monkeypatch.setattr(
+        "titiler.eopf.dataset_cache.random.randint",
+        lambda lower, upper: lower,
+    )
+    assert tiny_ttl_cache._redis_ttl() == 1
