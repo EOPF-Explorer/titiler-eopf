@@ -38,11 +38,11 @@ spec:
             - name: CURLOPT_NETRC_FILE
               value: /config/netrc
           {{- end }}
-          {{- if .Values.redis.enabled }}
+          {{- if or .Values.redis.enabled .Values.redis.external.enabled }}
             - name: REDIS_HOST
-              value: {{ include "titiler-eopf.redis.fullname" . }}
+              value: '{{- if .Values.redis.enabled -}}{{ include "titiler-eopf.redis.fullname" . }}{{- else -}}{{ .Values.redis.external.host | quote }}{{- end }}'
             - name: REDIS_PORT
-              value: "{{ .Values.redis.service.port }}"
+              value: "{{- if .Values.redis.enabled -}}{{ .Values.redis.service.port }}{{- else -}}{{ .Values.redis.external.port }}{{- end }}"
           {{- end }}
           {{- if and .Values.redis.auth.enabled (or .Values.redis.auth.password .Values.redis.auth.existingSecret) }}
             - name: REDIS_PASSWORD

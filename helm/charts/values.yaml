@@ -104,7 +104,12 @@ securityContext: {}
 podSecurityContext: {}
 
 redis:
+  # Only one of redis.enabled or redis.external.enabled may be true at one time
   enabled: false
+  external:
+    enabled: false
+    host: ""
+    port: 6379
 
   image:
     repository: redis
@@ -137,6 +142,6 @@ redis:
 
   auth:
     enabled: false
-    password: ""
+    password: "" # Only use when deploying redis via this chart, otherwise, use `existingSecret` for external redis usages
     existingSecret: ""
     existingSecretKey: "redis-password"
