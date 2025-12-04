@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, Sequence, Tuple, Type, Union
 
 import attr
 from attrs import define
-from openeo_pg_parser_networkx.pg_schema import TemporalInterval, BoundingBox
+from openeo_pg_parser_networkx.pg_schema import BoundingBox, TemporalInterval
 from rasterio.errors import RasterioIOError
 from rio_tiler.constants import MAX_THREADS
 from rio_tiler.errors import (
@@ -29,7 +29,6 @@ from titiler.openeo.errors import (
     NoDataAvailable,
     OutputLimitExceeded,
 )
-
 from titiler.openeo.processes.implementations.data_model import LazyRasterStack
 from titiler.openeo.processes.implementations.utils import _props_to_datename
 from titiler.openeo.reader import SimpleSTACReader, _estimate_output_dimensions
