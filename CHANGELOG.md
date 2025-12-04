@@ -2,8 +2,6 @@
 
 ## [Unreleased]
 
-## [0.2.1] - 2025-12-04
-
 ### Added
 
 * Ability to deploy redis via chart or to bring your own redis deployment (#43)
