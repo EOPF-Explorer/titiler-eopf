@@ -102,3 +102,46 @@ affinity: {}
 securityContext: {}
 
 podSecurityContext: {}
+
+redis:
+  # Only one of redis.enabled or redis.external.enabled may be true at one time
+  enabled: false
+  external:
+    enabled: false
+    host: ""
+    port: 6379
+
+  image:
+    repository: redis
+    tag: "8.4.0-alpine"
+    pullPolicy: IfNotPresent
+
+  service:
+    port: 6379
+    type: ClusterIP
+    annotations: {}
+
+  resources:
+    limits:
+      cpu: 1
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  persistence:
+    enabled: false
+    size: 1Gi
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+
+  auth:
+    enabled: false
+    password: ""  # Only use when deploying redis via this chart, otherwise, use `existingSecret` for external redis usages
+    existingSecret: ""
+    existingSecretKey: "redis-password"
