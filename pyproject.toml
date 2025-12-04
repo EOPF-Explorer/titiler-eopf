@@ -65,6 +65,8 @@ server = [
 ]
 notebook = [
     "ipython",
+    "ipykernel",
+    "jupyter-client",
 ]
 
 [project.urls]

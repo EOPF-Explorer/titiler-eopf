@@ -12,13 +12,13 @@ from titiler.openeo.auth import get_auth
 from titiler.openeo.errors import ExceptionHandler, OpenEOException
 from titiler.openeo.factory import EndpointsFactory
 from titiler.openeo.middleware import DynamicCacheControlMiddleware
-from titiler.openeo.processes import PROCESS_SPECIFICATIONS
 from titiler.openeo.services import get_store, get_tile_store
 from titiler.openeo.settings import ApiSettings, AuthSettings, BackendSettings
-from titiler.openeo.stacapi import LoadCollection, LoadStac, stacApiBackend
+from titiler.openeo.stacapi import stacApiBackend
 
 from .. import __version__ as titiler_version
-from .processes import process_registry
+from .processes import PROCESS_SPECIFICATIONS, process_registry
+from .processes.implementations.io import LoadCollection
 
 STAC_VERSION = "1.0.0"
 
@@ -97,18 +97,11 @@ process_registry["load_collection"] = process_registry["load_collection"] = Proc
     implementation=loaders.load_collection,
 )
 
-process_registry["load_collection_and_reduce"] = process_registry[
-    "load_collection_and_reduce"
-] = Process(
-    spec=PROCESS_SPECIFICATIONS["load_collection_and_reduce"],
-    implementation=loaders.load_collection_and_reduce,
-)
-
-loaders = LoadStac()  # type: ignore
-process_registry["load_stac"] = Process(
-    spec=PROCESS_SPECIFICATIONS["load_stac"],
-    implementation=loaders.load_stac,
-)
+# loaders = LoadStac()  # type: ignore
+# process_registry["load_stac"] = Process(
+#     spec=PROCESS_SPECIFICATIONS["load_stac"],
+#     implementation=loaders.load_stac,
+# )
 
 # Register OpenEO endpoints
 # Create endpoints with optional tile_store
@@ -126,7 +119,6 @@ endpoints = EndpointsFactory(
     **factory_args,
     load_nodes_ids=[
         "load_collection",
-        "load_collection_and_reduce",
         "load_zarr",
     ],
 )
