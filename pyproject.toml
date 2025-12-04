@@ -58,7 +58,7 @@ dev = [
     "pre-commit",
     "bump-my-version",
     "boto3",
-    "titiler-openeo@git+https://github.com/sentinel-hub/titiler-openeo.git",
+    "titiler-openeo@git+https://github.com/sentinel-hub/titiler-openeo.git@v0.6.0",
 ]
 server = [
     "uvicorn[standard]",
