@@ -14,11 +14,11 @@ from titiler.openeo.factory import EndpointsFactory
 from titiler.openeo.middleware import DynamicCacheControlMiddleware
 from titiler.openeo.services import get_store, get_tile_store
 from titiler.openeo.settings import ApiSettings, AuthSettings, BackendSettings
-from titiler.openeo.stacapi import stacApiBackend
 
 from .. import __version__ as titiler_version
 from .processes import PROCESS_SPECIFICATIONS, process_registry
 from .processes.implementations.io import LoadCollection
+from .stacapi import stacApiBackend
 
 STAC_VERSION = "1.0.0"
 
