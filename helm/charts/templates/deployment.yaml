@@ -38,6 +38,19 @@ spec:
             - name: CURLOPT_NETRC_FILE
               value: /config/netrc
           {{- end }}
+          {{- if .Values.redis.enabled }}
+            - name: REDIS_HOST
+              value: {{ include "titiler-eopf.redis.fullname" . }}
+            - name: REDIS_PORT
+              value: "{{ .Values.redis.service.port }}"
+          {{- end }}
+          {{- if and .Values.redis.auth.enabled (or .Values.redis.auth.password .Values.redis.auth.existingSecret) }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ if .Values.redis.auth.existingSecret }}{{ .Values.redis.auth.existingSecret }}{{ else }}{{ include "titiler-eopf.redis.fullname" . }}{{ end }}
+                  key: {{ default "redis-password" .Values.redis.auth.existingSecretKey }}
+          {{- end }}
           ports:
             - name: http
               containerPort: 80
@@ -120,24 +133,21 @@ spec:
           ports:
             - name: redis
               containerPort: {{ .Values.redis.service.port }}
-          {{- if and .Values.redis.auth.enabled .Values.redis.auth.password }}
+          {{- if and .Values.redis.auth.enabled (or .Values.redis.auth.password .Values.redis.auth.existingSecret) }}
           env:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "titiler-eopf.redis.fullname" . }}
-                  key: redis-password
+                  name: {{ if .Values.redis.auth.existingSecret }}{{ .Values.redis.auth.existingSecret }}{{ else }}{{ include "titiler-eopf.redis.fullname" . }}{{ end }}
+                  key: {{ default "redis-password" .Values.redis.auth.existingSecretKey }}
+          {{- end }}
           args:
             - "redis-server"
             - "--appendonly"
             - "no"
+          {{- if and .Values.redis.auth.enabled (or .Values.redis.auth.password .Values.redis.auth.existingSecret) }}
             - "--requirepass"
             - "$(REDIS_PASSWORD)"
-          {{- else }}
-          args:
-            - "redis-server"
-            - "--appendonly"
-            - "no"
           {{- end }}
           resources:
             {{- toYaml .Values.redis.resources | nindent 12 }}
