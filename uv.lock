@@ -2118,7 +2118,7 @@ wheels = [
 
 [[package]]
 name = "titiler-eopf"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "." }
 dependencies = [
     { name = "obstore" },
@@ -2182,7 +2182,7 @@ requires-dist = [
     { name = "sqlalchemy", marker = "extra == 'openeo'", specifier = ">=2.0.0" },
     { name = "starlette-cramjam", specifier = ">=0.4,<1.0" },
     { name = "titiler-core", specifier = ">=0.24,<0.25" },
-    { name = "titiler-openeo", marker = "extra == 'openeo'", git = "https://github.com/sentinel-hub/titiler-openeo.git?rev=v0.6.0" },
+    { name = "titiler-openeo", marker = "extra == 'openeo'", git = "https://github.com/sentinel-hub/titiler-openeo.git?rev=v0.6.1" },
     { name = "titiler-xarray", specifier = ">=0.24,<0.25" },
     { name = "zarr", specifier = ">=3.1.3" },
 ]
@@ -2200,7 +2200,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
-    { name = "titiler-openeo", git = "https://github.com/sentinel-hub/titiler-openeo.git?rev=v0.6.0" },
+    { name = "titiler-openeo", git = "https://github.com/sentinel-hub/titiler-openeo.git?rev=v0.6.1" },
 ]
 notebook = [
     { name = "ipykernel" },
@@ -2211,8 +2211,8 @@ server = [{ name = "uvicorn", extras = ["standard"] }]
 
 [[package]]
 name = "titiler-openeo"
-version = "0.6.0"
-source = { git = "https://github.com/sentinel-hub/titiler-openeo.git?rev=v0.6.0#6e301e36b3000a46be51919ad7c5a62c300fc3d0" }
+version = "0.6.1"
+source = { git = "https://github.com/sentinel-hub/titiler-openeo.git?rev=v0.6.1#a694642afa6ccb230385c138dde773c23b44d707" }
 dependencies = [
     { name = "jsonpath-ng" },
     { name = "openeo-pg-parser-networkx" },
