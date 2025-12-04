@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, Sequence, Tuple, Type, Union
 
 import attr
 from attrs import define
-from openeo_pg_parser_networkx.pg_schema import TemporalInterval
+from openeo_pg_parser_networkx.pg_schema import TemporalInterval, BoundingBox
 from rasterio.errors import RasterioIOError
 from rio_tiler.constants import MAX_THREADS
 from rio_tiler.errors import (
@@ -29,7 +29,7 @@ from titiler.openeo.errors import (
     NoDataAvailable,
     OutputLimitExceeded,
 )
-from titiler.openeo.models.openapi import SpatialExtent
+
 from titiler.openeo.processes.implementations.data_model import LazyRasterStack
 from titiler.openeo.processes.implementations.utils import _props_to_datename
 from titiler.openeo.reader import SimpleSTACReader, _estimate_output_dimensions
@@ -368,7 +368,7 @@ class LoadCollection(stacapi.LoadCollection):
     def load_collection(
         self,
         id: str,
-        spatial_extent: Optional[SpatialExtent] = None,
+        spatial_extent: Optional[BoundingBox] = None,
         temporal_extent: Optional[TemporalInterval] = None,
         bands: Optional[list[str]] = None,
         properties: Optional[dict] = None,
