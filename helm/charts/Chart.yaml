@@ -1,5 +1,5 @@
 apiVersion: v2
-appVersion: "0.2.0"
+appVersion: "0.2.1"
 description: A dynamic Web Map tile server for EOPF data
 name: titiler-eopf
 version: 0.2.0
