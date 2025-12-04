@@ -287,7 +287,7 @@ class STACReader(SimpleSTACReader):
                         variables := read_options.pop("variables", None)
                     ):
                         common_to_variable = {
-                            b["common_name"]: b["name"] for b in bands
+                            b["eo:common_name"] if "eo:common_name" in b else b["name"]: b["name"] for b in bands
                         }
                         read_options["variables"] = [
                             common_to_variable.get(v, v) for v in variables
