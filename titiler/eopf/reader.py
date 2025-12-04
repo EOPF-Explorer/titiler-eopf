@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import os
 import pickle
 import re
 import warnings
-from functools import cache, cached_property
+from functools import cached_property
 from pathlib import Path
+from threading import Lock
 from typing import Any, Callable, Dict, List, Literal, Union
 from urllib.parse import urlparse
 
@@ -17,6 +19,8 @@ import attr
 import obstore
 import xarray
 from affine import Affine
+from cachetools import TTLCache, cached
+from cachetools.keys import hashkey
 from morecantile import Tile, TileMatrixSet
 from rasterio import windows
 from rasterio.crs import CRS
@@ -65,7 +69,14 @@ class MissingVariables(RioTilerError):
     """Missing Variables."""
 
 
-@cache
+cache = TTLCache(maxsize=512, ttl=300)  # type: ignore
+
+
+@cached(
+    cache,
+    key=lambda src_path, **kwargs: hashkey(src_path, json.dumps(kwargs)),
+    lock=Lock(),
+)
 def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
     """Open Xarray dataset
 
@@ -130,6 +141,18 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
         dt = _open_dataset(src_path)
 
     return dt
+
+
+def clear_cache(src_path: str) -> None:
+    """Clear cached dataset."""
+    logger.info(f"Cache - Clearing for {src_path}")
+    with open_dataset.cache_lock:  # type: ignore
+        _ = open_dataset.cache.pop(open_dataset.cache_key(src_path), None)  # type: ignore
+
+    if cache_settings.enable and cache_settings.host:
+        pool = RedisCache.get_instance(cache_settings.host)
+        cache_client = redis.Redis(connection_pool=pool)
+        cache_client.delete(src_path)
 
 
 def get_multiscale_level(
