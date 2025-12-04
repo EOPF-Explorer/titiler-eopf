@@ -117,7 +117,9 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
         )
 
     if cache_settings.enable and cache_settings.host:
-        pool = RedisCache.get_instance(cache_settings.host)
+        pool = RedisCache.get_instance(
+            cache_settings.host, cache_settings.port, cache_settings.password
+        )
         cache_client = redis.Redis(connection_pool=pool)
         if data_bytes := cache_client.get(src_path):
             logger.info(f"Cache - found dataset in Cache {src_path}")
