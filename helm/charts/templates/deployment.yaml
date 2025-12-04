@@ -39,10 +39,12 @@ spec:
               value: /config/netrc
           {{- end }}
           {{- if or .Values.redis.enabled .Values.redis.external.enabled }}
-            - name: REDIS_HOST
+            - name: TITILER_EOPF_CACHE_HOST
               value: '{{- if .Values.redis.enabled -}}{{ include "titiler-eopf.redis.fullname" . }}{{- else -}}{{ .Values.redis.external.host | quote }}{{- end }}'
-            - name: REDIS_PORT
+            - name: TITILER_EOPF_CACHE_PORT
               value: "{{- if .Values.redis.enabled -}}{{ .Values.redis.service.port }}{{- else -}}{{ .Values.redis.external.port }}{{- end }}"
+            - name: TITILER_EOPF_CACHE_ENABLE
+              value: "true"
           {{- end }}
           {{- if and .Values.redis.auth.enabled (or .Values.redis.auth.password .Values.redis.auth.existingSecret) }}
             - name: REDIS_PASSWORD
