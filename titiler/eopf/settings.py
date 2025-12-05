@@ -1,6 +1,13 @@
 """API settings."""
 
-from pydantic import AnyUrl, Field, ValidationInfo, field_validator, model_validator
+from pydantic import (
+    AnyUrl,
+    Field,
+    SecretStr,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing_extensions import Self
 
@@ -68,14 +75,14 @@ class CacheSettings(BaseSettings):
     host: str | None = None
     port: int = Field(default=6379, ge=1, le=65535)
     username: str | None = None
-    password: str | None = None
+    password: SecretStr | None = None
     db: int = Field(default=0, ge=0)
     ssl: bool = False
     enable: bool = False
     dataset_ttl_seconds: int = Field(default=300, ge=0)
     dataset_max_items: int | None = Field(default=128, gt=0)
-    dataset_timer_path: str | None = None
-    dataset_ttl_jitter_seconds: int = Field(default=0, ge=0)
+    dataset_hmac_secret: SecretStr | None = None
+    dataset_max_redis_payload_bytes: int | None = Field(default=64 * 1024 * 1024, gt=0)
 
     model_config = SettingsConfigDict(
         env_prefix="TITILER_EOPF_CACHE_", env_file=".env", extra="ignore"
@@ -84,7 +91,12 @@ class CacheSettings(BaseSettings):
     @model_validator(mode="after")
     def check_cache_settings(self) -> Self:
         """Check if cache is disabled."""
-        if self.enable and not self.host:
-            raise ValueError("Redis CACHE_HOST must be set when cache is enabled")
+        if self.enable:
+            if not self.host:
+                raise ValueError("Redis CACHE_HOST must be set when cache is enabled")
+            if self.dataset_hmac_secret is None:
+                raise ValueError(
+                    "Redis dataset HMAC secret must be set when cache is enabled"
+                )
 
         return self

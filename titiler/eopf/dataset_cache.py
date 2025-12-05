@@ -1,21 +1,26 @@
-"""GeoZarr dataset caching helpers."""
+"""GeoZarr dataset caching helpers.
+
+Keeps cached GeoZarr payloads private and trustworthy by hashing normalized
+paths + kwargs into opaque Redis keys, by pickling/compressing/HMAC-signing
+each DataTree, and by adding TTL jitter plus a sorted-set index so expirations
+stagger and the cache stays within budget.
+"""
 
 from __future__ import annotations
 
 import hashlib
+import hmac
 import logging
 import pickle
 import random
-import sys
 import time
-from collections.abc import Callable, Iterable
-from importlib import import_module
+import zlib
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Hashable
+from typing import Any, Final
 from urllib.parse import ParseResult, urlparse
 
 import xarray
-from cachetools import TTLCache  # type: ignore[import-untyped]
 
 from .cache import get_redis_pool
 from .settings import CacheSettings
@@ -27,7 +32,9 @@ RedisErrorType: type[Exception]
 
 try:  # pragma: nocover - optional redis dependency
     import redis as redis_module  # type: ignore[import-untyped]
-    from redis.exceptions import RedisError as _RedisError  # type: ignore[import-untyped]
+    from redis.exceptions import (
+        RedisError as _RedisError,  # type: ignore[import-untyped]
+    )
 except ImportError:  # pragma: nocover
     redis_module = None
     RedisErrorType = Exception
@@ -38,49 +45,53 @@ redis = redis_module
 
 
 CacheKey = str
+REDIS_PREFIX: Final = "titiler:dataset-cache"
+DIGEST_SIZE: Final = hashlib.sha256().digest_size
+CACHE_INDEX_KEY: Final = f"{REDIS_PREFIX}:index"
+NO_KWARGS_DIGEST: Final = "base"
+DEFAULT_MAX_PAYLOAD_BYTES: Final = 64 * 1024 * 1024
+DEFAULT_REDIS_MAX_CONNECTIONS: Final = 128
+TTL_JITTER_RATIO: Final = 0.1
+SCAN_BATCH_SIZE: Final = 512
 
 
-def _now() -> float:
-    return time.monotonic()
+def _path_digest(normalized_path: str) -> str:
+    return hashlib.sha1(normalized_path.encode("utf-8")).hexdigest()
 
 
-def _resolve_timer(path: str | None) -> Callable[[], float]:
-    if not path:
-        return _now
-
-    module_path, _, attr = path.replace(":", ".").rpartition(".")
-    if not module_path or not attr:
-        raise ValueError(
-            "Timer path must include a module and attribute (e.g. package.module:callable)."
-        )
-
-    timer = getattr(import_module(module_path), attr)
-    if not callable(timer):
-        raise TypeError(f"Timer '{path}' is not callable")
-    return timer
-
-
-def _make_hashable(value: Any) -> Hashable:
-    if isinstance(value, Hashable):
+def _canonicalize(value: Any) -> Any:
+    if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     if isinstance(value, dict):
-        return tuple((key, _make_hashable(value[key])) for key in sorted(value))
+        return tuple((key, _canonicalize(value[key])) for key in sorted(value))
     if isinstance(value, (list, tuple)):
-        return tuple(_make_hashable(v) for v in value)
+        return tuple(_canonicalize(v) for v in value)
     if isinstance(value, set):
-        return tuple(sorted((_make_hashable(v) for v in value), key=repr))
-    return repr(value)
+        canonical = (_canonicalize(v) for v in value)
+        return tuple(sorted(canonical, key=repr))
+    if callable(value):
+        module = getattr(value, "__module__", "unknown")
+        qualname = getattr(
+            value, "__qualname__", getattr(type(value), "__qualname__", "callable")
+        )
+        return f"{module}.{qualname}"
+    return f"{type(value).__module__}.{type(value).__qualname__}"
+
+
+def _kwargs_digest(kwargs: dict[str, Any]) -> str:
+    if not kwargs:
+        return NO_KWARGS_DIGEST
+    canonical = tuple((key, _canonicalize(kwargs[key])) for key in sorted(kwargs))
+    payload = repr(canonical)
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 
 def build_dataset_cache_key(src_path: str, kwargs: dict[str, Any]) -> CacheKey:
     """Build a deterministic cache key for a dataset path and opener kwargs."""
 
-    if not kwargs:
-        return src_path
-
-    normalized_kwargs = tuple((key, _make_hashable(kwargs[key])) for key in sorted(kwargs))
-    digest = hashlib.sha1(repr(normalized_kwargs).encode("utf-8")).hexdigest()
-    return f"{src_path}#{digest}"
+    path_token = _path_digest(src_path)
+    kwargs_token = _kwargs_digest(kwargs)
+    return f"{path_token}:{kwargs_token}"
 
 
 def normalize_src_path(src_path: str) -> tuple[str, ParseResult]:
@@ -95,8 +106,22 @@ def normalize_src_path(src_path: str) -> tuple[str, ParseResult]:
     return normalized, urlparse(normalized)
 
 
+def _clone_datatree(tree: xarray.DataTree) -> xarray.DataTree:
+    """Return a deep copy to keep cached entries immutable."""
+
+    return tree.copy(deep=True)
+
+
+def _redis_key(cache_key: CacheKey) -> str:
+    return f"{REDIS_PREFIX}:{cache_key}"
+
+
+def _dataset_pattern(normalized_path: str) -> str:
+    return f"{REDIS_PREFIX}:{_path_digest(normalized_path)}:*"
+
+
 class DatasetCache:
-    """Cache GeoZarr datatrees locally and optionally in Redis."""
+    """Cache GeoZarr datatrees in Redis when configured."""
 
     def __init__(
         self,
@@ -110,13 +135,17 @@ class DatasetCache:
         redis_password: str | None,
         redis_db: int,
         redis_ssl: bool,
-        ttl_jitter_seconds: int,
-        timer: Callable[[], float] = _now,
+        redis_hmac_secret: str | None,
+        redis_max_payload_bytes: int | None,
     ) -> None:
-        """Configure cache TTL, capacity, and Redis connectivity."""
+        """Configure cache TTL and Redis connectivity."""
+
         self._ttl = max(0, ttl_seconds)
-        self._timer = timer
-        self._ttl_jitter = max(0, ttl_jitter_seconds)
+        self._max_items = max_items if max_items and max_items > 0 else None
+        self._redis_secret = (
+            redis_hmac_secret.encode("utf-8") if redis_hmac_secret else None
+        )
+        max_connections = DEFAULT_REDIS_MAX_CONNECTIONS
         self._redis_config = (
             {
                 "host": redis_host,
@@ -125,20 +154,31 @@ class DatasetCache:
                 "username": redis_username,
                 "password": redis_password,
                 "ssl": redis_ssl,
+                "max_connections": max_connections,
             }
-            if self._ttl and enable_redis and redis_host
+            if self._ttl and enable_redis and redis_host and self._redis_secret
             else None
         )
         self._redis_client: Any | None = None
-        local_max = max_items or sys.maxsize
-        self._local: TTLCache | None = (
-            TTLCache(maxsize=local_max, ttl=self._ttl, timer=self._timer) if self._ttl else None
+        self._redis_max_payload = (
+            redis_max_payload_bytes
+            if redis_max_payload_bytes is not None
+            else DEFAULT_MAX_PAYLOAD_BYTES
         )
+        self._redis_index_key = CACHE_INDEX_KEY
 
     @classmethod
     def from_settings(cls, settings: CacheSettings) -> "DatasetCache":
         """Create a cache based on application settings."""
-        timer = _resolve_timer(settings.dataset_timer_path)
+
+        redis_password = (
+            settings.password.get_secret_value() if settings.password else None
+        )
+        redis_secret = (
+            settings.dataset_hmac_secret.get_secret_value()
+            if settings.dataset_hmac_secret
+            else None
+        )
         return cls(
             ttl_seconds=settings.dataset_ttl_seconds,
             max_items=settings.dataset_max_items,
@@ -146,43 +186,22 @@ class DatasetCache:
             redis_host=settings.host,
             redis_port=settings.port,
             redis_username=settings.username,
-            redis_password=settings.password,
+            redis_password=redis_password,
             redis_db=settings.db,
             redis_ssl=settings.ssl,
-            ttl_jitter_seconds=settings.dataset_ttl_jitter_seconds,
-            timer=timer,
+            redis_hmac_secret=redis_secret,
+            redis_max_payload_bytes=settings.dataset_max_redis_payload_bytes,
         )
 
     @property
     def ttl(self) -> int:
         """Return the configured cache TTL in seconds."""
+
         return self._ttl
-
-    @property
-    def local_cache(self) -> TTLCache | None:
-        """Expose the in-process TTL cache instance for tests or debugging."""
-        return self._local
-
-    @property
-    def timer(self) -> Callable[[], float]:
-        """Return the callable used to track elapsed time for the local cache."""
-        return self._timer
-
-    def clear_local(self) -> None:
-        """Remove every entry from the local TTL cache."""
-        if self._local is not None:
-            self._local.clear()
-
-    def set_timer(self, timer: Callable[[], float]) -> None:
-        """Update the timer used by the local TTL cache."""
-        self._timer = timer
-        if self._local is not None:
-            snapshot = dict(self._local.items())
-            self._local = TTLCache(maxsize=self._local.maxsize, ttl=self._ttl, timer=timer)
-            self._local.update(snapshot)
 
     def reset_redis(self) -> None:
         """Drop the cached Redis client (used by tests)."""
+
         client = self._redis_client
         if client is None:
             return
@@ -204,30 +223,26 @@ class DatasetCache:
         return self._redis_client
 
     def _redis_ttl(self) -> int:
-        if not self._ttl:
+        base = self._ttl
+        if base <= 0:
             return 0
-        if not self._ttl_jitter:
-            return self._ttl
-        delta = random.randint(-self._ttl_jitter, self._ttl_jitter)
-        ttl = self._ttl + delta
-        return ttl if ttl > 0 else 1
+        jitter_ratio = TTL_JITTER_RATIO
+        if jitter_ratio <= 0:
+            return base
+        spread = max(1, int(base * jitter_ratio))
+        offset = random.randint(-spread, spread)
+        return max(1, base + offset)
 
-    def get(self, cache_key: CacheKey) -> xarray.DataTree | None:
-        """Fetch a datatree from local or Redis cache."""
-        if self._local is None:
-            return None
-
-        cached = self._local.get(cache_key)
-        if cached is not None:
-            logger.info("Cache - local hit %s", cache_key)
-            return cached
+    def get(self, cache_key: CacheKey, normalized_path: str) -> xarray.DataTree | None:
+        """Fetch a datatree from Redis cache."""
 
         cache_client = self._redis()
         if not cache_client:
             return None
 
+        redis_key = _redis_key(cache_key)
         try:
-            payload = cache_client.get(cache_key)
+            payload = cache_client.get(redis_key)
         except RedisErrorType as exc:  # pragma: nocover - network failures
             logger.warning("Cache - Redis get failed for %s: %s", cache_key, exc)
             return None
@@ -236,82 +251,167 @@ class DatasetCache:
             return None
 
         try:
-            dataset = pickle.loads(payload)
+            dataset = self._deserialize(payload)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Cache - could not deserialize %s, purging entry: %s", cache_key, exc)
-            self._delete_redis_keys(cache_client, [cache_key])
+            logger.warning(
+                "Cache - invalid payload for %s, purging entry: %s", cache_key, exc
+            )
+            self._delete_redis_keys(cache_client, [redis_key])
+            return None
+
+        if dataset is None:
+            self._delete_redis_keys(cache_client, [redis_key])
             return None
 
         logger.info("Cache - Redis hit %s", cache_key)
-        self._local[cache_key] = dataset
-        return dataset
+        return _clone_datatree(dataset)
 
-    def set(self, cache_key: CacheKey, data: xarray.DataTree) -> None:
-        """Write a datatree into the caches."""
-        if self._local is None:
-            return
+    def set(
+        self, cache_key: CacheKey, normalized_path: str, data: xarray.DataTree
+    ) -> None:
+        """Write a datatree into Redis."""
 
-        self._local[cache_key] = data
-
+        cached_copy = _clone_datatree(data)
         cache_client = self._redis()
         if not cache_client:
             return
 
         try:
-            payload = pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL)
-            ttl = self._redis_ttl()
-            kwargs: dict[str, Any] = {"ex": ttl} if ttl else {}
-            cache_client.set(cache_key, payload, **kwargs)
-        except (RedisErrorType, pickle.PickleError, TypeError) as exc:
+            payload = self._serialize(cached_copy)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Cache - serialization failed for %s: %s", cache_key, exc)
+            return
+
+        if payload is None:
+            return
+
+        if (
+            self._redis_max_payload is not None
+            and len(payload) > self._redis_max_payload
+        ):
+            logger.info(
+                "Cache - payload for %s skipped (size %s > limit %s)",
+                cache_key,
+                len(payload),
+                self._redis_max_payload,
+            )
+            return
+
+        ttl = self._redis_ttl()
+        kwargs: dict[str, Any] = {"ex": ttl} if ttl else {}
+        redis_key = _redis_key(cache_key)
+        try:
+            cache_client.set(redis_key, payload, **kwargs)
+            self._record_cache_key(cache_client, redis_key)
+        except RedisErrorType as exc:  # pragma: nocover - network failures
             logger.warning("Cache - Redis set failed for %s: %s", cache_key, exc)
 
-    def invalidate(self, normalized_path: str, cache_key: CacheKey | None = None) -> None:
+    def invalidate(
+        self, normalized_path: str, cache_key: CacheKey | None = None
+    ) -> None:
         """Purge cached entries matching the path or specific key."""
-        if self._local is not None:
-            targets = (cache_key,) if cache_key else self._matching_local_keys(normalized_path)
-            for key in filter(None, targets):
-                self._local.pop(key, None)
 
         cache_client = self._redis()
         if not cache_client:
             return
 
         if cache_key:
-            self._delete_redis_keys(cache_client, [cache_key])
+            redis_key = _redis_key(cache_key)
+            self._delete_redis_keys(cache_client, [redis_key])
         else:
             self._delete_dataset_keys(cache_client, normalized_path)
 
-    def _matching_local_keys(self, normalized_path: str) -> tuple[CacheKey, ...]:
-        if self._local is None:
-            return ()
-        return tuple(key for key in self._local.keys() if isinstance(key, str) and key.startswith(normalized_path))
-
     def _delete_dataset_keys(self, cache_client: Any, normalized_path: str) -> None:
-        scan_iter = getattr(cache_client, "scan_iter", None)
-        if not callable(scan_iter):
-            fallback = self._matching_local_keys(normalized_path) or (normalized_path,)
-            self._delete_redis_keys(cache_client, fallback)
-            return
-
-        pattern = f"{normalized_path}*"
+        pattern = _dataset_pattern(normalized_path)
+        delete_batch: list[str] = []
         try:
-            keys = list(scan_iter(match=pattern))
+            for key in self._scan_keys(cache_client, pattern):
+                delete_batch.append(key)
+                if len(delete_batch) >= SCAN_BATCH_SIZE:
+                    self._delete_redis_keys(cache_client, delete_batch)
+                    delete_batch.clear()
         except RedisErrorType as exc:  # pragma: nocover - best effort cleanup
             logger.warning("Cache - Redis scan failed for %s: %s", normalized_path, exc)
             return
 
-        if keys:
-            self._delete_redis_keys(cache_client, keys)
+        if delete_batch:
+            self._delete_redis_keys(cache_client, delete_batch)
+
+    def _scan_keys(self, cache_client: Any, pattern: str):
+        scan = getattr(cache_client, "scan", None)
+        if callable(scan):
+            cursor: int | str = 0
+            while True:
+                cursor, keys = scan(cursor=cursor, match=pattern, count=SCAN_BATCH_SIZE)
+                for key in keys:
+                    yield self._coerce_redis_key(key)
+                if cursor in (0, "0"):
+                    break
+            return
+
+        scan_iter = getattr(cache_client, "scan_iter", None)
+        if not callable(scan_iter):
+            raise RedisErrorType("Redis client missing SCAN support")
+        for key in scan_iter(match=pattern):
+            yield self._coerce_redis_key(key)
 
     @staticmethod
-    def _delete_redis_keys(cache_client: Any, keys: Iterable[bytes | str]) -> None:
-        targets = tuple(keys)
+    def _coerce_redis_key(key: bytes | str) -> str:
+        return key.decode("utf-8") if isinstance(key, bytes) else key
+
+    def _delete_redis_keys(
+        self, cache_client: Any, keys: Iterable[bytes | str]
+    ) -> None:
+        targets = tuple(self._coerce_redis_key(key) for key in keys if key)
         if not targets:
             return
         try:
             cache_client.delete(*targets)
         except RedisErrorType as exc:  # pragma: nocover - best effort cleanup
             logger.warning("Cache - Redis delete failed for %s: %s", targets, exc)
+            return
+        if not self._max_items:
+            return
+        try:
+            cache_client.zrem(self._redis_index_key, *targets)
+        except RedisErrorType as exc:  # pragma: nocover - best effort cleanup
+            logger.warning(
+                "Cache - Redis index cleanup failed for %s: %s", targets, exc
+            )
+
+    def _record_cache_key(self, cache_client: Any, redis_key: str) -> None:
+        if not self._max_items:
+            return
+        try:
+            cache_client.zadd(self._redis_index_key, {redis_key: time.time()})
+            overflow = cache_client.zcard(self._redis_index_key) - self._max_items
+            if overflow > 0:
+                evicted = cache_client.zpopmin(self._redis_index_key, overflow)
+                if evicted:
+                    self._delete_redis_keys(cache_client, (key for key, _ in evicted))
+        except RedisErrorType as exc:  # pragma: nocover - best effort cleanup
+            logger.warning("Cache - Redis eviction bookkeeping failed: %s", exc)
+
+    def _serialize(self, tree: xarray.DataTree) -> bytes | None:
+        if self._redis_secret is None:
+            return None
+        payload = pickle.dumps(tree, protocol=pickle.HIGHEST_PROTOCOL)
+        compressed = zlib.compress(payload)
+        digest = hmac.new(self._redis_secret, compressed, hashlib.sha256).digest()
+        return digest + compressed
+
+    def _deserialize(self, payload: bytes) -> xarray.DataTree | None:
+        if self._redis_secret is None:
+            return None
+        if len(payload) <= DIGEST_SIZE:
+            raise ValueError("Cache payload shorter than digest")
+        digest = payload[:DIGEST_SIZE]
+        compressed = payload[DIGEST_SIZE:]
+        expected = hmac.new(self._redis_secret, compressed, hashlib.sha256).digest()
+        if not hmac.compare_digest(digest, expected):
+            raise ValueError("Cache payload failed HMAC validation")
+        raw = zlib.decompress(compressed)
+        return pickle.loads(raw)
 
 
 _cache_settings = CacheSettings()
@@ -320,6 +420,7 @@ DATASET_CACHE = DatasetCache.from_settings(_cache_settings)
 
 def invalidate_open_dataset_cache(src_path: str, **kwargs: Any) -> None:
     """Helper to drop cache entries tied to an open_dataset call."""
+
     normalized_path, _ = normalize_src_path(src_path)
     cache_key = build_dataset_cache_key(normalized_path, kwargs) if kwargs else None
     DATASET_CACHE.invalidate(normalized_path, cache_key)

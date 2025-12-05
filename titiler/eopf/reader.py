@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 import math
 import os
@@ -58,6 +59,16 @@ class MissingVariables(RioTilerError):
     """Missing Variables."""
 
 
+def _uses_dataset_cache(opener: Callable[..., xarray.DataTree]) -> bool:
+    """Return True when the callable ultimately resolves to open_dataset."""
+
+    try:
+        target = inspect.unwrap(opener)
+    except ValueError:
+        target = opener
+    return target is open_dataset
+
+
 def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
     """Open an Xarray dataset using a lazy cache-aside strategy.
 
@@ -65,10 +76,10 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
     the AWS caching guidance so we only store entries that are actually
     requested and let TTL-based expiry refresh stale data automatically.
     """
-    src_path, parsed = normalize_src_path(src_path)
-    cache_key = build_dataset_cache_key(src_path, kwargs)
+    normalized_path, parsed = normalize_src_path(src_path)
+    cache_key = build_dataset_cache_key(normalized_path, kwargs)
 
-    cached_dt = DATASET_CACHE.get(cache_key)
+    cached_dt = DATASET_CACHE.get(cache_key, normalized_path)
     if cached_dt is not None:
         return cached_dt
 
@@ -96,7 +107,7 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
             zarr_store = ObjectStore(store=store, read_only=True)
         else:
             # Use the default obstore.store.from_url method
-            store = obstore.store.from_url(src_path)
+            store = obstore.store.from_url(normalized_path)
             zarr_store = ObjectStore(store=store, read_only=True)
 
         return xarray.open_datatree(
@@ -107,8 +118,8 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
             engine="zarr",
         )
 
-    dt = _open_dataset(src_path, parsed)
-    DATASET_CACHE.set(cache_key, dt)
+    dt = _open_dataset(normalized_path, parsed)
+    DATASET_CACHE.set(cache_key, normalized_path, dt)
 
     return dt
 
@@ -311,7 +322,7 @@ class GeoZarrReader(BaseReader):
                 )
 
         except Exception:
-            if self.opener is open_dataset:
+            if _uses_dataset_cache(self.opener):
                 invalidate_open_dataset_cache(self.input, **self.opener_options)
             raise
 
