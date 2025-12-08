@@ -8,7 +8,7 @@ import jinja2
 import rasterio
 import xarray
 import zarr
-from fastapi import FastAPI, Query
+from fastapi import Depends, FastAPI, Query
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.templating import Jinja2Templates
@@ -29,6 +29,7 @@ from .extensions import (
     EOPFViewerExtension,
 )
 from .factory import TilerFactory
+from .reader import clear_cache
 from .settings import ApiSettings
 
 # Configure logging
@@ -155,6 +156,16 @@ app.add_middleware(
 if settings.debug:
     print(settings.debug)
     app.add_middleware(TotalTimeMiddleware)
+
+    # Cache Clearing Endpoint
+    @app.get(
+        "/_mgmt/collections/{collection_id}/items/{item_id}/clear",
+        include_in_schema=False,
+    )
+    def mgmt_clear_cache(src_path=Depends(DatasetPathParams)):
+        """clear_cache."""
+        clear_cache(src_path)
+        return {"message": "Cache cleared"}
 
 
 # Health Check Endpoints
