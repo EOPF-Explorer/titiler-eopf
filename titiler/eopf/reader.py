@@ -134,7 +134,9 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
 
     if get_cache_settings().enable and get_cache_settings().host:
         pool = RedisCache.get_instance(
-            get_cache_settings().host, get_cache_settings().port, get_cache_settings().password
+            get_cache_settings().host,  # type: ignore
+            get_cache_settings().port,
+            get_cache_settings().password,
         )
         cache_client = redis.Redis(connection_pool=pool)
         if data_bytes := cache_client.get(src_path):
