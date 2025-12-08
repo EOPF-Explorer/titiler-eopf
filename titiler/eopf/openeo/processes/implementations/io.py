@@ -325,6 +325,119 @@ class STACReader(SimpleSTACReader):
 
         return img
 
+    def tile(  # noqa: C901
+        self,
+        tile_x: int,
+        tile_y: int,
+        tile_z: int,
+        assets: Union[Sequence[str], str] | None = None,
+        expression: str | None = None,
+        asset_indexes: Dict[str, Indexes] | None = None,
+        asset_as_band: bool = False,
+        **kwargs: Any,
+    ) -> ImageData:
+        """Read and merge Tile from multiple assets."""
+        assets = cast_to_sequence(assets)
+        if assets and expression:
+            warnings.warn(
+                "Both expression and assets passed; expression will overwrite assets parameter.",
+                ExpressionMixingWarning,
+                stacklevel=2,
+            )
+
+        if expression:
+            assets = self.parse_expression(expression, asset_as_band=asset_as_band)
+
+        if not assets and self.default_assets:
+            warnings.warn(
+                f"No assets/expression passed, defaults to {self.default_assets}",
+                UserWarning,
+                stacklevel=2,
+            )
+            assets = self.default_assets
+
+        if not assets:
+            raise MissingAssets(
+                "assets must be passed via `expression` or `assets` options, or via class-level `default_assets`."
+            )
+
+        asset_indexes = asset_indexes or {}
+
+        # We fall back to `indexes` if provided
+        indexes = kwargs.pop("indexes", None)
+
+        def _reader(asset_name: str, *args: Any, **kwargs: Any) -> ImageData:
+            idx = asset_indexes.get(asset_name) or indexes
+
+            # Parse Asset `{asset}|{variable}`
+            variable = asset_name.split("|")[1] if "|" in asset_name else None
+            asset = asset_name.split("|")[0]
+
+            read_options = {**kwargs, "variables": [variable]} if variable else kwargs
+
+            # TODO: Parse Asset `{asset}|{bidx}` ? for COG
+
+            asset_info = self._get_asset_info(asset)
+            reader, options = self._get_reader(asset_info)
+            uri = asset_info["url"]
+
+            # TODO: add s3 alternate in STAC Items
+            uri = uri.replace(
+                "https://esa-zarr-sentinel-explorer-fra.s3.de.io.cloud.ovh.net/",
+                "s3://esa-zarr-sentinel-explorer-fra/",
+            )
+
+            with self.ctx(**asset_info.get("env", {})):
+                with reader(
+                    uri,
+                    tms=self.tms,
+                    **{**self.reader_options, **options},
+                ) as src:
+                    # Note: Check if the `variable` name is a
+                    metadata = asset_info.get("metadata", {})
+                    if (bands := metadata.get("bands", {})) and (
+                        variables := read_options.pop("variables", None)
+                    ):
+                        common_to_variable = {
+                            b["eo:common_name"]
+                            if "eo:common_name" in b
+                            else b["name"]: b["name"]
+                            for b in bands
+                        }
+                        read_options["variables"] = [
+                            common_to_variable.get(v, v) for v in variables
+                        ]
+
+                    data = src.tile(*args, indexes=idx, **read_options)
+
+                    self._update_statistics(
+                        data,
+                        indexes=idx,
+                        statistics=asset_info.get("dataset_statistics"),
+                    )
+
+                    metadata = data.metadata or {}
+                    if m := asset_info.get("metadata"):
+                        metadata.update(m)
+                    data.metadata = {asset: metadata}
+
+                    if asset_as_band:
+                        if len(data.band_names) > 1:
+                            raise AssetAsBandError(
+                                "Can't use `asset_as_band` for multibands asset"
+                            )
+                        data.band_names = [asset_name]
+                    else:
+                        data.band_names = [f"{asset_name}_{n}" for n in data.band_names]
+
+                    return data
+
+        img = multi_arrays(assets, _reader, tile_x, tile_y, tile_z, **kwargs)
+        if expression:
+            return img.apply_expression(expression)
+
+        return img
+
 
 def _reader(item: Dict[str, Any], bbox: BBox, **kwargs: Any) -> ImageData:
     """
@@ -386,6 +499,7 @@ class LoadCollection(stacapi.LoadCollection):
             temporal_extent=temporal_extent,
             properties=properties,
         )
+        print(len(items))
         if not items:
             raise NoDataAvailable("There is no data available for the given extents.")
 
@@ -446,6 +560,6 @@ class LoadCollection(stacapi.LoadCollection):
 
         return LazyRasterStack(
             tasks=tasks,
-            date_name_fn=lambda asset: _props_to_datename(asset.properties),
+            date_name_fn=lambda asset: _props_to_datename(asset.properties) + asset.id,
             allowed_exceptions=(TileOutsideBounds,),
         )

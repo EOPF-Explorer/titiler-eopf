@@ -34,7 +34,7 @@ dynamic = ["version"]
 
 [project.optional-dependencies]
 openeo = [
-    "titiler-openeo@git+https://github.com/sentinel-hub/titiler-openeo.git@v0.6.1",
+    "titiler-openeo==0.6.1",
     "duckdb",
     "sqlalchemy>=2.0.0",
     "psycopg2-binary",
@@ -67,6 +67,7 @@ notebook = [
     "ipython",
     "ipykernel",
     "jupyter-client",
+    "matplotlib",
 ]
 
 [project.urls]
