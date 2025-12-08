@@ -29,7 +29,8 @@ from .extensions import (
     EOPFViewerExtension,
 )
 from .factory import TilerFactory
-from .settings import ApiSettings
+from .reader import set_cache_settings
+from .settings import ApiSettings, CacheSettings
 
 # Configure logging
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -44,6 +45,10 @@ logger = logging.getLogger(__name__)
 logger.info(f"Starting TiTiler EOPF application with log level: {log_level}")
 
 settings = ApiSettings()
+
+# Initialize and set cache settings
+cache_settings = CacheSettings()
+set_cache_settings(cache_settings)
 
 # HTML templates
 templates = Jinja2Templates(

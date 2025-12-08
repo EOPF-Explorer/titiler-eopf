@@ -58,7 +58,23 @@ except ImportError:
 
 sel_methods = Literal["nearest", "pad", "ffill", "backfill", "bfill"]
 
-cache_settings = CacheSettings()
+# Initialize cache settings as a module-level variable
+# This will be set by the main application
+_cache_settings = None
+
+
+def get_cache_settings() -> CacheSettings:
+    """Get the cache settings instance."""
+    global _cache_settings
+    if _cache_settings is None:
+        _cache_settings = CacheSettings()
+    return _cache_settings
+
+
+def set_cache_settings(settings: CacheSettings) -> None:
+    """Set the cache settings instance."""
+    global _cache_settings
+    _cache_settings = settings
 
 
 class MissingVariables(RioTilerError):
@@ -116,9 +132,9 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
             engine="zarr",
         )
 
-    if cache_settings.enable and cache_settings.host:
+    if get_cache_settings().enable and get_cache_settings().host:
         pool = RedisCache.get_instance(
-            cache_settings.host, cache_settings.port, cache_settings.password
+            get_cache_settings().host, get_cache_settings().port, get_cache_settings().password
         )
         cache_client = redis.Redis(connection_pool=pool)
         if data_bytes := cache_client.get(src_path):

@@ -17,6 +17,8 @@ from titiler.openeo.settings import ApiSettings, AuthSettings, BackendSettings
 from titiler.openeo.stacapi import stacApiBackend
 
 from .. import __version__ as titiler_version
+from ..reader import set_cache_settings
+from ..settings import CacheSettings
 from .processes import PROCESS_SPECIFICATIONS, process_registry
 from .processes.implementations.io import LoadCollection
 
@@ -24,6 +26,11 @@ STAC_VERSION = "1.0.0"
 
 api_settings = ApiSettings()
 auth_settings = AuthSettings()
+
+# Initialize EOPF cache settings to ensure environment variables are loaded
+cache_settings = CacheSettings()
+# Set the cache settings in the reader module
+set_cache_settings(cache_settings)
 
 # BackendSettings requires stac_api_url and service_store_url to be set via environment variables
 try:
