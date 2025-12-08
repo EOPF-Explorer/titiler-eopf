@@ -499,7 +499,6 @@ class LoadCollection(stacapi.LoadCollection):
             temporal_extent=temporal_extent,
             properties=properties,
         )
-        print(len(items))
         if not items:
             raise NoDataAvailable("There is no data available for the given extents.")
 
