@@ -708,6 +708,7 @@ class LoadCollection(stacapi.LoadCollection):
             spatial_extent=spatial_extent,
             temporal_extent=temporal_extent,
             properties=properties,
+            max_items=processing_settings.max_items,
         )
         if not items:
             raise NoDataAvailable("There is no data available for the given extents.")
