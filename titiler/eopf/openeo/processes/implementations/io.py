@@ -763,4 +763,5 @@ class LoadCollection(stacapi.LoadCollection):
             key_fn=lambda asset: asset.id,
             timestamp_fn=lambda asset: _props_to_datetime(asset.properties),
             allowed_exceptions=(TileOutsideBounds,),
+            max_workers=MAX_THREADS,
         )
