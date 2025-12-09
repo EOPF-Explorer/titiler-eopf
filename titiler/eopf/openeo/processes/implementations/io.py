@@ -8,6 +8,7 @@ import attr
 from attrs import define
 from openeo_pg_parser_networkx.pg_schema import BoundingBox, TemporalInterval
 from rasterio.errors import RasterioIOError
+from rioxarray.exceptions import NoDataInBounds
 from rio_tiler.constants import MAX_THREADS
 from rio_tiler.errors import (
     AssetAsBandError,
@@ -319,7 +320,8 @@ class STACReader(SimpleSTACReader):
 
                     return data
 
-        img = multi_arrays(assets, _reader, bbox, **kwargs)
+        # Handle corrupted data gracefully - allow processing to continue even if some rasters fail
+        img = multi_arrays(assets, _reader, bbox, allowed_exceptions=(NoDataInBounds,), **kwargs)
         if expression:
             return img.apply_expression(expression)
 
@@ -432,7 +434,8 @@ class STACReader(SimpleSTACReader):
 
                     return data
 
-        img = multi_arrays(assets, _reader, tile_x, tile_y, tile_z, **kwargs)
+        # Handle corrupted data gracefully - allow processing to continue even if some rasters fail
+        img = multi_arrays(assets, _reader, tile_x, tile_y, tile_z, allowed_exceptions=(NoDataInBounds,), **kwargs)
         if expression:
             return img.apply_expression(expression)
 
@@ -560,5 +563,5 @@ class LoadCollection(stacapi.LoadCollection):
         return LazyRasterStack(
             tasks=tasks,
             date_name_fn=lambda asset: _props_to_datename(asset.properties) + asset.id,
-            allowed_exceptions=(TileOutsideBounds,),
+            allowed_exceptions=(TileOutsideBounds, NoDataInBounds,),
         )
