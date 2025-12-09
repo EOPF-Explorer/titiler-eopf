@@ -2,6 +2,7 @@
 
 import time
 import warnings
+from datetime import datetime
 from typing import Any, Dict, Optional, Sequence, Tuple, Type, Union
 
 import attr
@@ -772,6 +773,7 @@ class LoadCollection(stacapi.LoadCollection):
 
         return LazyRasterStack(
             tasks=tasks,
-            date_name_fn=lambda asset: _props_to_datename(asset.properties) + asset.id,
+            key_fn=lambda asset: _props_to_datename(asset.properties) + asset.id,
+            timestamp_fn=lambda asset: datetime.fromisoformat(_props_to_datename(asset.properties).replace('Z', '+00:00')) if _props_to_datename(asset.properties) else None,
             allowed_exceptions=(TileOutsideBounds,),
         )
