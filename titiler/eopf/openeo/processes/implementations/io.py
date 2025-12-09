@@ -111,7 +111,7 @@ def _create_zarr_time_task(
 
 def load_zarr(
     url: str,
-    spatial_extent: Optional[Dict] = None,
+    spatial_extent: Optional[BoundingBox] = None,
     width: Optional[int] = None,
     height: Optional[int] = None,
     options: Optional[Dict] = None,
