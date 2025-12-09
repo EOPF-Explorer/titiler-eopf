@@ -33,10 +33,7 @@ from titiler.openeo.errors import (
     OutputLimitExceeded,
 )
 from titiler.openeo.processes.implementations.data_model import LazyRasterStack
-from titiler.openeo.processes.implementations.utils import (
-    _props_to_datename,
-    _props_to_datetime,
-)
+from titiler.openeo.processes.implementations.utils import _props_to_datetime
 from titiler.openeo.reader import SimpleSTACReader, _estimate_output_dimensions
 from titiler.openeo.settings import ProcessingSettings
 
@@ -746,19 +743,12 @@ class LoadCollection(stacapi.LoadCollection):
         bbox = dimensions["bbox"]
         crs = dimensions["crs"]
 
-        # Group items by date
-        items_by_date: dict[str, list[dict]] = {}
-        for item in items:
-            date = item.datetime.isoformat()
-            if date not in items_by_date:
-                items_by_date[date] = []
-            items_by_date[date].append(item)
-
+        # Use create_tasks with threads=0 to ensure lazy loading (partial functions)
         tasks = create_tasks(
             _reader,
             items,
-            MAX_THREADS,
-            bbox,
+            threads=0,  # Force no threading to use partial functions for lazy loading
+            bbox=bbox,
             assets=bands,
             bounds_crs=crs,
             dst_crs=crs,
@@ -770,7 +760,7 @@ class LoadCollection(stacapi.LoadCollection):
 
         return LazyRasterStack(
             tasks=tasks,
-            key_fn=lambda asset: _props_to_datename(asset.properties) + asset.id,
+            key_fn=lambda asset: asset.id,
             timestamp_fn=lambda asset: _props_to_datetime(asset.properties),
             allowed_exceptions=(TileOutsideBounds,),
         )
