@@ -657,11 +657,14 @@ class GeoZarrReader(BaseReader):
                 ) as da:
                     info = da.info()
                     # Fix band descriptions to use actual variable name
-                    variable_name = group_var.split(":")[-1] if ":" in group_var else group_var
+                    variable_name = (
+                        group_var.split(":")[-1] if ":" in group_var else group_var
+                    )
                     if info.band_descriptions:
                         # Replace the band description with the actual variable name
                         info.band_descriptions = [
-                            (band_idx, variable_name) for band_idx, _ in info.band_descriptions
+                            (band_idx, variable_name)
+                            for band_idx, _ in info.band_descriptions
                         ]
                     return info
             except Exception as e:
@@ -748,7 +751,9 @@ class GeoZarrReader(BaseReader):
                     )
                     if expression:
                         if len(img.band_names) > 1:
-                            raise ValueError("Can't use `expression` for multidim dataset")
+                            raise ValueError(
+                                "Can't use `expression` for multidim dataset"
+                            )
                         img.band_names = [self._variable_idx[gv]]
                     else:
                         # Extract variable name from group:variable format
@@ -757,12 +762,16 @@ class GeoZarrReader(BaseReader):
 
                     img_stack.append(img)
             except NoDataInBounds as e:
-                logger.warning(f"No data found for variable '{gv}' in tile bounds: {str(e)}. Skipping this variable.")
+                logger.warning(
+                    f"No data found for variable '{gv}' in tile bounds: {str(e)}. Skipping this variable."
+                )
                 # Continue processing other variables instead of failing completely
                 continue
 
         if not img_stack:
-            raise NoDataInBounds("No data found in bounds for any of the requested variables.")
+            raise NoDataInBounds(
+                "No data found in bounds for any of the requested variables."
+            )
 
         img = ImageData.create_from_list(img_stack)
 
@@ -847,7 +856,9 @@ class GeoZarrReader(BaseReader):
                     )
                     if expression:
                         if len(img.band_names) > 1:
-                            raise ValueError("Can't use `expression` for multidim dataset")
+                            raise ValueError(
+                                "Can't use `expression` for multidim dataset"
+                            )
                         img.band_names = [self._variable_idx[gv]]
                     else:
                         # Extract variable name from group:variable format
@@ -856,12 +867,16 @@ class GeoZarrReader(BaseReader):
 
                     img_stack.append(img)
             except NoDataInBounds as e:
-                logger.warning(f"No data found for variable '{gv}' in bounds: {str(e)}. Skipping this variable.")
+                logger.warning(
+                    f"No data found for variable '{gv}' in bounds: {str(e)}. Skipping this variable."
+                )
                 # Continue processing other variables instead of failing completely
                 continue
 
         if not img_stack:
-            raise NoDataInBounds("No data found in bounds for any of the requested variables.")
+            raise NoDataInBounds(
+                "No data found in bounds for any of the requested variables."
+            )
 
         img = ImageData.create_from_list(img_stack)
 
@@ -935,7 +950,9 @@ class GeoZarrReader(BaseReader):
                     )
                     if expression:
                         if len(img.band_names) > 1:
-                            raise ValueError("Can't use `expression` for multidim dataset")
+                            raise ValueError(
+                                "Can't use `expression` for multidim dataset"
+                            )
                         img.band_names = [self._variable_idx[gv]]
                     else:
                         # Extract variable name from group:variable format
@@ -944,12 +961,16 @@ class GeoZarrReader(BaseReader):
 
                     img_stack.append(img)
             except NoDataInBounds as e:
-                logger.warning(f"No data found for variable '{gv}' in preview bounds: {str(e)}. Skipping this variable.")
+                logger.warning(
+                    f"No data found for variable '{gv}' in preview bounds: {str(e)}. Skipping this variable."
+                )
                 # Continue processing other variables instead of failing completely
                 continue
 
         if not img_stack:
-            raise NoDataInBounds("No data found in bounds for any of the requested variables.")
+            raise NoDataInBounds(
+                "No data found in bounds for any of the requested variables."
+            )
 
         img = ImageData.create_from_list(img_stack)
 

@@ -1,6 +1,7 @@
 """titiler.eopf.openeo data models."""
 
 import logging
+
 import numpy as np
 from rio_tiler.models import ImageData
 from rioxarray.exceptions import NoDataInBounds
@@ -105,7 +106,9 @@ class LazyZarrRasterStack(dict[str, ImageData]):
                 super().__setitem__(key, self._load_time_slice(key))
                 self._loaded_times.add(key)
             except NoDataInBounds as e:
-                logger.warning(f"No data found for time slice '{key}': {str(e)}. Creating empty placeholder.")
+                logger.warning(
+                    f"No data found for time slice '{key}': {str(e)}. Creating empty placeholder."
+                )
                 # Create a placeholder ImageData with NaN values to maintain consistency
                 # This allows processing to continue with other valid time slices
                 empty_data = np.full((1, 256, 256), np.nan, dtype=np.float32)
