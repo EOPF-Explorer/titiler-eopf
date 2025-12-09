@@ -33,7 +33,10 @@ from titiler.openeo.errors import (
     OutputLimitExceeded,
 )
 from titiler.openeo.processes.implementations.data_model import LazyRasterStack
-from titiler.openeo.processes.implementations.utils import _props_to_datetime, _props_to_datename
+from titiler.openeo.processes.implementations.utils import (
+    _props_to_datename,
+    _props_to_datetime,
+)
 from titiler.openeo.reader import SimpleSTACReader, _estimate_output_dimensions
 from titiler.openeo.settings import ProcessingSettings
 
