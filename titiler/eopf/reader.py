@@ -727,46 +727,39 @@ class GeoZarrReader(BaseReader):
 
         for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
-            try:
-                with XarrayReader(
-                    self._get_variable(
-                        group,
-                        variable,
-                        sel=sel,
-                        method=method,
-                        bounds=tile_bounds,
-                        height=tilesize,
-                        width=tilesize,
-                        dst_crs=dst_crs,
-                    ),
-                    tms=self.tms,
-                ) as da:
-                    img = da.tile(
-                        tile_x,
-                        tile_y,
-                        tile_z,
-                        *args,
-                        tilesize=tilesize,
-                        **kwargs,
-                    )
-                    if expression:
-                        if len(img.band_names) > 1:
-                            raise ValueError(
-                                "Can't use `expression` for multidim dataset"
-                            )
-                        img.band_names = [self._variable_idx[gv]]
-                    else:
-                        # Extract variable name from group:variable format
-                        variable_name = gv.split(":")[-1] if ":" in gv else gv
-                        img.band_names = [variable_name]
-
-                    img_stack.append(img)
-            except NoDataInBounds as e:
-                logger.warning(
-                    f"No data found for variable '{gv}' in tile bounds: {str(e)}. Skipping this variable."
+            with XarrayReader(
+                self._get_variable(
+                    group,
+                    variable,
+                    sel=sel,
+                    method=method,
+                    bounds=tile_bounds,
+                    height=tilesize,
+                    width=tilesize,
+                    dst_crs=dst_crs,
+                ),
+                tms=self.tms,
+            ) as da:
+                img = da.tile(
+                    tile_x,
+                    tile_y,
+                    tile_z,
+                    *args,
+                    tilesize=tilesize,
+                    **kwargs,
                 )
-                # Continue processing other variables instead of failing completely
-                continue
+                if expression:
+                    if len(img.band_names) > 1:
+                        raise ValueError(
+                            "Can't use `expression` for multidim dataset"
+                        )
+                    img.band_names = [self._variable_idx[gv]]
+                else:
+                    # Extract variable name from group:variable format
+                    variable_name = gv.split(":")[-1] if ":" in gv else gv
+                    img.band_names = [variable_name]
+
+                img_stack.append(img)
 
         if not img_stack:
             raise NoDataInBounds(
@@ -830,48 +823,41 @@ class GeoZarrReader(BaseReader):
 
         for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
-            try:
-                with XarrayReader(
-                    self._get_variable(
-                        group,
-                        variable,
-                        sel=sel,
-                        method=method,
-                        max_size=max_size,
-                        height=height,
-                        width=width,
-                        bounds=bounds_in_dst_crs,
-                        dst_crs=dst_crs,
-                    ),
-                    tms=self.tms,
-                ) as da:
-                    img = da.part(
-                        bbox,
-                        dst_crs=dst_crs,
-                        bounds_crs=bounds_crs,
-                        max_size=max_size,
-                        height=height,
-                        width=width,
-                        **kwargs,
-                    )
-                    if expression:
-                        if len(img.band_names) > 1:
-                            raise ValueError(
-                                "Can't use `expression` for multidim dataset"
-                            )
-                        img.band_names = [self._variable_idx[gv]]
-                    else:
-                        # Extract variable name from group:variable format
-                        variable_name = gv.split(":")[-1] if ":" in gv else gv
-                        img.band_names = [variable_name]
-
-                    img_stack.append(img)
-            except NoDataInBounds as e:
-                logger.warning(
-                    f"No data found for variable '{gv}' in bounds: {str(e)}. Skipping this variable."
+            with XarrayReader(
+                self._get_variable(
+                    group,
+                    variable,
+                    sel=sel,
+                    method=method,
+                    max_size=max_size,
+                    height=height,
+                    width=width,
+                    bounds=bounds_in_dst_crs,
+                    dst_crs=dst_crs,
+                ),
+                tms=self.tms,
+            ) as da:
+                img = da.part(
+                    bbox,
+                    dst_crs=dst_crs,
+                    bounds_crs=bounds_crs,
+                    max_size=max_size,
+                    height=height,
+                    width=width,
+                    **kwargs,
                 )
-                # Continue processing other variables instead of failing completely
-                continue
+                if expression:
+                    if len(img.band_names) > 1:
+                        raise ValueError(
+                            "Can't use `expression` for multidim dataset"
+                        )
+                    img.band_names = [self._variable_idx[gv]]
+                else:
+                    # Extract variable name from group:variable format
+                    variable_name = gv.split(":")[-1] if ":" in gv else gv
+                    img.band_names = [variable_name]
+
+                img_stack.append(img)
 
         if not img_stack:
             raise NoDataInBounds(
@@ -926,46 +912,39 @@ class GeoZarrReader(BaseReader):
 
         for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
-            try:
-                with XarrayReader(
-                    self._get_variable(
-                        group,
-                        variable,
-                        sel=sel,
-                        method=method,
-                        max_size=max_size,
-                        height=height,
-                        width=width,
-                        dst_crs=dst_crs,
-                    ),
-                    tms=self.tms,
-                ) as da:
-                    img = da.preview(
-                        *args,
-                        max_size=max_size,
-                        height=height,
-                        width=width,
-                        dst_crs=dst_crs,
-                        **kwargs,
-                    )
-                    if expression:
-                        if len(img.band_names) > 1:
-                            raise ValueError(
-                                "Can't use `expression` for multidim dataset"
-                            )
-                        img.band_names = [self._variable_idx[gv]]
-                    else:
-                        # Extract variable name from group:variable format
-                        variable_name = gv.split(":")[-1] if ":" in gv else gv
-                        img.band_names = [variable_name]
-
-                    img_stack.append(img)
-            except NoDataInBounds as e:
-                logger.warning(
-                    f"No data found for variable '{gv}' in preview bounds: {str(e)}. Skipping this variable."
+            with XarrayReader(
+                self._get_variable(
+                    group,
+                    variable,
+                    sel=sel,
+                    method=method,
+                    max_size=max_size,
+                    height=height,
+                    width=width,
+                    dst_crs=dst_crs,
+                ),
+                tms=self.tms,
+            ) as da:
+                img = da.preview(
+                    *args,
+                    max_size=max_size,
+                    height=height,
+                    width=width,
+                    dst_crs=dst_crs,
+                    **kwargs,
                 )
-                # Continue processing other variables instead of failing completely
-                continue
+                if expression:
+                    if len(img.band_names) > 1:
+                        raise ValueError(
+                            "Can't use `expression` for multidim dataset"
+                        )
+                    img.band_names = [self._variable_idx[gv]]
+                else:
+                    # Extract variable name from group:variable format
+                    variable_name = gv.split(":")[-1] if ":" in gv else gv
+                    img.band_names = [variable_name]
+
+                img_stack.append(img)
 
         if not img_stack:
             raise NoDataInBounds(
