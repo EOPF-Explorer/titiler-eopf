@@ -33,8 +33,9 @@ from titiler.openeo.errors import (
     OutputLimitExceeded,
 )
 from titiler.openeo.processes.implementations.data_model import LazyRasterStack
-from titiler.openeo.processes.implementations.utils import (  # _props_to_datetime,
+from titiler.openeo.processes.implementations.utils import (
     _props_to_datename,
+    _props_to_datetime,
 )
 from titiler.openeo.reader import SimpleSTACReader, _estimate_output_dimensions
 from titiler.openeo.settings import ProcessingSettings
@@ -213,11 +214,10 @@ def load_zarr(
     # Return a lazy RasterStack organized by time using tasks
     return LazyRasterStack(
         tasks=tasks,
-        # key_fn=key_fn,
-        # timestamp_fn=timestamp_fn,
-        date_name_fn=lambda asset: asset["time_key"],
+        key_fn=key_fn,
+        timestamp_fn=timestamp_fn,
         allowed_exceptions=(TileOutsideBounds, NoDataInBounds),
-        # max_workers=MAX_THREADS,
+        max_workers=MAX_THREADS,
     )
 
 
@@ -769,8 +769,7 @@ class LoadCollection(stacapi.LoadCollection):
 
         return LazyRasterStack(
             tasks=tasks,
-            date_name_fn=lambda asset: _props_to_datename(asset.properties) + asset.id,
-            # key_fn=lambda asset: _props_to_datename(asset.properties) + asset.id,
-            # timestamp_fn=lambda asset: _props_to_datetime(asset.properties),
+            key_fn=lambda asset: _props_to_datename(asset.properties) + asset.id,
+            timestamp_fn=lambda asset: _props_to_datetime(asset.properties),
             allowed_exceptions=(TileOutsideBounds,),
         )
