@@ -8,7 +8,7 @@ import os
 import pickle
 import re
 import warnings
-from functools import cache, cached_property
+from functools import cache, cached_property, lru_cache
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Union
 from urllib.parse import urlparse
@@ -58,23 +58,11 @@ except ImportError:
 
 sel_methods = Literal["nearest", "pad", "ffill", "backfill", "bfill"]
 
-# Initialize cache settings as a module-level variable
-# This will be set by the main application
-_cache_settings = None
 
-
-def get_cache_settings() -> CacheSettings:
-    """Get the cache settings instance."""
-    global _cache_settings
-    if _cache_settings is None:
-        _cache_settings = CacheSettings()
-    return _cache_settings
-
-
-def set_cache_settings(settings: CacheSettings) -> None:
-    """Set the cache settings instance."""
-    global _cache_settings
-    _cache_settings = settings
+@lru_cache(maxsize=1)
+def cache_settings() -> CacheSettings:
+    """This function returns a cached instance of the CacheSettings object."""
+    return CacheSettings()
 
 
 class MissingVariables(RioTilerError):
@@ -132,11 +120,11 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
             engine="zarr",
         )
 
-    if get_cache_settings().enable and get_cache_settings().host:
+    if cache_settings().enable and cache_settings().host:
         pool = RedisCache.get_instance(
-            get_cache_settings().host,  # type: ignore
-            get_cache_settings().port,
-            get_cache_settings().password,
+            cache_settings().host,  # type: ignore
+            cache_settings().port,
+            cache_settings().password,
         )
         cache_client = redis.Redis(connection_pool=pool)
         if data_bytes := cache_client.get(src_path):
