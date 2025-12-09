@@ -8,7 +8,7 @@ import os
 import pickle
 import re
 import warnings
-from functools import cache, cached_property
+from functools import cache, cached_property, lru_cache
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Union
 from urllib.parse import urlparse
@@ -58,7 +58,11 @@ except ImportError:
 
 sel_methods = Literal["nearest", "pad", "ffill", "backfill", "bfill"]
 
-cache_settings = CacheSettings()
+
+@lru_cache(maxsize=1)
+def cache_settings() -> CacheSettings:
+    """This function returns a cached instance of the CacheSettings object."""
+    return CacheSettings()
 
 
 class MissingVariables(RioTilerError):
@@ -116,9 +120,11 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
             engine="zarr",
         )
 
-    if cache_settings.enable and cache_settings.host:
+    if cache_settings().enable and cache_settings().host:
         pool = RedisCache.get_instance(
-            cache_settings.host, cache_settings.port, cache_settings.password
+            cache_settings().host,  # type: ignore
+            cache_settings().port,
+            cache_settings().password,
         )
         cache_client = redis.Redis(connection_pool=pool)
         if data_bytes := cache_client.get(src_path):
