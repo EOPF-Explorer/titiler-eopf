@@ -6,8 +6,8 @@ from datetime import datetime
 from typing import Any, Dict, Optional, Sequence, Tuple, Type, Union
 
 import attr
-from attrs import define
 import numpy as np
+from attrs import define
 from openeo_pg_parser_networkx.pg_schema import BoundingBox, TemporalInterval
 from rasterio.errors import RasterioIOError
 from rio_tiler.constants import MAX_THREADS
@@ -462,7 +462,6 @@ class STACReader(SimpleSTACReader):
 
         # If no valid assets, return empty ImageData instead of failing
         if not valid_assets:
-
             empty_data = np.full((1, 256, 256), 0, dtype=np.float32)
             return ImageData(
                 array=empty_data,
@@ -624,7 +623,6 @@ class STACReader(SimpleSTACReader):
 
         # If no valid assets, return empty ImageData instead of failing
         if not valid_assets:
-
             empty_data = np.full((1, 256, 256), 0, dtype=np.float32)
             return ImageData(
                 array=empty_data,
