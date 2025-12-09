@@ -324,7 +324,7 @@ class STACReader(SimpleSTACReader):
         # get method crs from kwargs for bbox reprojection
         # first compare CRS of bbox and self.bounds and reproject the bbox if needed
         # Then check intersection and discard reading if no intersection
-        
+
         # Filter assets based on bounds intersection to prevent NoDataInBounds exceptions
         valid_assets = []
         for asset_name in assets:
@@ -333,35 +333,41 @@ class STACReader(SimpleSTACReader):
                 asset_info = self._get_asset_info(asset)
                 reader, options = self._get_reader(asset_info)
                 uri = asset_info["url"]
-                
+
                 # Quick bounds check without full data loading
                 with self.ctx(**asset_info.get("env", {})):
                     with reader(uri, **{**self.reader_options, **options}) as src:
                         # Get CRS from kwargs or use source CRS
-                        bounds_crs = kwargs.get('bounds_crs', src.crs)
-                        
+                        bounds_crs = kwargs.get("bounds_crs", src.crs)
+
                         # Transform bbox to source CRS if needed
                         if bounds_crs != src.crs:
                             from rasterio.warp import transform_bounds
-                            transformed_bbox = transform_bounds(bounds_crs, src.crs, *bbox)
+
+                            transformed_bbox = transform_bounds(
+                                bounds_crs, src.crs, *bbox
+                            )
                         else:
                             transformed_bbox = bbox
-                        
+
                         # Check if bbox intersects with source bounds
                         src_bounds = src.bounds
-                        if (transformed_bbox[2] > src_bounds[0] and 
-                            transformed_bbox[0] < src_bounds[2] and 
-                            transformed_bbox[3] > src_bounds[1] and 
-                            transformed_bbox[1] < src_bounds[3]):
+                        if (
+                            transformed_bbox[2] > src_bounds[0]
+                            and transformed_bbox[0] < src_bounds[2]
+                            and transformed_bbox[3] > src_bounds[1]
+                            and transformed_bbox[1] < src_bounds[3]
+                        ):
                             valid_assets.append(asset_name)
             except Exception:
                 # If bounds check fails, skip this asset
                 continue
-        
+
         # If no valid assets, return empty ImageData instead of failing
         if not valid_assets:
             import numpy as np
             from rio_tiler.models import ImageData
+
             empty_data = np.full((1, 256, 256), 0, dtype=np.float32)
             return ImageData(
                 array=empty_data,
@@ -370,7 +376,9 @@ class STACReader(SimpleSTACReader):
                 band_names=["empty"],
             )
 
-        img = multi_arrays(valid_assets, _reader, bbox, allowed_exceptions=(NoDataInBounds,) **kwargs)
+        img = multi_arrays(
+            valid_assets, _reader, bbox, allowed_exceptions=(NoDataInBounds,), **kwargs
+        )
         if expression:
             return img.apply_expression(expression)
 
@@ -492,32 +500,38 @@ class STACReader(SimpleSTACReader):
                 asset_info = self._get_asset_info(asset)
                 reader, options = self._get_reader(asset_info)
                 uri = asset_info["url"]
-                
+
                 # Quick bounds check without full data loading
                 with self.ctx(**asset_info.get("env", {})):
                     with reader(uri, **{**self.reader_options, **options}) as src:
                         # Transform tile bbox to source CRS if needed
                         if self.tms.rasterio_crs != src.crs:
                             from rasterio.warp import transform_bounds
-                            transformed_bbox = transform_bounds(self.tms.rasterio_crs, src.crs, *tile_bbox)
+
+                            transformed_bbox = transform_bounds(
+                                self.tms.rasterio_crs, src.crs, *tile_bbox
+                            )
                         else:
                             transformed_bbox = tile_bbox
-                        
+
                         # Check if tile bbox intersects with source bounds
                         src_bounds = src.bounds
-                        if (transformed_bbox[2] > src_bounds[0] and 
-                            transformed_bbox[0] < src_bounds[2] and 
-                            transformed_bbox[3] > src_bounds[1] and 
-                            transformed_bbox[1] < src_bounds[3]):
+                        if (
+                            transformed_bbox[2] > src_bounds[0]
+                            and transformed_bbox[0] < src_bounds[2]
+                            and transformed_bbox[3] > src_bounds[1]
+                            and transformed_bbox[1] < src_bounds[3]
+                        ):
                             valid_assets.append(asset_name)
             except Exception:
                 # If bounds check fails, skip this asset
                 continue
-        
+
         # If no valid assets, return empty ImageData instead of failing
         if not valid_assets:
             import numpy as np
             from rio_tiler.models import ImageData
+
             empty_data = np.full((1, 256, 256), 0, dtype=np.float32)
             return ImageData(
                 array=empty_data,

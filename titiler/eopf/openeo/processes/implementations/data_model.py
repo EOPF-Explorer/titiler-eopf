@@ -1,12 +1,8 @@
 """titiler.eopf.openeo data models."""
 
-import logging
-
 from rio_tiler.models import ImageData
 
 from titiler.eopf.reader import GeoZarrReader
-
-logger = logging.getLogger(__name__)
 
 
 class LazyZarrRasterStack(dict[str, ImageData]):
