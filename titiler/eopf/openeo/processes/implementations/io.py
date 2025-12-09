@@ -36,11 +36,75 @@ from titiler.openeo.reader import SimpleSTACReader, _estimate_output_dimensions
 from titiler.openeo.settings import ProcessingSettings
 
 from ....reader import GeoZarrReader
-from .data_model import LazyZarrRasterStack
 
 __all__ = ["load_zarr", "LoadCollection"]
 
 processing_settings = ProcessingSettings()
+
+
+def _create_zarr_time_task(
+    time_key: str, zarr_dataset: GeoZarrReader, variables: list[str], options: dict
+):
+    """Create a task function for loading a specific time slice from GeoZarr.
+
+    Args:
+        time_key: Time value (ISO string) to load
+        zarr_dataset: The GeoZarrReader instance
+        variables: List of variables to load
+        options: Reading options including spatial_extent, width, height, etc.
+
+    Returns:
+        Callable that returns ImageData for this time slice
+    """
+
+    def load_time_slice():
+        # Get spatial extent from options or use reader's full bounds
+        spatial_extent = options.get("spatial_extent")
+        crs = 4326
+        if spatial_extent:
+            # Handle both BoundingBox object and dictionary formats
+            if hasattr(spatial_extent, "west"):
+                # BoundingBox object
+                bbox = [
+                    spatial_extent.west,
+                    spatial_extent.south,
+                    spatial_extent.east,
+                    spatial_extent.north,
+                ]
+            else:
+                # Dictionary format
+                bbox = [
+                    spatial_extent["west"],
+                    spatial_extent["south"],
+                    spatial_extent["east"],
+                    spatial_extent["north"],
+                ]
+            if hasattr(spatial_extent, "crs"):
+                crs = spatial_extent.crs
+        else:
+            bbox = zarr_dataset.bounds
+
+        # Use the reader's part() method to load data for all variables at this time
+        width = options.get("width")
+        height = options.get("height")
+
+        # For single time datasets, don't use time selection
+        sel = None
+        if len(options.get("time_values", [])) > 1:
+            sel = [f"time={time_key}"]
+
+        return zarr_dataset.part(
+            bbox=bbox,
+            bounds_crs=crs,
+            dst_crs=crs,
+            variables=variables,
+            sel=sel,
+            method=options.get("method", "nearest"),
+            width=int(width) if width else None,
+            height=int(height) if height else None,
+        )
+
+    return load_time_slice
 
 
 def load_zarr(
@@ -49,7 +113,7 @@ def load_zarr(
     width: Optional[int] = None,
     height: Optional[int] = None,
     options: Optional[Dict] = None,
-) -> LazyZarrRasterStack:
+) -> LazyRasterStack:
     """Load data from a Zarr store.
 
     Args:
@@ -112,12 +176,45 @@ def load_zarr(
             # If no time dimension, create a single time entry
             time_values = ["data"]
 
-    # Return a lazy RasterStack organized by time
-    return LazyZarrRasterStack(
-        zarr_dataset=zarr_dataset,
-        variables=variables,
-        time_values=time_values,
-        options=options,
+    # Store time_values in options for task creation
+    options["time_values"] = time_values
+
+    # Create tasks for each time slice
+    tasks = []
+    for time_key in time_values:
+        # Create asset info for this time slice
+        asset_info = {
+            "time_key": time_key,
+            "url": url,
+            "variables": variables,
+        }
+
+        # Create task function for this time slice
+        task_fn = _create_zarr_time_task(time_key, zarr_dataset, variables, options)
+
+        tasks.append((task_fn, asset_info))
+
+    # Create key and timestamp functions
+    def key_fn(asset):
+        return asset["time_key"]
+
+    def timestamp_fn(asset):
+        from datetime import datetime
+
+        try:
+            # Try to parse as ISO datetime
+            return datetime.fromisoformat(asset["time_key"].replace("Z", "+00:00"))
+        except ValueError:
+            # Fallback for non-datetime keys like "data"
+            return datetime.now()
+
+    # Return a lazy RasterStack organized by time using tasks
+    return LazyRasterStack(
+        tasks=tasks,
+        key_fn=key_fn,
+        timestamp_fn=timestamp_fn,
+        allowed_exceptions=(TileOutsideBounds, NoDataInBounds),
+        max_workers=MAX_THREADS,
     )
 
 
