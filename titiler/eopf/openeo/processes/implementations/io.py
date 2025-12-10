@@ -1,5 +1,6 @@
 """eopf_openeo.processes."""
 
+import logging
 import time
 import warnings
 from datetime import datetime
@@ -7,6 +8,7 @@ from typing import Any, Dict, Optional, Sequence, Tuple, Type, Union
 
 import attr
 import numpy as np
+import rasterio
 from attrs import define
 from openeo_pg_parser_networkx.pg_schema import BoundingBox, TemporalInterval
 from rasterio.errors import RasterioIOError
@@ -41,6 +43,7 @@ from ....reader import GeoZarrReader
 
 __all__ = ["load_zarr", "LoadCollection"]
 
+logger = logging.getLogger(__name__)
 processing_settings = ProcessingSettings()
 
 
@@ -609,8 +612,11 @@ class STACReader(SimpleSTACReader):
                             and transformed_bbox[1] < src_bounds[3]
                         ):
                             valid_assets.append(asset_name)
-            except Exception:
-                # If bounds check fails, skip this asset
+            except (OSError, ValueError, rasterio.RasterioIOError) as e:
+                # If bounds check fails due to file access or data issues, skip this asset
+                logger.debug(
+                    f"Bounds check failed for asset {asset_name}: {e}. Skipping asset."
+                )
                 continue
 
         # If no valid assets, return empty ImageData instead of failing
