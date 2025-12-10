@@ -39,6 +39,27 @@ def test_load_zarr():
     keys = list(zarr.keys())
     assert len(keys) == 1  # we only have one time slice
 
+    # Check that without variable filtering, we get all available bands
+    img_stack = list(zarr.values())
+    assert len(img_stack) == 1
+    assert isinstance(img_stack[0], ImageData)
+    # Should contain all bands from the default level: b02, b03, b04, b05, b06, b07, b08, b11, b12, b8a
+    expected_bands = [
+        "b02",
+        "b03",
+        "b04",
+        "b05",
+        "b06",
+        "b07",
+        "b08",
+        "b11",
+        "b12",
+        "b8a",
+    ]
+    assert sorted(img_stack[0].band_names) == sorted(
+        expected_bands
+    ), f"Expected {expected_bands} but got {img_stack[0].band_names}"
+
     # Test with specific variables
     zarr = load_zarr(
         OPTIMIZED_PYRAMID,
@@ -51,3 +72,9 @@ def test_load_zarr():
     img_stack = list(zarr.values())
     assert len(img_stack) == 1
     assert isinstance(img_stack[0], ImageData)
+
+    # Verify that variable filtering worked correctly
+    # Should only contain the b02 band that was requested
+    assert img_stack[0].band_names == [
+        "b02"
+    ], f"Expected ['b02'] but got {img_stack[0].band_names}"
