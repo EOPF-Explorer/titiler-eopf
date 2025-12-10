@@ -12,6 +12,7 @@ import rasterio
 from attrs import define
 from openeo_pg_parser_networkx.pg_schema import BoundingBox, TemporalInterval
 from rasterio.errors import RasterioIOError
+from rasterio.warp import transform_bounds
 from rio_tiler.constants import MAX_THREADS
 from rio_tiler.errors import (
     AssetAsBandError,
@@ -65,7 +66,7 @@ def _create_zarr_time_task(
     def load_time_slice():
         # Get spatial extent from options or use reader's full bounds
         spatial_extent = options.get("spatial_extent")
-        crs = 4326
+        crs = "epsg:4326"
         if spatial_extent:
             # Handle BoundingBox object
             bbox = [
@@ -430,12 +431,10 @@ class STACReader(SimpleSTACReader):
                 with self.ctx(**asset_info.get("env", {})):
                     with reader(uri, **{**self.reader_options, **options}) as src:
                         # Get CRS from kwargs or use source CRS
-                        bounds_crs = kwargs.get("bounds_crs", src.crs)
+                        bounds_crs = kwargs.get("bounds_crs", "epsg:4326")
 
                         # Transform bbox to source CRS if needed
                         if bounds_crs != src.crs:
-                            from rasterio.warp import transform_bounds
-
                             transformed_bbox = transform_bounds(
                                 bounds_crs, src.crs, *bbox
                             )
@@ -460,7 +459,10 @@ class STACReader(SimpleSTACReader):
 
         # If no valid assets, return empty ImageData instead of failing
         if not valid_assets:
-            empty_data = np.full((1, 256, 256), 0, dtype=np.float32)
+            # Get requested dimensions from kwargs, with sensible defaults
+            width = kwargs.get("width", 256)
+            height = kwargs.get("height", 256)
+            empty_data = np.full((1, height, width), 0, dtype=np.float32)
             return ImageData(
                 array=empty_data,
                 crs=self.tms.rasterio_crs,
@@ -598,8 +600,6 @@ class STACReader(SimpleSTACReader):
                     with reader(uri, **{**self.reader_options, **options}) as src:
                         # Transform tile bbox to source CRS if needed
                         if self.tms.rasterio_crs != src.crs:
-                            from rasterio.warp import transform_bounds
-
                             transformed_bbox = transform_bounds(
                                 self.tms.rasterio_crs, src.crs, *tile_bbox
                             )
@@ -624,7 +624,11 @@ class STACReader(SimpleSTACReader):
 
         # If no valid assets, return empty ImageData instead of failing
         if not valid_assets:
-            empty_data = np.full((1, 256, 256), 0, dtype=np.float32)
+            # Use TMS tile size (typically 256x256) or kwargs if provided
+            tile_size = getattr(self.tms, "tileSize", 256)
+            width = kwargs.get("width", tile_size)
+            height = kwargs.get("height", tile_size)
+            empty_data = np.full((1, height, width), 0, dtype=np.float32)
             return ImageData(
                 array=empty_data,
                 crs=self.tms.rasterio_crs,
