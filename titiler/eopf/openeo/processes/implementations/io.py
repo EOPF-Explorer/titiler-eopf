@@ -630,6 +630,7 @@ class STACReader(SimpleSTACReader):
             tile_x,
             tile_y,
             tile_z,
+            allowed_exceptions=(NoDataInBounds,),
             **kwargs,
         )
         if expression:
