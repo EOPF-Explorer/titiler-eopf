@@ -35,7 +35,6 @@ from rio_tiler.io.xarray import XarrayReader
 from rio_tiler.models import BandStatistics, ImageData, Info, PointData
 from rio_tiler.reader import _get_width_height, _missing_size
 from rio_tiler.types import BBox
-from rioxarray.exceptions import NoDataInBounds
 from zarr.storage import ObjectStore
 
 from .cache import RedisCache
@@ -759,11 +758,6 @@ class GeoZarrReader(BaseReader):
 
                 img_stack.append(img)
 
-        if not img_stack:
-            raise NoDataInBounds(
-                "No data found in bounds for any of the requested variables."
-            )
-
         img = ImageData.create_from_list(img_stack)
 
         if expression:
@@ -855,11 +849,6 @@ class GeoZarrReader(BaseReader):
 
                 img_stack.append(img)
 
-        if not img_stack:
-            raise NoDataInBounds(
-                "No data found in bounds for any of the requested variables."
-            )
-
         img = ImageData.create_from_list(img_stack)
 
         if expression:
@@ -939,11 +928,6 @@ class GeoZarrReader(BaseReader):
                     img.band_names = [variable_name]
 
                 img_stack.append(img)
-
-        if not img_stack:
-            raise NoDataInBounds(
-                "No data found in bounds for any of the requested variables."
-            )
 
         img = ImageData.create_from_list(img_stack)
 

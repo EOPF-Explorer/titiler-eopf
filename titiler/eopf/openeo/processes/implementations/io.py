@@ -389,6 +389,24 @@ class STACReader(SimpleSTACReader):
                             common_to_variable.get(v, v) for v in variables
                         ]
 
+                    bounds_crs = read_options.get("bounds_crs", "epsg:4326")
+
+                    transformed_bbox = bbox
+                    # Transform bbox to source CRS if needed
+                    if bounds_crs != src.crs:
+                        transformed_bbox = transform_bounds(bounds_crs, src.crs, *bbox)
+
+                    # Check if bbox intersects with source bounds
+                    if not (
+                        transformed_bbox[2] > src.bounds[0]
+                        and transformed_bbox[0] < src.bounds[2]
+                        and transformed_bbox[3] > src.bounds[1]
+                        and transformed_bbox[1] < src.bounds[3]
+                    ):
+                        raise TileOutsideBounds(
+                            f"No data found in bounds {bbox} for asset {asset_name}"
+                        )
+
                     data = src.part(*args, indexes=idx, **read_options)
 
                     self._update_statistics(
@@ -413,64 +431,7 @@ class STACReader(SimpleSTACReader):
 
                     return data
 
-        # Check intersection of bbox with self bounds
-        # get method crs from kwargs for bbox reprojection
-        # first compare CRS of bbox and self.bounds and reproject the bbox if needed
-        # Then check intersection and discard reading if no intersection
-
-        # Filter assets based on bounds intersection to prevent NoDataInBounds exceptions
-        valid_assets = []
-        for asset_name in assets:
-            asset = asset_name.split("|")[0]
-            try:
-                asset_info = self._get_asset_info(asset)
-                reader, options = self._get_reader(asset_info)
-                uri = asset_info["url"]
-
-                # Quick bounds check without full data loading
-                with self.ctx(**asset_info.get("env", {})):
-                    with reader(uri, **{**self.reader_options, **options}) as src:
-                        # Get CRS from kwargs or use source CRS
-                        bounds_crs = kwargs.get("bounds_crs", "epsg:4326")
-
-                        transformed_bbox = bbox
-                        # Transform bbox to source CRS if needed
-                        if bounds_crs != src.crs:
-                            transformed_bbox = transform_bounds(
-                                bounds_crs, src.crs, *bbox
-                            )
-
-                        # Check if bbox intersects with source bounds
-                        if (
-                            transformed_bbox[2] > src.bounds[0]
-                            and transformed_bbox[0] < src.bounds[2]
-                            and transformed_bbox[3] > src.bounds[1]
-                            and transformed_bbox[1] < src.bounds[3]
-                        ):
-                            valid_assets.append(asset_name)
-            except (RasterioIOError, InvalidAssetName, AttributeError, OSError) as e:
-                # If bounds check fails due to file access, invalid asset, or missing attributes, skip this asset
-                logger.debug(
-                    f"Skipping asset {asset_name} due to bounds check failure: {e}"
-                )
-                continue
-
-        # If no valid assets, return empty ImageData instead of failing
-        if not valid_assets:
-            # Get requested dimensions from kwargs, with sensible defaults
-            width = kwargs.get("width", 256)
-            height = kwargs.get("height", 256)
-            empty_data = np.full((1, height, width), 0, dtype=np.float32)
-            return ImageData(
-                array=empty_data,
-                crs=self.tms.rasterio_crs,
-                bounds=bbox,
-                band_names=["empty"],
-            )
-
-        img = multi_arrays(
-            valid_assets, _reader, bbox, allowed_exceptions=(NoDataInBounds,), **kwargs
-        )
+        img = multi_arrays(assets, _reader, bbox, **kwargs)
         if expression:
             return img.apply_expression(expression)
 
@@ -766,6 +727,5 @@ class LoadCollection(stacapi.LoadCollection):
             tasks=tasks,
             key_fn=lambda asset: asset.id,
             timestamp_fn=lambda asset: _props_to_datetime(asset.properties),
-            allowed_exceptions=(TileOutsideBounds,),
             max_workers=MAX_THREADS,
         )
