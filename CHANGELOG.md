@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2025-12-10
+
+### Added
+
+* Improved error handling and resilient reading in case of missing data (#50)
+* Enhanced code organization in STACReader and LazyZarrRasterStack classes (#50)
+* Better logging for data loading traceability (#50)
+* Graceful handling of missing data to ensure processing continuity (#50)
+
+### Changed
+
+* Initialize cache settings in main application and openeo (#49)
+* Centralized cache management for better handling of cache settings (#49)
+* Updated titiler-openeo dependency to v0.7.0 (#50)
+* Fixed environment variable naming: `TITILER_OPENEO_SERVICE_STORE_URL` → `TITILER_OPENEO_STORE_URL` (#50)
+* Improved bounds checking with proper exception handling (#50)
+* Enhanced variable name handling in band descriptions (#50)
+* Updated OpenEO processing max items limit to 1000 (#50)
+
+### Fixed
+
+* Resilient data reading with retry logic for network errors (#50)
+* Better handling of Zarr data loading edge cases (#50)
+* Improved variable filtering and band name extraction (#50)
+
 ## [0.3.0] - 2025-12-04
 
 ### Added
@@ -42,6 +67,8 @@
 
 * initial release
 
-[Unreleased]: <https://github.com/EOPF-Explorer/titiler-eopf/compare/0.2.0..main>
+[Unreleased]: <https://github.com/EOPF-Explorer/titiler-eopf/compare/0.4.0..main>
+[0.4.0]: <https://github.com/EOPF-Explorer/titiler-eopf/compare/0.3.0..0.4.0>
+[0.3.0]: <https://github.com/EOPF-Explorer/titiler-eopf/compare/0.2.0..0.3.0>
 [0.2.0]: <https://github.com/EOPF-Explorer/titiler-eopf/compare/0.1.0..0.2.0>
 [0.1.0]: <https://github.com/EOPF-Explorer/titiler-eopf/tree/0.1.0>
