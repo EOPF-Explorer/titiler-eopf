@@ -64,23 +64,13 @@ def _create_zarr_time_task(
         spatial_extent = options.get("spatial_extent")
         crs = 4326
         if spatial_extent:
-            # Handle both BoundingBox object and dictionary formats
-            if hasattr(spatial_extent, "west"):
-                # BoundingBox object
-                bbox = [
-                    spatial_extent.west,
-                    spatial_extent.south,
-                    spatial_extent.east,
-                    spatial_extent.north,
-                ]
-            else:
-                # Dictionary format
-                bbox = [
-                    spatial_extent["west"],
-                    spatial_extent["south"],
-                    spatial_extent["east"],
-                    spatial_extent["north"],
-                ]
+            # Handle BoundingBox object
+            bbox = [
+                spatial_extent.west,
+                spatial_extent.south,
+                spatial_extent.east,
+                spatial_extent.north,
+            ]
             if hasattr(spatial_extent, "crs"):
                 crs = spatial_extent.crs
         else:
@@ -134,9 +124,11 @@ def load_zarr(
         >>> # Access specific time slice
         >>> time_slice = data["2020-01-01T00:00:00"]
         >>> # Or specify variables and spatial extent
+        >>> from openeo_pg_parser_networkx.pg_schema import BoundingBox
+        >>> bbox = BoundingBox(west=-10, south=40, east=10, north=50)
         >>> data = load_zarr(
         ...     "path/to/data.zarr",
-        ...     spatial_extent={"west": -10, "south": 40, "east": 10, "north": 50},
+        ...     spatial_extent=bbox,
         ...     options={"variables": ["group:band1", "group:band2"]}
         ... )
     """
