@@ -12,7 +12,7 @@ from titiler.openeo.auth import get_auth
 from titiler.openeo.errors import ExceptionHandler, OpenEOException
 from titiler.openeo.factory import EndpointsFactory
 from titiler.openeo.middleware import DynamicCacheControlMiddleware
-from titiler.openeo.services import get_store, get_tile_store
+from titiler.openeo.services import get_store, get_tile_store, get_udp_store
 from titiler.openeo.settings import ApiSettings, AuthSettings, BackendSettings
 from titiler.openeo.stacapi import stacApiBackend
 
@@ -36,6 +36,7 @@ except Exception as err:
 
 stac_client = stacApiBackend(str(backend_settings.stac_api_url))  # type: ignore
 service_store = get_store(str(backend_settings.store_url))
+udp_store = get_udp_store(str(backend_settings.store_url))
 tile_store = (
     get_tile_store(backend_settings.tile_store_url)
     if backend_settings.tile_store_url
@@ -111,6 +112,7 @@ factory_args = {
     "process_registry": process_registry,
     "auth": auth,
     "default_services_file": backend_settings.default_services_file,
+    "udp_store": udp_store,
 }
 if tile_store:
     factory_args["tile_store"] = tile_store
