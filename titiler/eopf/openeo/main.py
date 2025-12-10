@@ -31,11 +31,11 @@ try:
 except Exception as err:
     raise ValueError(
         "Missing required environment variables for BackendSettings. "
-        "Please set TITILER_OPENEO_STAC_API_URL and TITILER_OPENEO_SERVICE_STORE_URL"
+        "Please set TITILER_OPENEO_STAC_API_URL and TITILER_OPENEO_STORE_URL"
     ) from err
 
 stac_client = stacApiBackend(str(backend_settings.stac_api_url))  # type: ignore
-service_store = get_store(str(backend_settings.service_store_url))
+service_store = get_store(str(backend_settings.store_url))
 tile_store = (
     get_tile_store(backend_settings.tile_store_url)
     if backend_settings.tile_store_url
