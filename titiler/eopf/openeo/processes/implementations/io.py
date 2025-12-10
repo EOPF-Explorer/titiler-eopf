@@ -7,8 +7,6 @@ from datetime import datetime
 from typing import Any, Dict, Optional, Sequence, Tuple, Type, Union
 
 import attr
-import numpy as np
-import rasterio
 from attrs import define
 from openeo_pg_parser_networkx.pg_schema import BoundingBox, TemporalInterval
 from rasterio.errors import RasterioIOError
@@ -27,7 +25,6 @@ from rio_tiler.models import ImageData
 from rio_tiler.tasks import create_tasks, multi_arrays
 from rio_tiler.types import AssetInfo, BBox, Indexes
 from rio_tiler.utils import cast_to_sequence
-from rioxarray.exceptions import NoDataInBounds
 
 from titiler.openeo import stacapi
 from titiler.openeo.errors import (
@@ -209,7 +206,7 @@ def load_zarr(
         tasks=tasks,
         key_fn=key_fn,
         timestamp_fn=timestamp_fn,
-        allowed_exceptions=(TileOutsideBounds, NoDataInBounds),
+        allowed_exceptions=(TileOutsideBounds,),
         max_workers=MAX_THREADS,
     )
 
@@ -431,178 +428,11 @@ class STACReader(SimpleSTACReader):
 
                     return data
 
-        img = multi_arrays(assets, _reader, bbox, **kwargs)
-        if expression:
-            return img.apply_expression(expression)
-
-        return img
-
-    def tile(  # noqa: C901
-        self,
-        tile_x: int,
-        tile_y: int,
-        tile_z: int,
-        assets: Union[Sequence[str], str] | None = None,
-        expression: str | None = None,
-        asset_indexes: Dict[str, Indexes] | None = None,
-        asset_as_band: bool = False,
-        **kwargs: Any,
-    ) -> ImageData:
-        """Read and merge Tile from multiple assets."""
-        assets = cast_to_sequence(assets)
-        if assets and expression:
-            warnings.warn(
-                "Both expression and assets passed; expression will overwrite assets parameter.",
-                ExpressionMixingWarning,
-                stacklevel=2,
-            )
-
-        if expression:
-            assets = self.parse_expression(expression, asset_as_band=asset_as_band)
-
-        if not assets and self.default_assets:
-            warnings.warn(
-                f"No assets/expression passed, defaults to {self.default_assets}",
-                UserWarning,
-                stacklevel=2,
-            )
-            assets = self.default_assets
-
-        if not assets:
-            raise MissingAssets(
-                "assets must be passed via `expression` or `assets` options, or via class-level `default_assets`."
-            )
-
-        asset_indexes = asset_indexes or {}
-
-        # We fall back to `indexes` if provided
-        indexes = kwargs.pop("indexes", None)
-
-        def _reader(asset_name: str, *args: Any, **kwargs: Any) -> ImageData:
-            idx = asset_indexes.get(asset_name) or indexes
-
-            # Parse Asset `{asset}|{variable}`
-            variable = asset_name.split("|")[1] if "|" in asset_name else None
-            asset = asset_name.split("|")[0]
-
-            read_options = {**kwargs, "variables": [variable]} if variable else kwargs
-
-            # TODO: Parse Asset `{asset}|{bidx}` ? for COG
-
-            asset_info = self._get_asset_info(asset)
-            reader, options = self._get_reader(asset_info)
-            uri = asset_info["url"]
-
-            # TODO: add s3 alternate in STAC Items
-            uri = uri.replace(
-                "https://esa-zarr-sentinel-explorer-fra.s3.de.io.cloud.ovh.net/",
-                "s3://esa-zarr-sentinel-explorer-fra/",
-            )
-
-            with self.ctx(**asset_info.get("env", {})):
-                with reader(
-                    uri,
-                    tms=self.tms,
-                    **{**self.reader_options, **options},
-                ) as src:
-                    # Note: Check if the `variable` name is a
-                    metadata = asset_info.get("metadata", {})
-                    if (bands := metadata.get("bands", {})) and (
-                        variables := read_options.pop("variables", None)
-                    ):
-                        common_to_variable = {
-                            b["eo:common_name"]
-                            if "eo:common_name" in b
-                            else b["name"]: b["name"]
-                            for b in bands
-                        }
-                        read_options["variables"] = [
-                            common_to_variable.get(v, v) for v in variables
-                        ]
-
-                    data = src.tile(*args, indexes=idx, **read_options)
-
-                    self._update_statistics(
-                        data,
-                        indexes=idx,
-                        statistics=asset_info.get("dataset_statistics"),
-                    )
-
-                    metadata = data.metadata or {}
-                    if m := asset_info.get("metadata"):
-                        metadata.update(m)
-                    data.metadata = {asset: metadata}
-
-                    if asset_as_band:
-                        if len(data.band_names) > 1:
-                            raise AssetAsBandError(
-                                "Can't use `asset_as_band` for multibands asset"
-                            )
-                        data.band_names = [asset_name]
-                    else:
-                        data.band_names = [f"{asset_name}_{n}" for n in data.band_names]
-
-                    return data
-
-        # Filter assets based on tile bounds intersection to prevent NoDataInBounds exceptions
-        tile_bbox = self.tms.xy_bounds(tile_x, tile_y, tile_z)
-        valid_assets = []
-        for asset_name in assets:
-            asset = asset_name.split("|")[0]
-            try:
-                asset_info = self._get_asset_info(asset)
-                reader, options = self._get_reader(asset_info)
-                uri = asset_info["url"]
-
-                # Quick bounds check without full data loading
-                with self.ctx(**asset_info.get("env", {})):
-                    with reader(uri, **{**self.reader_options, **options}) as src:
-                        # Transform tile bbox to source CRS if needed
-                        if self.tms.rasterio_crs != src.crs:
-                            transformed_bbox = transform_bounds(
-                                self.tms.rasterio_crs, src.crs, *tile_bbox
-                            )
-                        else:
-                            transformed_bbox = tile_bbox
-
-                        # Check if tile bbox intersects with source bounds
-                        src_bounds = src.bounds
-                        if (
-                            transformed_bbox[2] > src_bounds[0]
-                            and transformed_bbox[0] < src_bounds[2]
-                            and transformed_bbox[3] > src_bounds[1]
-                            and transformed_bbox[1] < src_bounds[3]
-                        ):
-                            valid_assets.append(asset_name)
-            except (OSError, ValueError, rasterio.RasterioIOError) as e:
-                # If bounds check fails due to file access or data issues, skip this asset
-                logger.debug(
-                    f"Bounds check failed for asset {asset_name}: {e}. Skipping asset."
-                )
-                continue
-
-        # If no valid assets, return empty ImageData instead of failing
-        if not valid_assets:
-            # Use TMS tile size (typically 256x256) or kwargs if provided
-            tile_size = getattr(self.tms, "tileSize", 256)
-            width = kwargs.get("width", tile_size)
-            height = kwargs.get("height", tile_size)
-            empty_data = np.full((1, height, width), 0, dtype=np.float32)
-            return ImageData(
-                array=empty_data,
-                crs=self.tms.rasterio_crs,
-                bounds=tile_bbox,
-                band_names=["empty"],
-            )
-
-        # Handle corrupted data gracefully - allow processing to continue even if some rasters fail
         img = multi_arrays(
-            valid_assets,
+            assets,
             _reader,
-            tile_x,
-            tile_y,
-            tile_z,
-            allowed_exceptions=(NoDataInBounds,),
+            bbox,
+            allowed_exceptions=(TileOutsideBounds,),
             **kwargs,
         )
         if expression:
@@ -728,4 +558,5 @@ class LoadCollection(stacapi.LoadCollection):
             key_fn=lambda asset: asset.id,
             timestamp_fn=lambda asset: _props_to_datetime(asset.properties),
             max_workers=MAX_THREADS,
+            allowed_exceptions=(TileOutsideBounds,),
         )
