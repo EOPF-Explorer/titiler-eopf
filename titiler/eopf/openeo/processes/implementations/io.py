@@ -433,21 +433,19 @@ class STACReader(SimpleSTACReader):
                         # Get CRS from kwargs or use source CRS
                         bounds_crs = kwargs.get("bounds_crs", "epsg:4326")
 
+                        transformed_bbox = bbox
                         # Transform bbox to source CRS if needed
                         if bounds_crs != src.crs:
                             transformed_bbox = transform_bounds(
                                 bounds_crs, src.crs, *bbox
                             )
-                        else:
-                            transformed_bbox = bbox
 
                         # Check if bbox intersects with source bounds
-                        src_bounds = src.bounds
                         if (
-                            transformed_bbox[2] > src_bounds[0]
-                            and transformed_bbox[0] < src_bounds[2]
-                            and transformed_bbox[3] > src_bounds[1]
-                            and transformed_bbox[1] < src_bounds[3]
+                            transformed_bbox[2] > src.bounds[0]
+                            and transformed_bbox[0] < src.bounds[2]
+                            and transformed_bbox[3] > src.bounds[1]
+                            and transformed_bbox[1] < src.bounds[3]
                         ):
                             valid_assets.append(asset_name)
             except (RasterioIOError, InvalidAssetName, AttributeError, OSError) as e:
