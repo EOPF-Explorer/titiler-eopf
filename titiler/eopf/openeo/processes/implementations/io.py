@@ -432,7 +432,10 @@ class STACReader(SimpleSTACReader):
             assets,
             _reader,
             bbox,
-            allowed_exceptions=(TileOutsideBounds,),
+            allowed_exceptions=(
+                TileOutsideBounds,
+                ValueError,
+            ),
             **kwargs,
         )
         if expression:
@@ -558,5 +561,8 @@ class LoadCollection(stacapi.LoadCollection):
             key_fn=lambda asset: asset.id,
             timestamp_fn=lambda asset: _props_to_datetime(asset.properties),
             max_workers=MAX_THREADS,
-            allowed_exceptions=(TileOutsideBounds,),
+            allowed_exceptions=(
+                TileOutsideBounds,
+                ValueError,
+            ),
         )
