@@ -451,8 +451,11 @@ class STACReader(SimpleSTACReader):
                             and transformed_bbox[1] < src_bounds[3]
                         ):
                             valid_assets.append(asset_name)
-            except Exception:
-                # If bounds check fails, skip this asset
+            except (RasterioIOError, InvalidAssetName, AttributeError, OSError) as e:
+                # If bounds check fails due to file access, invalid asset, or missing attributes, skip this asset
+                logger.debug(
+                    f"Skipping asset {asset_name} due to bounds check failure: {e}"
+                )
                 continue
 
         # If no valid assets, return empty ImageData instead of failing
