@@ -135,7 +135,7 @@ env:
   
   # OpenEO Backend Configuration (Required)
   TITILER_OPENEO_STAC_API_URL: "https://api.explorer.eopf.copernicus.eu/stac/"
-  TITILER_OPENEO_SERVICE_STORE_URL: "services/eopf-explorer.json"
+  TITILER_OPENEO_STORE_URL: "services/eopf-explorer.json"
   
   # Data Store Configuration
   TITILER_EOPF_STORE_URL: "s3://your-bucket/data/"
@@ -202,7 +202,7 @@ For local development, you can run the OpenEO API using the configuration from `
 
 ```bash
 export TITILER_OPENEO_STAC_API_URL="https://your-stac-api-url.com"
-export TITILER_OPENEO_SERVICE_STORE_URL="services/eopf-explorer.json"
+export TITILER_OPENEO_STORE_URL="services/eopf-explorer.json"
 export TITILER_EOPF_STORE_URL="s3://your-bucket/data/"
 export AWS_DEFAULT_REGION="your-region"
 export AWS_ENDPOINT_URL="https://your-s3-endpoint.com/"
@@ -215,7 +215,7 @@ uv run --group server uvicorn titiler.eopf.openeo.main:app --host 127.0.0.1 --po
 The OpenEO API requires the following environment variables to be configured:
 
 - `TITILER_OPENEO_STAC_API_URL`: URL of the STAC API for collection discovery
-- `TITILER_OPENEO_SERVICE_STORE_URL`: Path to the services configuration file
+- `TITILER_OPENEO_STORE_URL`: Path to the services configuration file
 - `TITILER_EOPF_STORE_URL`: Base URL for the data store (supports s3://, file://, etc.)
 
 Additional environment variables for authentication, AWS configuration, and other settings can be found in the `.vscode/launch.json` file.

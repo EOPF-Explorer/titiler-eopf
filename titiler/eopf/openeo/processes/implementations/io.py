@@ -1,13 +1,16 @@
 """eopf_openeo.processes."""
 
+import logging
 import time
 import warnings
+from datetime import datetime
 from typing import Any, Dict, Optional, Sequence, Tuple, Type, Union
 
 import attr
 from attrs import define
 from openeo_pg_parser_networkx.pg_schema import BoundingBox, TemporalInterval
 from rasterio.errors import RasterioIOError
+from rasterio.warp import transform_bounds
 from rio_tiler.constants import MAX_THREADS
 from rio_tiler.errors import (
     AssetAsBandError,
@@ -30,25 +33,80 @@ from titiler.openeo.errors import (
     OutputLimitExceeded,
 )
 from titiler.openeo.processes.implementations.data_model import LazyRasterStack
-from titiler.openeo.processes.implementations.utils import _props_to_datename
+from titiler.openeo.processes.implementations.utils import _props_to_datetime
 from titiler.openeo.reader import SimpleSTACReader, _estimate_output_dimensions
 from titiler.openeo.settings import ProcessingSettings
 
 from ....reader import GeoZarrReader
-from .data_model import LazyZarrRasterStack
 
 __all__ = ["load_zarr", "LoadCollection"]
 
+logger = logging.getLogger(__name__)
 processing_settings = ProcessingSettings()
+
+
+def _create_zarr_time_task(
+    time_key: str, zarr_dataset: GeoZarrReader, variables: list[str], options: dict
+):
+    """Create a task function for loading a specific time slice from GeoZarr.
+
+    Args:
+        time_key: Time value (ISO string) to load
+        zarr_dataset: The GeoZarrReader instance
+        variables: List of variables to load
+        options: Reading options including spatial_extent, width, height, etc.
+
+    Returns:
+        Callable that returns ImageData for this time slice
+    """
+
+    def load_time_slice():
+        # Get spatial extent from options or use reader's full bounds
+        spatial_extent = options.get("spatial_extent")
+        crs = "epsg:4326"
+        if spatial_extent:
+            # Handle BoundingBox object
+            bbox = [
+                spatial_extent.west,
+                spatial_extent.south,
+                spatial_extent.east,
+                spatial_extent.north,
+            ]
+            if hasattr(spatial_extent, "crs"):
+                crs = spatial_extent.crs
+        else:
+            bbox = zarr_dataset.bounds
+
+        # Use the reader's part() method to load data for all variables at this time
+        width = options.get("width")
+        height = options.get("height")
+
+        # For single time datasets, don't use time selection
+        sel = None
+        if len(options.get("time_values", [])) > 1:
+            sel = [f"time={time_key}"]
+
+        return zarr_dataset.part(
+            bbox=bbox,
+            bounds_crs=crs,
+            dst_crs=crs,
+            variables=variables,
+            sel=sel,
+            method=options.get("method", "nearest"),
+            width=int(width) if width else None,
+            height=int(height) if height else None,
+        )
+
+    return load_time_slice
 
 
 def load_zarr(
     url: str,
-    spatial_extent: Optional[Dict] = None,
+    spatial_extent: Optional[BoundingBox] = None,
     width: Optional[int] = None,
     height: Optional[int] = None,
     options: Optional[Dict] = None,
-) -> LazyZarrRasterStack:
+) -> LazyRasterStack:
     """Load data from a Zarr store.
 
     Args:
@@ -67,9 +125,11 @@ def load_zarr(
         >>> # Access specific time slice
         >>> time_slice = data["2020-01-01T00:00:00"]
         >>> # Or specify variables and spatial extent
+        >>> from openeo_pg_parser_networkx.pg_schema import BoundingBox
+        >>> bbox = BoundingBox(west=-10, south=40, east=10, north=50)
         >>> data = load_zarr(
         ...     "path/to/data.zarr",
-        ...     spatial_extent={"west": -10, "south": 40, "east": 10, "north": 50},
+        ...     spatial_extent=bbox,
         ...     options={"variables": ["group:band1", "group:band2"]}
         ... )
     """
@@ -111,12 +171,43 @@ def load_zarr(
             # If no time dimension, create a single time entry
             time_values = ["data"]
 
-    # Return a lazy RasterStack organized by time
-    return LazyZarrRasterStack(
-        zarr_dataset=zarr_dataset,
-        variables=variables,
-        time_values=time_values,
-        options=options,
+    # Store time_values in options for task creation
+    options["time_values"] = time_values
+
+    # Create tasks for each time slice
+    tasks = []
+    for time_key in time_values:
+        # Create asset info for this time slice
+        asset_info = {
+            "time_key": time_key,
+            "url": url,
+            "variables": variables,
+        }
+
+        # Create task function for this time slice
+        task_fn = _create_zarr_time_task(time_key, zarr_dataset, variables, options)
+
+        tasks.append((task_fn, asset_info))
+
+    # Create key and timestamp functions
+    def key_fn(asset):
+        return asset["time_key"]
+
+    def timestamp_fn(asset):
+        try:
+            # Try to parse as ISO datetime
+            return datetime.fromisoformat(asset["time_key"].replace("Z", "+00:00"))
+        except ValueError:
+            # Fallback for non-datetime keys like "data"
+            return datetime.now()
+
+    # Return a lazy RasterStack organized by time using tasks
+    return LazyRasterStack(
+        tasks=tasks,
+        key_fn=key_fn,
+        timestamp_fn=timestamp_fn,
+        allowed_exceptions=(TileOutsideBounds,),
+        max_workers=MAX_THREADS,
     )
 
 
@@ -295,6 +386,24 @@ class STACReader(SimpleSTACReader):
                             common_to_variable.get(v, v) for v in variables
                         ]
 
+                    bounds_crs = read_options.get("bounds_crs", "epsg:4326")
+
+                    transformed_bbox = bbox
+                    # Transform bbox to source CRS if needed
+                    if bounds_crs != src.crs:
+                        transformed_bbox = transform_bounds(bounds_crs, src.crs, *bbox)
+
+                    # Check if bbox intersects with source bounds
+                    if not (
+                        transformed_bbox[2] > src.bounds[0]
+                        and transformed_bbox[0] < src.bounds[2]
+                        and transformed_bbox[3] > src.bounds[1]
+                        and transformed_bbox[1] < src.bounds[3]
+                    ):
+                        raise TileOutsideBounds(
+                            f"No data found in bounds {bbox} for asset {asset_name}"
+                        )
+
                     data = src.part(*args, indexes=idx, **read_options)
 
                     self._update_statistics(
@@ -319,7 +428,16 @@ class STACReader(SimpleSTACReader):
 
                     return data
 
-        img = multi_arrays(assets, _reader, bbox, **kwargs)
+        img = multi_arrays(
+            assets,
+            _reader,
+            bbox,
+            allowed_exceptions=(
+                TileOutsideBounds,
+                ValueError,
+            ),
+            **kwargs,
+        )
         if expression:
             return img.apply_expression(expression)
 
@@ -385,6 +503,7 @@ class LoadCollection(stacapi.LoadCollection):
             spatial_extent=spatial_extent,
             temporal_extent=temporal_extent,
             properties=properties,
+            max_items=processing_settings.max_items,
         )
         if not items:
             raise NoDataAvailable("There is no data available for the given extents.")
@@ -422,19 +541,12 @@ class LoadCollection(stacapi.LoadCollection):
         bbox = dimensions["bbox"]
         crs = dimensions["crs"]
 
-        # Group items by date
-        items_by_date: dict[str, list[dict]] = {}
-        for item in items:
-            date = item.datetime.isoformat()
-            if date not in items_by_date:
-                items_by_date[date] = []
-            items_by_date[date].append(item)
-
+        # Use create_tasks with threads=0 to ensure lazy loading (partial functions)
         tasks = create_tasks(
             _reader,
             items,
-            MAX_THREADS,
-            bbox,
+            threads=0,  # Force no threading to use partial functions for lazy loading
+            bbox=bbox,
             assets=bands,
             bounds_crs=crs,
             dst_crs=crs,
@@ -446,6 +558,11 @@ class LoadCollection(stacapi.LoadCollection):
 
         return LazyRasterStack(
             tasks=tasks,
-            date_name_fn=lambda asset: _props_to_datename(asset.properties),
-            allowed_exceptions=(TileOutsideBounds,),
+            key_fn=lambda asset: asset.id,
+            timestamp_fn=lambda asset: _props_to_datetime(asset.properties),
+            max_workers=MAX_THREADS,
+            allowed_exceptions=(
+                TileOutsideBounds,
+                ValueError,
+            ),
         )

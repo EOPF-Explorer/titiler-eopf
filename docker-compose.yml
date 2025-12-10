@@ -85,7 +85,7 @@ services:
       - AWS_REGION=${AWS_REGION}
       - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL}
       - TITILER_OPENEO_STAC_API_URL=https://api.explorer.eopf.copernicus.eu/stac
-      - TITILER_OPENEO_SERVICE_STORE_URL=/services/copernicus.json
+      - TITILER_OPENEO_STORE_URL=/services/copernicus.json
       - TITILER_EOPF_CACHE_HOST=cache
       - TITILER_EOPF_CACHE_ENABLE=True
     command: ["uvicorn", "titiler.eopf.openeo.main:app", "--host", "0.0.0.0", "--port", "8081", "--workers", "1"]

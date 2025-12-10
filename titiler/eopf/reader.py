@@ -654,7 +654,18 @@ class GeoZarrReader(BaseReader):
                 with XarrayReader(
                     self._get_variable(group, variable, sel=sel, method=method),
                 ) as da:
-                    return da.info()
+                    info = da.info()
+                    # Fix band descriptions to use actual variable name
+                    variable_name = (
+                        group_var.split(":")[-1] if ":" in group_var else group_var
+                    )
+                    if info.band_descriptions:
+                        # Replace the band description with the actual variable name
+                        info.band_descriptions = [
+                            (band_idx, variable_name)
+                            for band_idx, _ in info.band_descriptions
+                        ]
+                    return info
             except Exception as e:
                 logger.info(f"Failed to get info for variable '{group_var}': {e!s}")
                 return None
@@ -740,6 +751,10 @@ class GeoZarrReader(BaseReader):
                     if len(img.band_names) > 1:
                         raise ValueError("Can't use `expression` for multidim dataset")
                     img.band_names = [self._variable_idx[gv]]
+                else:
+                    # Extract variable name from group:variable format
+                    variable_name = gv.split(":")[-1] if ":" in gv else gv
+                    img.band_names = [variable_name]
 
                 img_stack.append(img)
 
@@ -827,6 +842,10 @@ class GeoZarrReader(BaseReader):
                     if len(img.band_names) > 1:
                         raise ValueError("Can't use `expression` for multidim dataset")
                     img.band_names = [self._variable_idx[gv]]
+                else:
+                    # Extract variable name from group:variable format
+                    variable_name = gv.split(":")[-1] if ":" in gv else gv
+                    img.band_names = [variable_name]
 
                 img_stack.append(img)
 
@@ -903,6 +922,10 @@ class GeoZarrReader(BaseReader):
                     if len(img.band_names) > 1:
                         raise ValueError("Can't use `expression` for multidim dataset")
                     img.band_names = [self._variable_idx[gv]]
+                else:
+                    # Extract variable name from group:variable format
+                    variable_name = gv.split(":")[-1] if ":" in gv else gv
+                    img.band_names = [variable_name]
 
                 img_stack.append(img)
 
@@ -959,6 +982,10 @@ class GeoZarrReader(BaseReader):
                     if len(pt.band_names) > 1:
                         raise ValueError("Can't use `expression` for multidim dataset")
                     pt.band_names = [self._variable_idx[gv]]
+                else:
+                    # Extract variable name from group:variable format
+                    variable_name = gv.split(":")[-1] if ":" in gv else gv
+                    pt.band_names = [variable_name]
 
                 pts_stack.append(pt)
 
@@ -1049,6 +1076,10 @@ class GeoZarrReader(BaseReader):
                     if len(img.band_names) > 1:
                         raise ValueError("Can't use `expression` for multidim dataset")
                     img.band_names = [self._variable_idx[gv]]
+                else:
+                    # Extract variable name from group:variable format
+                    variable_name = gv.split(":")[-1] if ":" in gv else gv
+                    img.band_names = [variable_name]
 
                 img_stack.append(img)
 
