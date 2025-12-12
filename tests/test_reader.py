@@ -7,9 +7,12 @@ import pytest
 import xarray
 from rio_tiler.errors import ExpressionMixingWarning
 
+from titiler.eopf import reader as reader_module
 from titiler.eopf.reader import GeoZarrReader, MissingVariables
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
+
+
 SENTINEL_2 = os.path.join(
     DATA_DIR,
     "eopf_geozarr",
@@ -242,3 +245,24 @@ def test_feature():
         15.117187499999853,
         37.996162679728194,
     ]
+
+
+def test_reader_failure_triggers_cache_invalidation(monkeypatch):
+    """GeoZarrReader failures should drop cached datatrees."""
+
+    calls = []
+
+    def fake_invalidate(src_path: str, **kwargs: object) -> None:  # type: ignore[no-untyped-def]
+        calls.append((src_path, kwargs))
+
+    def boom(self):  # type: ignore[no-untyped-def]
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(reader_module, "invalidate_open_dataset_cache", fake_invalidate)
+    monkeypatch.setattr(reader_module.GeoZarrReader, "_get_groups", boom)
+
+    with pytest.raises(RuntimeError):
+        reader_module.GeoZarrReader(SENTINEL_2)
+
+    assert len(calls) == 1
+    assert calls[0][0] == SENTINEL_2
