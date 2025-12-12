@@ -435,6 +435,7 @@ class STACReader(SimpleSTACReader):
             allowed_exceptions=(
                 TileOutsideBounds,
                 ValueError,
+                IndexError,
             ),
             **kwargs,
         )
@@ -564,5 +565,6 @@ class LoadCollection(stacapi.LoadCollection):
             allowed_exceptions=(
                 TileOutsideBounds,
                 ValueError,
+                IndexError,
             ),
         )
