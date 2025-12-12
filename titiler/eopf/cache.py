@@ -1,32 +1,43 @@
-""" "titiler.eopf cache."""
+"""titiler.eopf cache helpers."""
 
 from __future__ import annotations
 
-from pydantic import SecretStr
+from functools import lru_cache
+from typing import Any
 
 try:
     import redis
-
 except ImportError:  # pragma: nocover
     redis = None  # type: ignore
 
 
-class RedisCache:
-    """Redis connection pool singleton class."""
+@lru_cache(maxsize=None)
+def get_redis_pool(
+    *,
+    host: str,
+    port: int,
+    db: int,
+    username: str | None,
+    password: str | None,
+    ssl: bool,
+    max_connections: int | None = None,
+) -> "redis.ConnectionPool":
+    """Return a cached Redis connection pool for the given parameters."""
 
-    _instance = None
+    assert redis, "Redis package needs to be installed to use Redis Cache"
 
-    @classmethod
-    def get_instance(
-        cls, host: str, port: int, password: SecretStr | None
-    ) -> redis.ConnectionPool:
-        """Get the redis connection pool."""
-        assert redis, "Redis package needs to be installed to use Redis Cache"
-        if cls._instance is None:
-            cls._instance = redis.ConnectionPool(
-                host=host,
-                port=port,
-                password=password.get_secret_value() if password else None,
-                db=0,
-            )
-        return cls._instance
+    kwargs: dict[str, Any] = {
+        "host": host,
+        "port": port,
+        "db": db,
+    }
+    if username:
+        kwargs["username"] = username
+    if password:
+        kwargs["password"] = password
+    if ssl:
+        kwargs["ssl"] = True
+    if max_connections is not None:
+        kwargs["max_connections"] = max_connections
+
+    return redis.ConnectionPool(**kwargs)

@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 import math
 import os
-import pickle
 import re
 import warnings
-from functools import cache, cached_property, lru_cache
-from pathlib import Path
+from functools import cached_property
 from typing import Any, Callable, Dict, List, Literal, Union
-from urllib.parse import urlparse
+from urllib.parse import ParseResult
 
 import attr
 import obstore
@@ -37,17 +36,14 @@ from rio_tiler.reader import _get_width_height, _missing_size
 from rio_tiler.types import BBox
 from zarr.storage import ObjectStore
 
-from .cache import RedisCache
-from .settings import CacheSettings
+from .dataset_cache import (
+    DATASET_CACHE,
+    build_dataset_cache_key,
+    invalidate_open_dataset_cache,
+    normalize_src_path,
+)
 
 logger = logging.getLogger(__name__)
-
-try:
-    import redis
-
-except ImportError:  # pragma: nocover
-    redis = None  # type: ignore
-
 
 try:
     from obstore.auth.boto3 import Boto3CredentialProvider
@@ -59,33 +55,35 @@ except ImportError:
 sel_methods = Literal["nearest", "pad", "ffill", "backfill", "bfill"]
 
 
-@lru_cache(maxsize=1)
-def cache_settings() -> CacheSettings:
-    """This function returns a cached instance of the CacheSettings object."""
-    return CacheSettings()
-
-
 class MissingVariables(RioTilerError):
     """Missing Variables."""
 
 
-@cache
+def _uses_dataset_cache(opener: Callable[..., xarray.DataTree]) -> bool:
+    """Return True when the callable ultimately resolves to open_dataset."""
+
+    try:
+        target = inspect.unwrap(opener)
+    except ValueError:
+        target = opener
+    return target is open_dataset
+
+
 def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
-    """Open Xarray dataset
+    """Open an Xarray dataset using a lazy cache-aside strategy.
 
-    Args:
-        src_path (str): dataset path.
-
-    Returns:
-        xarray.DataTree
-
+    This follows the classic pattern (read -> cache -> reuse) recommended in
+    the AWS caching guidance so we only store entries that are actually
+    requested and let TTL-based expiry refresh stale data automatically.
     """
-    parsed = urlparse(src_path)
-    if not parsed.scheme:
-        src_path = str(Path(src_path).resolve())
-        src_path = "file://" + src_path
+    normalized_path, parsed = normalize_src_path(src_path)
+    cache_key = build_dataset_cache_key(normalized_path, kwargs)
 
-    def _open_dataset(src_path: str) -> xarray.DataTree:
+    cached_dt = DATASET_CACHE.get(cache_key)
+    if cached_dt is not None:
+        return cached_dt
+
+    def _open_dataset(src_path: str, parsed: ParseResult) -> xarray.DataTree:
         # Check if AWS_PROFILE is set and we're dealing with an S3 URL
         aws_profile = os.environ.get("AWS_PROFILE")
         if aws_profile and parsed.scheme == "s3" and HAS_BOTO3_PROVIDER:
@@ -109,7 +107,7 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
             zarr_store = ObjectStore(store=store, read_only=True)
         else:
             # Use the default obstore.store.from_url method
-            store = obstore.store.from_url(src_path)
+            store = obstore.store.from_url(normalized_path)
             zarr_store = ObjectStore(store=store, read_only=True)
 
         return xarray.open_datatree(
@@ -120,22 +118,8 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
             engine="zarr",
         )
 
-    if cache_settings().enable and cache_settings().host:
-        pool = RedisCache.get_instance(
-            cache_settings().host,  # type: ignore
-            cache_settings().port,
-            cache_settings().password,
-        )
-        cache_client = redis.Redis(connection_pool=pool)
-        if data_bytes := cache_client.get(src_path):
-            logger.info(f"Cache - found dataset in Cache {src_path}")
-            dt = pickle.loads(data_bytes)
-        else:
-            dt = _open_dataset(src_path)
-            logger.info(f"Cache - adding dataset in Cache {src_path}")
-            cache_client.set(src_path, pickle.dumps(dt), ex=300)
-    else:
-        dt = _open_dataset(src_path)
+    dt = _open_dataset(normalized_path, parsed)
+    DATASET_CACHE.set(cache_key, dt)
 
     return dt
 
@@ -284,53 +268,63 @@ class GeoZarrReader(BaseReader):
 
     def __attrs_post_init__(self):
         """Set bounds and CRS."""
-        if not self.datatree:
-            self.datatree = self.opener(self.input, **self.opener_options)
-
-        self.groups = self._get_groups()
-        self.variables = self._get_variables()
-
-        # There might not be global bounds/CRS for a Zarr Store
         try:
-            ds = self.datatree.to_dataset()
-            self.bounds = tuple(ds.rio.bounds())
-            self.crs = ds.rio.crs or "epsg:4326"
+            if not self.datatree:
+                self.datatree = self.opener(self.input, **self.opener_options)
 
-            # adds half x/y resolution on each values
-            # https://github.com/corteva/rioxarray/issues/645#issuecomment-1461070634
-            xres, yres = map(abs, ds.rio.resolution())
-            if self.crs == WGS84_CRS and (
-                self.bounds[0] + xres / 2 < -180
-                or self.bounds[1] + yres / 2 < -90
-                or self.bounds[2] - xres / 2 > 180
-                or self.bounds[3] - yres / 2 > 90
-            ):
-                raise InvalidGeographicBounds(
-                    f"Invalid geographic bounds: {self.bounds}. Must be within (-180, -90, 180, 90)."
+            self.groups = self._get_groups()
+            self.variables = self._get_variables()
+
+            # There might not be global bounds/CRS for a Zarr Store
+            try:
+                ds = self.datatree.to_dataset()
+                self.bounds = tuple(ds.rio.bounds())
+                self.crs = ds.rio.crs or "epsg:4326"
+
+                # adds half x/y resolution on each values
+                # https://github.com/corteva/rioxarray/issues/645#issuecomment-1461070634
+                xres, yres = map(abs, ds.rio.resolution())
+                if self.crs == WGS84_CRS and (
+                    self.bounds[0] + xres / 2 < -180
+                    or self.bounds[1] + yres / 2 < -90
+                    or self.bounds[2] - xres / 2 > 180
+                    or self.bounds[3] - yres / 2 > 90
+                ):
+                    raise InvalidGeographicBounds(
+                        f"Invalid geographic bounds: {self.bounds}. Must be within (-180, -90, 180, 90)."
+                    )
+
+                self.transform = ds.rio.transform()
+                self.height = ds.rio.height
+                self.width = ds.rio.width
+
+                # Default to user input or Dataset min/max zoom
+                self.minzoom = (
+                    self.minzoom if self.minzoom is not None else self._minzoom
+                )
+                self.maxzoom = (
+                    self.maxzoom if self.maxzoom is not None else self._maxzoom
                 )
 
-            self.transform = ds.rio.transform()
-            self.height = ds.rio.height
-            self.width = ds.rio.width
+            except:  # noqa
+                self.crs = WGS84_CRS
+                minx, miny, maxx, maxy = zip(
+                    *[self.get_bounds(group, self.crs) for group in self.groups]
+                )
+                self.bounds = (min(minx), min(miny), max(maxx), max(maxy))
 
-            # Default to user input or Dataset min/max zoom
-            self.minzoom = self.minzoom if self.minzoom is not None else self._minzoom
-            self.maxzoom = self.maxzoom if self.maxzoom is not None else self._maxzoom
+                # Default to user input or TMS min/max zoom
+                self.minzoom = (
+                    self.minzoom if self.minzoom is not None else self.tms.minzoom
+                )
+                self.maxzoom = (
+                    self.maxzoom if self.maxzoom is not None else self.tms.maxzoom
+                )
 
-        except:  # noqa
-            self.crs = WGS84_CRS
-            minx, miny, maxx, maxy = zip(
-                *[self.get_bounds(group, self.crs) for group in self.groups]
-            )
-            self.bounds = (min(minx), min(miny), max(maxx), max(maxy))
-
-            # Default to user input or TMS min/max zoom
-            self.minzoom = (
-                self.minzoom if self.minzoom is not None else self.tms.minzoom
-            )
-            self.maxzoom = (
-                self.maxzoom if self.maxzoom is not None else self.tms.maxzoom
-            )
+        except Exception:
+            if _uses_dataset_cache(self.opener):
+                invalidate_open_dataset_cache(self.input, **self.opener_options)
+            raise
 
     def _get_groups(self) -> List[str]:
         """return groups within the datatree."""
