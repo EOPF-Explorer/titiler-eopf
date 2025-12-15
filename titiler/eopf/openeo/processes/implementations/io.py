@@ -492,7 +492,7 @@ class LoadCollection(stacapi.LoadCollection):
         properties: Optional[dict] = None,
         # private arguments
         width: Optional[int] = 1024,
-        height: Optional[int] = None,
+        height: Optional[int] = 1024,
         tile_buffer: Optional[float] = None,
         options: Optional[Dict] = None,
     ) -> LazyRasterStack:
