@@ -2,6 +2,44 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2025-12-10
+
+### Added
+
+* Custom STAC API backend for EOPF Zarr collections with enhanced band management (#41)
+* Support for asset|band format in band references (e.g., "reflectance|b04") (#41)
+* Datacube extension with proper dimensions and variables for EOPF collections (#41)
+* Enhanced band extraction from multiple STAC asset formats (#41)
+* Improved error handling and resilient reading in case of missing data (#50)
+* Enhanced code organization in STACReader and LazyZarrRasterStack classes (#50)
+* Better logging for data loading traceability (#50)
+* Graceful handling of missing data to ensure processing continuity (#50)
+* IndexError to allowed exceptions for improved robustness (#52)
+* Folium dependency for notebook visualizations (#52)
+
+### Changed
+
+* Initialize cache settings in main application and openeo (#49)
+* Centralized cache management for better handling of cache settings (#49)
+* Updated titiler-openeo dependency to v0.7.0 (#50)
+* Fixed environment variable naming: `TITILER_OPENEO_SERVICE_STORE_URL` → `TITILER_OPENEO_STORE_URL` (#50)
+* Improved bounds checking with proper exception handling (#50)
+* Enhanced variable name handling in band descriptions (#50)
+* Updated OpenEO processing max items limit to 1000 (#50)
+* Updated STAC version from 1.0.0 to 1.1.0 (#41)
+* Enhanced dimension naming from "spectral" to "bands" for OpenEO processes (#41)
+* Updated notebooks to use the new band referencing format (#41)
+* Improved default height parameter in load_collection (set to 1024) (#41, #52)
+
+### Fixed
+
+* Resilient data reading with retry logic for network errors (#50)
+* Better handling of Zarr data loading edge cases (#50)
+* Improved variable filtering and band name extraction (#50)
+* Enhanced error handling in STACReader and LoadCollection classes (#52)
+* Better robustness with IndexError exception handling (#52)
+
+
 ## [0.3.0] - 2025-12-04
 
 ### Added
@@ -42,6 +80,8 @@
 
 * initial release
 
-[Unreleased]: <https://github.com/EOPF-Explorer/titiler-eopf/compare/0.2.0..main>
+[Unreleased]: <https://github.com/EOPF-Explorer/titiler-eopf/compare/0.4.0..main>
+[0.4.0]: <https://github.com/EOPF-Explorer/titiler-eopf/compare/0.3.0..0.4.0>
+[0.3.0]: <https://github.com/EOPF-Explorer/titiler-eopf/compare/0.2.0..0.3.0>
 [0.2.0]: <https://github.com/EOPF-Explorer/titiler-eopf/compare/0.1.0..0.2.0>
 [0.1.0]: <https://github.com/EOPF-Explorer/titiler-eopf/tree/0.1.0>
