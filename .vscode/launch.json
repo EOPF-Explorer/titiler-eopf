@@ -79,14 +79,15 @@
         "AWS_EC2_METADATA_DISABLED": "true",
         "TITILER_EOPF_STORE_URL": "s3://esa-zarr-sentinel-explorer-fra/tests-output/",
         "TITILER_OPENEO_STAC_API_URL": "http://api.explorer.eopf.copernicus.eu/stac/",
-        "TITILER_OPENEO_SERVICE_STORE_URL": "services/eopf-explorer.json",
+        "TITILER_OPENEO_STORE_URL": "services/eopf-explorer.json",
         "TITILER_OPENEO_API_DEBUG": "true",
         "TITILER_OPENEO_AUTH_METHOD": "oidc",
         "TITILER_OPENEO_AUTH_OIDC_CLIENT_ID": "cdse-public",
         "TITILER_OPENEO_AUTH_OIDC_WK_URL": "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/.well-known/openid-configuration",
         "TITILER_OPENEO_AUTH_OIDC_REDIRECT_URL": "http://localhost:8080/", // openEO editor login URL
         "TITILER_OPENEO_AUTH_OIDC_SCOPES": "openid profile email",
-        "TITILER_OPENEO_AUTH_OIDC_NAME_CLAIM": "preferred_username"
+        "TITILER_OPENEO_AUTH_OIDC_NAME_CLAIM": "preferred_username",
+        "TITILER_OPENEO_PROCESSING_MAX_ITEMS": "1000",
       }
     }
   ]

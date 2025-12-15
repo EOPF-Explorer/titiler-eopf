@@ -6,7 +6,6 @@ from rio_tiler.models import ImageData
 
 from titiler.eopf.openeo.processes import PROCESS_IMPLEMENTATIONS, process_registry
 from titiler.eopf.openeo.processes.implementations import load_zarr
-from titiler.eopf.reader import GeoZarrReader
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 OPTIMIZED_PYRAMID = os.path.join(
@@ -33,22 +32,49 @@ def test_load_zarr():
     """Test Load Zarr function."""
     zarr = load_zarr(OPTIMIZED_PYRAMID)
 
-    assert zarr._variables
-    assert "/measurements/reflectance:b02" in zarr._variables
+    # Check that we have at least one key (time slice)
+    assert len(zarr) > 0
 
-    # we only have one time slice
-    assert len(zarr._time_values) == 1
-    assert isinstance(zarr._dataset, GeoZarrReader)
+    # Check that we can access keys
+    keys = list(zarr.keys())
+    assert len(keys) == 1  # we only have one time slice
 
+    # Check that without variable filtering, we get all available bands
+    img_stack = list(zarr.values())
+    assert len(img_stack) == 1
+    assert isinstance(img_stack[0], ImageData)
+    # Should contain all bands from the default level: b02, b03, b04, b05, b06, b07, b08, b11, b12, b8a
+    expected_bands = [
+        "b02",
+        "b03",
+        "b04",
+        "b05",
+        "b06",
+        "b07",
+        "b08",
+        "b11",
+        "b12",
+        "b8a",
+    ]
+    assert sorted(img_stack[0].band_names) == sorted(
+        expected_bands
+    ), f"Expected {expected_bands} but got {img_stack[0].band_names}"
+
+    # Test with specific variables
     zarr = load_zarr(
         OPTIMIZED_PYRAMID,
         options={
             "variables": ["/measurements/reflectance:b02"],
         },
     )
-    assert zarr._variables
-    assert ["/measurements/reflectance:b02"] == zarr._variables
 
-    img_stac = list(zarr.values())
-    assert len(img_stac) == 1
-    assert isinstance(img_stac[0], ImageData)
+    # Check we can get values (ImageData objects)
+    img_stack = list(zarr.values())
+    assert len(img_stack) == 1
+    assert isinstance(img_stack[0], ImageData)
+
+    # Verify that variable filtering worked correctly
+    # Should only contain the b02 band that was requested
+    assert img_stack[0].band_names == [
+        "b02"
+    ], f"Expected ['b02'] but got {img_stack[0].band_names}"

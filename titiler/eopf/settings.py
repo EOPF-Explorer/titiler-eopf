@@ -1,6 +1,6 @@
 """API settings."""
 
-from pydantic import AnyUrl, ValidationInfo, field_validator, model_validator
+from pydantic import AnyUrl, SecretStr, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing_extensions import Self
 
@@ -66,6 +66,8 @@ class CacheSettings(BaseSettings):
     """Redis Cache Settings"""
 
     host: str | None = None
+    port: int = 6379
+    password: SecretStr | None = None
     enable: bool = False
 
     model_config = SettingsConfigDict(

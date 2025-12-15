@@ -1,0 +1,7 @@
+{{- /*
+Validation: internal Redis and external Redis cannot both be enabled.
+*/ -}}
+
+{{- if and .Values.redis.enabled .Values.redis.external.enabled }}
+{{- fail "Invalid configuration: redis.enabled=true and redis.external.enabled=true cannot both be set. Choose one." }}
+{{- end }}

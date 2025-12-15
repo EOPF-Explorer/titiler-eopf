@@ -66,3 +66,20 @@ Environment variables with secret override capability
   {{- end }}
 {{- end }}
 {{- end }}
+
+{{/*
+Redis specific additions
+*/}}
+{{- define "titiler-eopf.redis.fullname" -}}
+{{- printf "%s-redis" (include "titiler-eopf.fullname" .) -}}
+{{- end -}}
+
+{{- define "titiler-eopf.redis.labels" -}}
+{{ include "titiler-eopf.labels" . | nindent 0 }}
+app.kubernetes.io/component: redis
+{{- end -}}
+
+{{- define "titiler-eopf.redis.selectorLabels" -}}
+{{ include "titiler-eopf.selectorLabels" . | nindent 0 }}
+app.kubernetes.io/component: redis
+{{- end -}}

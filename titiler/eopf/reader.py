@@ -8,7 +8,7 @@ import os
 import pickle
 import re
 import warnings
-from functools import cache, cached_property
+from functools import cache, cached_property, lru_cache
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Union
 from urllib.parse import urlparse
@@ -58,7 +58,11 @@ except ImportError:
 
 sel_methods = Literal["nearest", "pad", "ffill", "backfill", "bfill"]
 
-cache_settings = CacheSettings()
+
+@lru_cache(maxsize=1)
+def cache_settings() -> CacheSettings:
+    """This function returns a cached instance of the CacheSettings object."""
+    return CacheSettings()
 
 
 class MissingVariables(RioTilerError):
@@ -116,8 +120,12 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
             engine="zarr",
         )
 
-    if cache_settings.enable and cache_settings.host:
-        pool = RedisCache.get_instance(cache_settings.host)
+    if cache_settings().enable and cache_settings().host:
+        pool = RedisCache.get_instance(
+            cache_settings().host,  # type: ignore
+            cache_settings().port,
+            cache_settings().password,
+        )
         cache_client = redis.Redis(connection_pool=pool)
         if data_bytes := cache_client.get(src_path):
             logger.info(f"Cache - found dataset in Cache {src_path}")
@@ -646,7 +654,18 @@ class GeoZarrReader(BaseReader):
                 with XarrayReader(
                     self._get_variable(group, variable, sel=sel, method=method),
                 ) as da:
-                    return da.info()
+                    info = da.info()
+                    # Fix band descriptions to use actual variable name
+                    variable_name = (
+                        group_var.split(":")[-1] if ":" in group_var else group_var
+                    )
+                    if info.band_descriptions:
+                        # Replace the band description with the actual variable name
+                        info.band_descriptions = [
+                            (band_idx, variable_name)
+                            for band_idx, _ in info.band_descriptions
+                        ]
+                    return info
             except Exception as e:
                 logger.info(f"Failed to get info for variable '{group_var}': {e!s}")
                 return None
@@ -732,6 +751,10 @@ class GeoZarrReader(BaseReader):
                     if len(img.band_names) > 1:
                         raise ValueError("Can't use `expression` for multidim dataset")
                     img.band_names = [self._variable_idx[gv]]
+                else:
+                    # Extract variable name from group:variable format
+                    variable_name = gv.split(":")[-1] if ":" in gv else gv
+                    img.band_names = [variable_name]
 
                 img_stack.append(img)
 
@@ -819,6 +842,10 @@ class GeoZarrReader(BaseReader):
                     if len(img.band_names) > 1:
                         raise ValueError("Can't use `expression` for multidim dataset")
                     img.band_names = [self._variable_idx[gv]]
+                else:
+                    # Extract variable name from group:variable format
+                    variable_name = gv.split(":")[-1] if ":" in gv else gv
+                    img.band_names = [variable_name]
 
                 img_stack.append(img)
 
@@ -895,6 +922,10 @@ class GeoZarrReader(BaseReader):
                     if len(img.band_names) > 1:
                         raise ValueError("Can't use `expression` for multidim dataset")
                     img.band_names = [self._variable_idx[gv]]
+                else:
+                    # Extract variable name from group:variable format
+                    variable_name = gv.split(":")[-1] if ":" in gv else gv
+                    img.band_names = [variable_name]
 
                 img_stack.append(img)
 
@@ -951,6 +982,10 @@ class GeoZarrReader(BaseReader):
                     if len(pt.band_names) > 1:
                         raise ValueError("Can't use `expression` for multidim dataset")
                     pt.band_names = [self._variable_idx[gv]]
+                else:
+                    # Extract variable name from group:variable format
+                    variable_name = gv.split(":")[-1] if ":" in gv else gv
+                    pt.band_names = [variable_name]
 
                 pts_stack.append(pt)
 
@@ -1041,6 +1076,10 @@ class GeoZarrReader(BaseReader):
                     if len(img.band_names) > 1:
                         raise ValueError("Can't use `expression` for multidim dataset")
                     img.band_names = [self._variable_idx[gv]]
+                else:
+                    # Extract variable name from group:variable format
+                    variable_name = gv.split(":")[-1] if ":" in gv else gv
+                    img.band_names = [variable_name]
 
                 img_stack.append(img)
 

@@ -12,13 +12,13 @@ from titiler.openeo.auth import get_auth
 from titiler.openeo.errors import ExceptionHandler, OpenEOException
 from titiler.openeo.factory import EndpointsFactory
 from titiler.openeo.middleware import DynamicCacheControlMiddleware
-from titiler.openeo.services import get_store, get_tile_store
+from titiler.openeo.services import get_store, get_tile_store, get_udp_store
 from titiler.openeo.settings import ApiSettings, AuthSettings, BackendSettings
+from titiler.openeo.stacapi import stacApiBackend
 
 from .. import __version__ as titiler_version
 from .processes import PROCESS_SPECIFICATIONS, process_registry
 from .processes.implementations.io import LoadCollection
-from .stacapi import stacApiBackend
 
 STAC_VERSION = "1.0.0"
 
@@ -31,11 +31,12 @@ try:
 except Exception as err:
     raise ValueError(
         "Missing required environment variables for BackendSettings. "
-        "Please set TITILER_OPENEO_STAC_API_URL and TITILER_OPENEO_SERVICE_STORE_URL"
+        "Please set TITILER_OPENEO_STAC_API_URL and TITILER_OPENEO_STORE_URL"
     ) from err
 
 stac_client = stacApiBackend(str(backend_settings.stac_api_url))  # type: ignore
-service_store = get_store(str(backend_settings.service_store_url))
+service_store = get_store(str(backend_settings.store_url))
+udp_store = get_udp_store(str(backend_settings.store_url))
 tile_store = (
     get_tile_store(backend_settings.tile_store_url)
     if backend_settings.tile_store_url
@@ -111,6 +112,7 @@ factory_args = {
     "process_registry": process_registry,
     "auth": auth,
     "default_services_file": backend_settings.default_services_file,
+    "udp_store": udp_store,
 }
 if tile_store:
     factory_args["tile_store"] = tile_store
