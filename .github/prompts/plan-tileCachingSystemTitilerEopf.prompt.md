@@ -446,15 +446,15 @@ curl -I "http://localhost:8000/collections/test/items/test/tiles/WebMercatorQuad
 ```
 
 ## Current Implementation Status
-- [x] Phase 1: Core Foundation *(✅ COMPLETED)*
-- [ ] Phase 2: S3+Redis Implementation *(In Progress)*  
-- [ ] Phase 3: Key Generation & Middleware *(Not Started)*
+- [x] Phase 1: Core Foundation *(✅ COMMITTED: 56392cd)*
+- [x] Phase 2: S3+Redis Implementation *(✅ COMMITTED: 1afa942)*  
+- [ ] Phase 3: Key Generation & Middleware *(In Progress)*
 - [ ] Phase 4: EOPF Integration *(Not Started)*
 - [ ] Phase 5: Invalidation API *(Not Started)*
 - [ ] Phase 6: Monitoring & OpenEO *(Not Started)*
 
 ## Resume Point
-**Current Focus**: Starting Phase 2.1 - Implement Redis cache backend
+**Current Focus**: Phase 3.1 - Implement cache key generation utilities
 
 ## Next Steps
 1. Create `titiler/cache/` directory structure
