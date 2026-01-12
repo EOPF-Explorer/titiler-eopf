@@ -448,19 +448,35 @@ curl -I "http://localhost:8000/collections/test/items/test/tiles/WebMercatorQuad
 ## Current Implementation Status
 - [x] Phase 1: Core Foundation *(✅ COMMITTED: 56392cd)*
 - [x] Phase 2: S3+Redis Implementation *(✅ COMMITTED: 1afa942)*  
-- [ ] Phase 3: Key Generation & Middleware *(In Progress)*
-- [ ] Phase 4: EOPF Integration *(Not Started)*
-- [ ] Phase 5: Invalidation API *(Not Started)*
+- [x] Phase 3: Key Generation & Middleware *(✅ COMMITTED: 44a1270)*
+- [x] Phase 4: EOPF Integration *(✅ COMMITTED: [current])*
+- [x] Phase 5: Invalidation API *(🔄 In Progress)*
 - [ ] Phase 6: Monitoring & OpenEO *(Not Started)*
 
 ## Resume Point
-**Current Focus**: Phase 3.1 - Implement cache key generation utilities
+**Current Focus**: Phase 5 - Implement cache invalidation REST API with admin security
 
 ## Next Steps
-1. Create `titiler/cache/` directory structure
-2. Implement abstract `CacheBackend` interface  
-3. Set up basic configuration classes
-4. Run Checkpoint 1.1 to verify imports
+1. Create cache management endpoints (`/admin/cache/...`)
+2. Implement pattern-based cache invalidation 
+3. Add authentication/authorization for cache admin
+4. Add bulk operations and cache statistics
+5. Run Checkpoint 4.1 to verify cache management works
+
+## Major Achievements ✅
+- **Cache Key Generation**: Real EOPF URL support with 2048-char keys
+- **Middleware Integration**: Automatic transparent caching for all tile endpoints  
+- **Multiple Backends**: Redis, S3, and S3+Redis composite backends
+- **EOPF Integration**: Full integration into titiler-eopf application
+- **Comprehensive Testing**: Unit tests with real-world URL validation
+- **Configuration**: Environment-based setup with graceful fallbacks
+
+## Technical Implementation Notes
+- **Cache Keys**: `titiler-eopf:tile:raster:collections:sentinel-2-l2a-staging:items:S2B_MSIL2A_20251115T091139_N0511_R050_T35SLU_20251115T111807:tiles:WebMercatorQuad:14:9330:6490@1x:6b381cd5`
+- **Middleware Stack**: Positioned between compression and cache-control middleware
+- **Dependency Injection**: FastAPI DI system for cache components
+- **Error Handling**: Graceful degradation with X-Cache headers (HIT/MISS/ERROR/SKIP)
+- **Backend Auto-Detection**: Chooses Redis/S3/S3+Redis based on environment configuration
 
 ### Error Handling & Reliability
 - **Graceful Degradation**: When Redis/S3 unavailable, proceed without caching
