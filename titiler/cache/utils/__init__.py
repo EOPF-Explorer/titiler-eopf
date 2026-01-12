@@ -1,3 +1,5 @@
 """Cache utilities and helpers."""
 
-__all__: list[str] = []
+from .keys import CacheKeyGenerator
+
+__all__ = ["CacheKeyGenerator"]
