@@ -135,15 +135,15 @@ class EOPFCacheSettings(BaseCacheSettings):
 
         if self.backend == "redis":
             if not self.redis:
-                self.redis = CacheRedisSettings()
+                self.redis = CacheRedisSettings(_env_prefix="TITILER_EOPF_CACHE_REDIS_")
         elif self.backend == "s3":
             if not self.s3:
-                self.s3 = CacheS3Settings()
+                self.s3 = CacheS3Settings(_env_prefix="TITILER_EOPF_CACHE_S3_")
         elif self.backend == "s3-redis":
             if not self.redis:
-                self.redis = CacheRedisSettings()
+                self.redis = CacheRedisSettings(_env_prefix="TITILER_EOPF_CACHE_REDIS_")
             if not self.s3:
-                self.s3 = CacheS3Settings()
+                self.s3 = CacheS3Settings(_env_prefix="TITILER_EOPF_CACHE_S3_")
         else:
             raise ValueError(f"Unsupported cache backend: {self.backend}")
 

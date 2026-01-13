@@ -80,13 +80,31 @@ class S3StorageBackend(CacheBackend):
         """Get S3 client with isolated credentials."""
         if self._client is None:
             try:
+                # Import botocore config for EC2 metadata configuration
+                import os
+
+                from botocore.config import Config
+
                 # Create session with isolated credentials
                 session = boto3.Session(**self._credentials)
+
+                # Configure client to disable EC2 metadata service if requested
+                client_config = None
+                if os.getenv("AWS_EC2_METADATA_DISABLED", "").lower() == "true":
+                    client_config = Config(
+                        region_name=self.region,
+                        # Disable instance metadata service
+                        metadata_service_timeout=1,
+                        metadata_service_num_attempts=1,
+                    )
+                else:
+                    client_config = Config(region_name=self.region)
 
                 self._client = session.client(
                     "s3",
                     region_name=self.region,
                     endpoint_url=self.endpoint_url,
+                    config=client_config,
                     **self.client_kwargs,
                 )
 

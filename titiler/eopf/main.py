@@ -87,8 +87,10 @@ def setup_cache_system():
         and cache_settings.redis
         and cache_settings.s3
     ):
+        redis_backend = RedisCacheBackend(cache_settings.redis)
+        s3_backend = S3StorageBackend(cache_settings.s3)
         cache_backend = S3RedisCacheBackend(
-            redis_settings=cache_settings.redis, s3_settings=cache_settings.s3
+            redis_backend=redis_backend, s3_backend=s3_backend
         )
         logger.info(
             f"S3+Redis cache configured: Redis {cache_settings.redis.host}, S3 {cache_settings.s3.bucket}"
@@ -192,7 +194,6 @@ if cache_backend and cache_key_generator:
     cache_admin = create_cache_admin_router(cache_backend, cache_key_generator)
     app.include_router(
         cache_admin,
-        prefix="/admin/cache",
         tags=["Cache Admin"],
     )
 
