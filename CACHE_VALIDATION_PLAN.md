@@ -66,6 +66,37 @@ Redis TTL countdown: 3025s → 3020s  ✅ Time-based expiration working
 - Admin API `/admin/cache/keys` endpoint returns "Not Found" 
 - Pattern invalidation may need URL pattern adjustments
 
+## ✅ PATTERN INVALIDATION COMPLETED - January 13, 2026 14:20 UTC
+
+### Admin API Investigation & Fix:
+- **Root Issue**: Admin API checked for `delete_pattern()` but backend implements `clear_pattern()`
+- **Solution**: Added `clear_pattern()` method check to admin invalidation logic
+- **Fix Commit**: `f35e4c2` - Admin API pattern invalidation enabled
+
+### Pattern Invalidation Test Results:
+- **Admin Status Endpoint**: ✅ `/admin/cache/status` working correctly
+- **Admin Invalidation Endpoint**: ✅ `/admin/cache/invalidate` operational  
+- **Pattern Matching**: ✅ `*sentinel-2-l2a*` invalidated 3 items (Redis + S3)
+- **Performance**: ✅ ~1.4s execution time for Redis metadata + S3 data clearing
+- **Post-Invalidation**: ✅ Previously cached tiles now return MISS
+- **Normal Operation**: ✅ MISS → HIT behavior restored after invalidation
+
+### Working Admin API Commands:
+```bash
+# Check cache status
+curl -s "http://localhost:8000/admin/cache/status" | jq .
+
+# Invalidate by pattern  
+curl -X POST "http://localhost:8000/admin/cache/invalidate" \
+  -H "Content-Type: application/json" \
+  -d '{"patterns": ["*sentinel-2-l2a*"]}'
+
+# Clear all cache
+curl -X POST "http://localhost:8000/admin/cache/invalidate" \
+  -H "Content-Type: application/json" \
+  -d '{"patterns": ["*"]}'
+```
+
 ## 1. 🔧 Infrastructure Validation
 
 ### 1.1 Service Health Check
