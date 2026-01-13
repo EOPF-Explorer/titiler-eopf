@@ -89,6 +89,7 @@ spec:
                 {{- end }}
               {{- end }}
             {{- end }}
+            {{- end }}
             {{- /* S3 Configuration */ -}}
             {{- if or (eq .Values.cache.backend "s3") (eq .Values.cache.backend "s3-redis") }}
             - name: TITILER_EOPF_CACHE_S3_BUCKET
