@@ -2,7 +2,7 @@ apiVersion: v2
 appVersion: "0.4.0"
 description: A dynamic Web Map tile server for EOPF data with caching support
 name: titiler-eopf
-version: 0.3.0
+version: 0.4.0
 icon: https://raw.githubusercontent.com/EOPF-Explorer/titiler-eopf/main/docs/img/landing.png
 maintainers:
   - name: emmanuelmathot
