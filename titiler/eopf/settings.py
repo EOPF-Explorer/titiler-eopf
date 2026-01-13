@@ -85,7 +85,9 @@ class CacheSettings(BaseSettings):
     def check_cache_settings(self) -> Self:
         """Check if cache is disabled."""
         if self.enable and not self.host:
-            raise ValueError("Redis CACHE_HOST must be set when cache is enabled")
+            raise ValueError(
+                "Redis TITILER_EOPF_CACHE_REDIS_HOST must be set when cache is enabled"
+            )
 
         return self
 
