@@ -132,8 +132,9 @@ class TestTileCacheMiddleware:
         cache_backend = MockCacheBackend()
         key_generator = CacheKeyGenerator("test-app")
 
-        # Pre-populate cache with proper base64 encoded content
+        # Pre-populate cache with proper JSON serialized content (as the middleware does)
         import base64
+        import json
 
         tile_data = b"cached tile data"
         cached_response_data = {
@@ -144,21 +145,29 @@ class TestTileCacheMiddleware:
             "media_type": "image/png",
         }
 
-        # Mock request for key generation
+        # Mock request for key generation - make it match exactly what the middleware expects
         class MockRequest:
             def __init__(self):
                 self.method = "GET"
+                # Create a proper URL mock that returns a string when str() is called
                 self.url = MagicMock()
                 self.url.path = "/tiles/10/512/384.png"
+                self.url.__str__ = lambda self: "http://localhost/tiles/10/512/384.png"
                 self.query_params = {}
 
         # Generate the actual cache key that would be used
         test_request = MockRequest()
         expected_key = key_generator.from_request(test_request, "tile")
-        cache_backend.storage[expected_key] = cached_response_data
 
+        # Store serialized data like the middleware does
+        cache_backend.storage[expected_key] = json.dumps(cached_response_data).encode(
+            "utf-8"
+        )
+
+        # Create a simple mock app
+        app = Starlette()
         middleware = TileCacheMiddleware(
-            app=None, cache_backend=cache_backend, key_generator=key_generator
+            app=app, cache_backend=cache_backend, key_generator=key_generator
         )
 
         request = MockRequest()
@@ -169,13 +178,24 @@ class TestTileCacheMiddleware:
         # Process request
         response = await middleware.dispatch(request, call_next)
 
-        # Verify cache hit
+        # Verify response type first
         assert (
             response is not None
         ), f"Response is None, cache keys: {list(cache_backend.storage.keys())}"
+
+        # Debug: Check if this is a real Response or mock
+        response_type = type(response).__name__
+        assert (
+            response_type == "Response"
+        ), f"Expected Response object, got {response_type}: {response}"
+
+        # Now check headers
         assert hasattr(
             response, "headers"
         ), f"Response doesn't have headers: {response}"
+        assert (
+            "X-Cache" in response.headers
+        ), f"X-Cache header not found in headers: {list(response.headers.keys()) if hasattr(response.headers, 'keys') else 'no keys method'}"
         assert response.headers["X-Cache"] == "HIT"
         assert response.status_code == 200
         assert response.body == tile_data  # Check content is properly decoded
