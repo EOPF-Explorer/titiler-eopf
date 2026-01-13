@@ -101,22 +101,23 @@ factory = TilerFactory(
 
 ### S3+Redis Cache Architecture
 
-#### Two-Tier Design Overview
-The S3+Redis cache backend implements a sophisticated 2-tier architecture that optimizes for both performance and cost-effectiveness:
+#### Redis-Authoritative Design Overview
+The S3+Redis cache backend implements a Redis-authoritative architecture that prioritizes consistency and simplicity:
 
-**Tier 1 (Redis): Metadata & Fast Access**
-- Stores cache metadata: TTL, content-type, content-length, creation timestamp
-- Provides millisecond-latency lookups for cache hit/miss determination
-- Handles cache key management and expiration logic
+**Redis: Authoritative Cache Source**
+- Stores cache metadata and TTL as the single source of truth
+- Handles all cache expiration logic and key management
+- Must be persistent across application restarts
+- Recommended: Redis persistence (RDB + AOF) enabled
 - Memory-efficient: Only stores small metadata objects (~100-200 bytes each)
 
-**Tier 2 (S3): Bulk Data Storage**
+**S3: Bulk Data Storage**
 - Stores actual tile data (PNG/JPEG images, typically 5-50KB each)
-- Provides cost-effective storage for large tile datasets (1TB+)
+- Provides cost-effective storage for large tile datasets (1TB+)  
 - Leverages S3's durability and availability guarantees
-- Supports object tagging for TTL metadata redundancy
+- Orphaned objects cleaned by scheduled agent when Redis metadata missing
 
-#### Cache Flow & Self-Healing Behavior
+#### Cache Flow & Consistency Model
 
 **Cache Hit Flow:**
 ```python
@@ -197,23 +198,19 @@ The `allkeys-lru` Redis eviction policy is not only safe but recommended for thi
 - S3 object tags store TTL for offline/recovery scenarios
 - Background cleanup processes handle expired objects in both tiers
 
-**Monitoring & Observability:**
-- Cache hit/miss/error rates tracked per tier
-- Redis memory usage and eviction metrics
-- S3 storage utilization and request patterns
-- Recovery event frequency and success rates
+#### Performance & Consistency Benefits
 
-#### Performance Characteristics
+**Simplified Logic:**
+- **Single source of truth**: Redis metadata determines cache validity
+- **No synchronization complexity**: S3 is subordinate to Redis
+- **Predictable behavior**: Cache hits/misses follow Redis state exactly
+- **No recovery logic needed**: Missing S3 data = simple cache miss
 
-**Typical Latencies:**
-- **Cache hit (hot)**: 1-3ms (Redis metadata + S3 GET)
-- **Cache hit (warm)**: 5-15ms (Redis metadata miss, S3 object recovery)
-- **Cache miss**: 200-500ms (EOPF data processing + dual storage)
-
-**Throughput Scaling:**
-- **Redis**: 10,000+ metadata ops/second per instance
-- **S3**: 3,500+ GET/PUT ops/second per prefix
-- **Combined**: Scales horizontally with Redis cluster and S3 prefix sharding
+**Operational Characteristics:**
+- **Cache hit (Redis + S3)**: 1-3ms Redis + 5-15ms S3 = ~6-18ms total
+- **Cache miss (Redis only)**: 1-3ms Redis lookup, immediate response
+- **Cleanup overhead**: Periodic S3 scanning, minimal impact on cache performance
+- **Storage efficiency**: Periodic cleanup prevents S3 cost accumulation
 
 ### Isolated S3 Cache Configuration
 The cache S3 backend will use separate configuration from the data source S3, requiring dedicated environment variables:
@@ -569,7 +566,52 @@ curl -I "http://localhost:8000/collections/test/items/test/tiles/WebMercatorQuad
 - [x] Phase 5: Invalidation API *(✅ COMMITTED: 303e5be)*
 - [x] **Phase 5 Post-Implementation**: S3 Backend Resolution *(✅ COMMITTED: d068c4b, f35e4c2)*
 - [x] **Phase 7: Helm Chart Cache Configuration** *(✅ COMMITTED: dbce382)*
+- [ ] Phase 8: S3 Cleanup Agent *(Not Started)*
 - [ ] Phase 6: Monitoring & OpenEO *(Not Started)*
+
+### Phase 8: S3 Cleanup Agent for Redis-Authoritative Architecture
+- [ ] **8.1** Create S3 cleanup agent module
+  - [ ] `titiler/cache/cleanup/s3_agent.py` - Standalone cleanup agent
+  - [ ] Redis connection for metadata key checks
+  - [ ] S3 client for object listing and deletion
+  - [ ] Configurable scan batch size and cleanup intervals
+  - [ ] Comprehensive logging and metrics collection
+
+- [ ] **8.2** Implement orphaned object detection
+  - [ ] S3 bucket scanning with pagination support
+  - [ ] Redis metadata existence checks (`cache:metadata:{key}`)
+  - [ ] Orphan detection logic with configurable grace period
+  - [ ] Batch deletion for performance optimization
+
+- [ ] **8.3** Add Kubernetes CronJob deployment
+  - [ ] `helm/charts/templates/cronjob-cleanup.yaml` - CronJob manifest
+  - [ ] Environment variable configuration for cleanup agent
+  - [ ] Resource limits and scheduling configuration
+  - [ ] Integration with existing cache configuration values
+
+- [ ] **8.4** Create monitoring and alerting
+  - [ ] Cleanup metrics export (objects scanned, deleted, errors)
+  - [ ] Dead letter queue for failed deletions
+  - [ ] Alert thresholds for excessive orphan detection
+  - [ ] Dashboard integration with cache system metrics
+
+**🧪 Checkpoint 8.1**: S3 cleanup agent removes orphaned objects
+```bash
+# Manual cleanup agent test
+python -m titiler.cache.cleanup.s3_agent --dry-run
+
+# Verify orphan detection
+# 1. Create cache entry with S3 object
+# 2. Delete Redis metadata manually  
+# 3. Run cleanup agent
+# 4. Verify S3 object was deleted
+```
+
+**Dev Notes Phase 8**:
+- Cleanup agent should be conservative (grace period before deletion)
+- Support dry-run mode for testing and validation
+- Implement exponential backoff for Redis/S3 errors
+- Consider multi-bucket support for different cache environments
 
 ### Phase 7: Helm Chart Cache Configuration Support ✅ COMPLETED
 - [x] **7.1** Update Helm chart values.yaml structure
