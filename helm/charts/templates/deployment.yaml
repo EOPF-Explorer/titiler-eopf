@@ -148,9 +148,13 @@ spec:
           args:
             - "redis-server"
             - "--appendonly"
+            {{- if .Values.redis.persistence.enabled }}
             - "yes"
             - "--dir"
             - "/data"
+            {{- else }}
+            - "no"
+            {{- end }}
           {{- if and .Values.redis.auth.enabled (or .Values.redis.auth.password .Values.redis.auth.existingSecret) }}
             - "--requirepass"
             - "$(REDIS_PASSWORD)"
