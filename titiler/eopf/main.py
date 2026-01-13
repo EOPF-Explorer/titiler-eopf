@@ -73,13 +73,29 @@ def setup_cache_system():
 
     # Create cache backend based on configuration
     if cache_settings.backend == "redis" and cache_settings.redis:
-        cache_backend = RedisCacheBackend(cache_settings.redis)
+        cache_backend = RedisCacheBackend(
+            host=cache_settings.redis.host,
+            port=cache_settings.redis.port,
+            password=cache_settings.redis.password.get_secret_value()
+            if cache_settings.redis.password
+            else None,
+            db=cache_settings.redis.db,
+        )
         logger.info(
             f"Redis cache configured: {cache_settings.redis.host}:{cache_settings.redis.port}"
         )
 
     elif cache_settings.backend == "s3" and cache_settings.s3:
-        cache_backend = S3StorageBackend(cache_settings.s3)
+        cache_backend = S3StorageBackend(
+            bucket=cache_settings.s3.bucket,
+            region=cache_settings.s3.region,
+            endpoint_url=cache_settings.s3.endpoint_url,
+            access_key_id=cache_settings.s3.access_key_id,
+            secret_access_key=cache_settings.s3.secret_access_key.get_secret_value()
+            if cache_settings.s3.secret_access_key
+            else None,
+            session_token=cache_settings.s3.session_token,
+        )
         logger.info(f"S3 cache configured: {cache_settings.s3.bucket}")
 
     elif (
@@ -87,8 +103,25 @@ def setup_cache_system():
         and cache_settings.redis
         and cache_settings.s3
     ):
-        redis_backend = RedisCacheBackend(cache_settings.redis)
-        s3_backend = S3StorageBackend(cache_settings.s3)
+        redis_backend = RedisCacheBackend(
+            host=cache_settings.redis.host,
+            port=cache_settings.redis.port,
+            password=cache_settings.redis.password.get_secret_value()
+            if cache_settings.redis.password
+            else None,
+            db=cache_settings.redis.db,
+        )
+        s3_backend = S3StorageBackend(
+            bucket=cache_settings.s3.bucket,
+            region=cache_settings.s3.region,
+            endpoint_url=cache_settings.s3.endpoint_url,
+            access_key_id=cache_settings.s3.access_key_id,
+            secret_access_key=cache_settings.s3.secret_access_key.get_secret_value()
+            if cache_settings.s3.secret_access_key
+            else None,
+            session_token=cache_settings.s3.session_token,
+        )
+        s3_backend = S3StorageBackend.from_settings(cache_settings.s3)
         cache_backend = S3RedisCacheBackend(
             redis_backend=redis_backend, s3_backend=s3_backend
         )

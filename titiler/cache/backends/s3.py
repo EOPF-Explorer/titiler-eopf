@@ -9,11 +9,35 @@ from ..settings import CacheS3Settings
 
 try:
     import boto3
-    from botocore.exceptions import ClientError, NoCredentialsError
+    from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError
+
+    BOTO3_AVAILABLE = True
 except ImportError:  # pragma: nocover
     boto3 = None  # type: ignore
-    ClientError = Exception  # type: ignore
-    NoCredentialsError = Exception  # type: ignore
+    BOTO3_AVAILABLE = False
+
+    # Only create fallback classes if boto3 is not available
+    class BotoCoreError(Exception):  # type: ignore
+        """Fallback BotoCoreError when boto3 is not available."""
+
+        def __init__(self, *args, **kwargs):
+            """Initialize fallback exception."""
+            super().__init__(*args, **kwargs)
+
+    class ClientError(Exception):  # type: ignore
+        """Fallback ClientError when boto3 is not available."""
+
+        def __init__(self, *args, **kwargs):
+            """Initialize fallback exception."""
+            super().__init__(*args, **kwargs)
+
+    class NoCredentialsError(Exception):  # type: ignore
+        """Fallback NoCredentialsError when boto3 is not available."""
+
+        def __init__(self, *args, **kwargs):
+            """Initialize fallback exception."""
+            super().__init__(*args, **kwargs)
+
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +70,7 @@ class S3StorageBackend(CacheBackend):
             session_token: AWS session token (for temporary credentials)
             **kwargs: Additional boto3 client parameters
         """
-        if boto3 is None:
+        if not BOTO3_AVAILABLE:
             raise ImportError("boto3 package is required for S3StorageBackend")
 
         self.bucket = bucket
@@ -80,39 +104,82 @@ class S3StorageBackend(CacheBackend):
         """Get S3 client with isolated credentials."""
         if self._client is None:
             try:
-                # Import botocore config for EC2 metadata configuration
                 import os
 
                 from botocore.config import Config
 
-                # Create session with isolated credentials
-                session = boto3.Session(**self._credentials)
-
-                # Configure client to disable EC2 metadata service if requested
-                client_config = None
+                # Completely bypass credential chain if AWS_EC2_METADATA_DISABLED is set
                 if os.getenv("AWS_EC2_METADATA_DISABLED", "").lower() == "true":
+                    logger.debug(
+                        "EC2 metadata disabled - using explicit credential configuration"
+                    )
+
+                    # Configuration to completely disable EC2 metadata service
                     client_config = Config(
                         region_name=self.region,
-                        # Disable instance metadata service
-                        metadata_service_timeout=1,
-                        metadata_service_num_attempts=1,
+                        retries={
+                            "max_attempts": 0
+                        },  # Disable retries for faster failure
+                        parameter_validation=False,  # Skip parameter validation
                     )
+
+                    # Use explicit credentials only, no credential chain
+                    client_kwargs = {
+                        "service_name": "s3",
+                        "region_name": self.region,
+                        "config": client_config,
+                    }
+
+                    # Add endpoint URL if specified
+                    if self.endpoint_url:
+                        client_kwargs["endpoint_url"] = self.endpoint_url
+
+                    # Add explicit credentials if provided
+                    if self._credentials:
+                        client_kwargs.update(self._credentials)
+                    else:
+                        # If no explicit credentials, try environment variables only
+                        env_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+                        env_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+                        env_session_token = os.getenv("AWS_SESSION_TOKEN")
+
+                        if env_access_key and env_secret_key:
+                            client_kwargs["aws_access_key_id"] = env_access_key
+                            client_kwargs["aws_secret_access_key"] = env_secret_key
+                            if env_session_token:
+                                client_kwargs["aws_session_token"] = env_session_token
+                        else:
+                            # If no credentials available at all, create client anyway and let boto3 handle it
+                            logger.warning(
+                                "No explicit credentials found with EC2 metadata disabled - boto3 will handle credential resolution"
+                            )
+                            pass
+
+                    # Add any additional client kwargs
+                    client_kwargs.update(self.client_kwargs)
+
+                    # Create client directly without going through credential chain
+                    self._client = boto3.client(**client_kwargs)
+
                 else:
+                    # Use normal boto3 credential chain
+                    logger.debug("Using standard boto3 credential chain")
                     client_config = Config(region_name=self.region)
 
-                self._client = session.client(
-                    "s3",
-                    region_name=self.region,
-                    endpoint_url=self.endpoint_url,
-                    config=client_config,
-                    **self.client_kwargs,
-                )
+                    self._client = boto3.client(
+                        "s3",
+                        region_name=self.region,
+                        endpoint_url=self.endpoint_url,
+                        config=client_config,
+                        **self._credentials,
+                        **self.client_kwargs,
+                    )
 
                 # Test access to bucket
                 self._client.head_bucket(Bucket=self.bucket)
                 logger.debug(f"Connected to S3 bucket: {self.bucket}")
 
-            except (ClientError, NoCredentialsError) as e:
+            except (BotoCoreError, ClientError, NoCredentialsError) as e:
                 logger.error(f"Failed to connect to S3: {e}")
                 raise CacheBackendUnavailable(f"S3 unavailable: {e}") from e
 
@@ -166,8 +233,8 @@ class S3StorageBackend(CacheBackend):
             logger.debug(f"S3 Cache HIT for key: {key} ({len(data)} bytes)")
             return data
 
-        except ClientError as e:
-            if e.response["Error"]["Code"] == "NoSuchKey":
+        except (BotoCoreError, ClientError) as e:
+            if hasattr(e, "response") and e.response["Error"]["Code"] == "NoSuchKey":
                 self._stats["misses"] += 1
                 logger.debug(f"S3 Cache MISS for key: {key}")
                 return None
@@ -224,9 +291,19 @@ class S3StorageBackend(CacheBackend):
         except CacheBackendUnavailable:
             self._stats["errors"] += 1
             return False
+        except (BotoCoreError, ClientError) as e:
+            self._stats["errors"] += 1
+            import traceback
+
+            logger.error(f"S3 set error for key {key}: {e}")
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            return False
         except Exception as e:
             self._stats["errors"] += 1
+            import traceback
+
             logger.error(f"S3 set error for key {key}: {e}")
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return False
 
     async def delete(self, key: str) -> bool:
@@ -243,8 +320,11 @@ class S3StorageBackend(CacheBackend):
                 client.delete_object(Bucket=self.bucket, Key=object_key)
                 logger.debug(f"S3 Cache DELETE for key: {key}")
                 return True
-            except ClientError as e:
-                if e.response["Error"]["Code"] == "NoSuchKey":
+            except (BotoCoreError, ClientError) as e:
+                if (
+                    hasattr(e, "response")
+                    and e.response["Error"]["Code"] == "NoSuchKey"
+                ):
                     return False
                 raise
 
@@ -266,8 +346,8 @@ class S3StorageBackend(CacheBackend):
             client.head_object(Bucket=self.bucket, Key=object_key)
             return True
 
-        except ClientError as e:
-            if e.response["Error"]["Code"] == "NoSuchKey":
+        except (BotoCoreError, ClientError) as e:
+            if hasattr(e, "response") and e.response["Error"]["Code"] == "NoSuchKey":
                 return False
             self._stats["errors"] += 1
             logger.error(f"S3 exists error for key {key}: {e}")
