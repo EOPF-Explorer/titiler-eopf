@@ -62,7 +62,7 @@ spec:
             - name: TITILER_EOPF_CACHE_REDIS_DATABASE
               value: {{ .Values.cache.redis.external.database | quote }}
               {{- end }}
-              {{- /* Redis Authentication */ -}}
+              {{- /* Redis Authentication - External Redis */ -}}
               {{- if .Values.cache.redis.external.auth.enabled }}
                 {{- if .Values.cache.redis.external.auth.existingSecret }}
             - name: TITILER_EOPF_CACHE_REDIS_PASSWORD
@@ -73,15 +73,20 @@ spec:
                 {{- else if .Values.cache.redis.external.auth.password }}
             - name: TITILER_EOPF_CACHE_REDIS_PASSWORD
               value: {{ .Values.cache.redis.external.auth.password | quote }}
-              {{- else if .Values.cache.redis.internal.enabled }}
-                {{- if and .Values.redis.auth.enabled (or .Values.redis.auth.password .Values.redis.auth.existingSecret) }}
+                {{- end }}
+              {{- end }}
+              {{- /* Redis Authentication - Internal Redis */ -}}
+              {{- if and .Values.cache.redis.internal.enabled .Values.redis.auth.enabled }}
+                {{- if .Values.redis.auth.existingSecret }}
             - name: TITILER_EOPF_CACHE_REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ if .Values.redis.auth.existingSecret }}{{ .Values.redis.auth.existingSecret }}{{ else }}{{ include "titiler-eopf.redis.fullname" . }}{{ end }}
-                  key: {{ default "redis-password" .Values.redis.auth.existingSecretKey }}
+                  name: {{ .Values.redis.auth.existingSecret }}
+                  key: {{ .Values.redis.auth.existingSecretKey | default "redis-password" }}
+                {{- else if .Values.redis.auth.password }}
+            - name: TITILER_EOPF_CACHE_REDIS_PASSWORD
+              value: {{ .Values.redis.auth.password | quote }}
                 {{- end }}
-              {{- end }}
               {{- end }}
             {{- end }}
             {{- /* S3 Configuration */ -}}
