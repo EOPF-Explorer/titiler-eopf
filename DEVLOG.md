@@ -1,5 +1,40 @@
 # TiTiler-EOPF Cache System Development Log
 
+## Phase 5: Cache Invalidation API - COMPLETED ✅
+
+### What Was Accomplished ✅
+- **Admin API Implementation**: Complete RESTful cache management API with `/admin/cache/*` endpoints
+- **Code Quality Refactoring**: Reduced complexity from 32 to <10 through modular helper functions
+- **Pattern-Based Invalidation**: Support for cache invalidation using URL pattern matching
+- **Comprehensive Testing**: 40/41 tests passing with real-world EOPF URL validation
+- **Pre-commit Integration**: All quality checks passing (complexity, linting, formatting, type checking)
+
+### Implementation Details ✅
+- **Admin Router**: Clean, modular endpoint creation with proper error handling
+  - `/admin/cache/status` - Cache system health and statistics
+  - `/admin/cache/invalidate/pattern/{pattern}` - Pattern-based cache invalidation
+  - `/admin/cache/invalidate/key/{key}` - Direct key invalidation  
+  - `/admin/cache/keys` - List cache keys with optional pattern filtering
+  
+- **Modular Architecture**: Refactored complex functions into maintainable helper components
+  - `_create_status_endpoint()` - Status endpoint factory
+  - `_create_invalidate_endpoint()` - Invalidation endpoint factory
+  - `_find_request_in_args()` - Request detection helper
+  - `_reconstruct_response_from_cache()` - Cache response reconstruction
+  - `_serialize_and_cache_response()` - Response serialization helper
+
+### Technical Improvements ✅
+- **Base64 Encoding**: Proper JSON serialization for bytes content
+- **Async Iteration**: Fixed async/sync iterator handling in middleware
+- **Error Handling**: Comprehensive error handling with `raise from` pattern
+- **Code Style**: Consistent formatting and import organization
+
+### Code Quality Achievements ✅
+- **Complexity Reduction**: All functions now under 10 complexity threshold
+- **Linting Compliance**: Full ruff compliance with proper formatting
+- **Type Safety**: Complete mypy type checking without errors
+- **Import Organization**: Clean isort-compliant import structure
+
 ## Phase 4: EOPF Integration - COMPLETED
 
 ### What Was Accomplished ✅

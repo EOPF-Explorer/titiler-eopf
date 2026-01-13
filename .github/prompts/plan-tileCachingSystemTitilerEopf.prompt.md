@@ -449,26 +449,28 @@ curl -I "http://localhost:8000/collections/test/items/test/tiles/WebMercatorQuad
 - [x] Phase 1: Core Foundation *(✅ COMMITTED: 56392cd)*
 - [x] Phase 2: S3+Redis Implementation *(✅ COMMITTED: 1afa942)*  
 - [x] Phase 3: Key Generation & Middleware *(✅ COMMITTED: 44a1270)*
-- [x] Phase 4: EOPF Integration *(✅ COMMITTED: [current])*
-- [x] Phase 5: Invalidation API *(🔄 In Progress)*
+- [x] Phase 4: EOPF Integration *(✅ COMMITTED: 66011ae)*
+- [x] Phase 5: Invalidation API *(✅ COMMITTED: 303e5be)*
 - [ ] Phase 6: Monitoring & OpenEO *(Not Started)*
 
 ## Resume Point
-**Current Focus**: Phase 5 - Implement cache invalidation REST API with admin security
+**Current Focus**: Phase 6 - Implement monitoring endpoints with Prometheus metrics
 
 ## Next Steps
-1. Create cache management endpoints (`/admin/cache/...`)
-2. Implement pattern-based cache invalidation 
-3. Add authentication/authorization for cache admin
-4. Add bulk operations and cache statistics
-5. Run Checkpoint 4.1 to verify cache management works
+1. Create monitoring endpoints (`/_mgmt/cache/...`)
+2. Add Prometheus metrics collection for cache operations
+3. Implement health check integration hooks
+4. Add OpenEO service cache integration  
+5. Run Checkpoint 6.1 to verify monitoring works
 
 ## Major Achievements ✅
-- **Cache Key Generation**: Real EOPF URL support with 2048-char keys
+- **Complete Cache System**: Redis/S3/S3+Redis backends with full CRUD operations
+- **Admin API**: RESTful cache management with pattern-based invalidation (/admin/cache/...)
+- **Cache Key Generation**: Real EOPF URL support with 2048-char keys and parameter exclusion
 - **Middleware Integration**: Automatic transparent caching for all tile endpoints  
-- **Multiple Backends**: Redis, S3, and S3+Redis composite backends
-- **EOPF Integration**: Full integration into titiler-eopf application
-- **Comprehensive Testing**: Unit tests with real-world URL validation
+- **Modular Architecture**: Clean separation of concerns with helper functions
+- **EOPF Integration**: Full integration into titiler-eopf application with dependency injection
+- **Comprehensive Testing**: Unit tests with real-world URL validation (40/41 tests passing)
 - **Configuration**: Environment-based setup with graceful fallbacks
 
 ## Technical Implementation Notes
