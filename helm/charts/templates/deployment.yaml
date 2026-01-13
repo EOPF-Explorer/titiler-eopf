@@ -73,6 +73,12 @@ spec:
                 {{- else if .Values.cache.redis.external.auth.password }}
             - name: TITILER_EOPF_CACHE_REDIS_PASSWORD
               value: {{ .Values.cache.redis.external.auth.password | quote }}
+                {{- else if and .Values.redis.auth.enabled (or .Values.redis.auth.password .Values.redis.auth.existingSecret) }}
+            - name: TITILER_EOPF_CACHE_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ if .Values.redis.auth.existingSecret }}{{ .Values.redis.auth.existingSecret }}{{ else }}{{ include "titiler-eopf.redis.fullname" . }}{{ end }}
+                  key: {{ default "redis-password" .Values.redis.auth.existingSecretKey }}
                 {{- end }}
               {{- end }}
             {{- end }}
