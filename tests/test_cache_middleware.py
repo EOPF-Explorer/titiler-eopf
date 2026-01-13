@@ -132,28 +132,34 @@ class TestTileCacheMiddleware:
         cache_backend = MockCacheBackend()
         key_generator = CacheKeyGenerator("test-app")
 
-        # Pre-populate cache
+        # Pre-populate cache with proper base64 encoded content
+        import base64
+
+        tile_data = b"cached tile data"
         cached_response_data = {
-            "content": b"cached tile data",
+            "content": base64.b64encode(tile_data).decode("ascii"),
+            "content_type": "base64",
             "status_code": 200,
             "headers": {"Content-Type": "image/png"},
             "media_type": "image/png",
         }
-        cache_backend.storage["test-app:tile:tiles:10:512:384:hash123"] = (
-            cached_response_data
-        )
 
-        middleware = TileCacheMiddleware(
-            app=None, cache_backend=cache_backend, key_generator=key_generator
-        )
-
-        # Mock request
+        # Mock request for key generation
         class MockRequest:
             def __init__(self):
                 self.method = "GET"
                 self.url = MagicMock()
                 self.url.path = "/tiles/10/512/384.png"
                 self.query_params = {}
+
+        # Generate the actual cache key that would be used
+        test_request = MockRequest()
+        expected_key = key_generator.from_request(test_request, "tile")
+        cache_backend.storage[expected_key] = cached_response_data
+
+        middleware = TileCacheMiddleware(
+            app=None, cache_backend=cache_backend, key_generator=key_generator
+        )
 
         request = MockRequest()
 
@@ -164,8 +170,15 @@ class TestTileCacheMiddleware:
         response = await middleware.dispatch(request, call_next)
 
         # Verify cache hit
+        assert (
+            response is not None
+        ), f"Response is None, cache keys: {list(cache_backend.storage.keys())}"
+        assert hasattr(
+            response, "headers"
+        ), f"Response doesn't have headers: {response}"
         assert response.headers["X-Cache"] == "HIT"
         assert response.status_code == 200
+        assert response.body == tile_data  # Check content is properly decoded
         call_next.assert_not_called()  # Should not call next handler on cache hit
 
     @pytest.mark.asyncio

@@ -94,6 +94,31 @@ class CacheBackend(abc.ABC):
         """
         return {}
 
+    async def scan_keys(self, pattern: str, limit: Optional[int] = None) -> list[str]:
+        """Scan for keys matching pattern.
+
+        Args:
+            pattern: Redis glob pattern to match
+            limit: Maximum number of keys to return
+
+        Returns:
+            List of matching cache keys.
+            Base implementation returns empty list.
+        """
+        return []
+
+    async def get_key_info(self, key: str) -> Optional[dict[str, Any]]:
+        """Get information about a specific cache key.
+
+        Args:
+            key: Cache key to get info for
+
+        Returns:
+            Dictionary with key information (ttl, size, created_at, etc.)
+            or None if key doesn't exist or info not available.
+        """
+        return None
+
 
 class CacheError(Exception):
     """Base exception for cache-related errors."""

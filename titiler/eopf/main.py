@@ -14,7 +14,11 @@ from starlette.requests import Request
 from starlette.templating import Jinja2Templates
 from starlette_cramjam.middleware import CompressionMiddleware
 
-from titiler.cache import CacheKeyGenerator, TileCacheMiddleware
+from titiler.cache import (
+    CacheKeyGenerator,
+    TileCacheMiddleware,
+    create_cache_admin_router,
+)
 from titiler.cache.backends.redis import RedisCacheBackend
 from titiler.cache.backends.s3 import S3StorageBackend
 from titiler.cache.backends.s3_redis import S3RedisCacheBackend
@@ -182,6 +186,15 @@ app.include_router(
     tags=["ColorMaps"],
 )
 TITILER_CONFORMS_TO.update(cmaps.conforms_to)
+
+# Cache Admin endpoints
+if cache_backend and cache_key_generator:
+    cache_admin = create_cache_admin_router(cache_backend, cache_key_generator)
+    app.include_router(
+        cache_admin,
+        prefix="/admin/cache",
+        tags=["Cache Admin"],
+    )
 
 add_exception_handlers(app, DEFAULT_STATUS_CODES)
 

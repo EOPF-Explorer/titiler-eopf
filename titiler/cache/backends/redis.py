@@ -251,6 +251,87 @@ class RedisCacheBackend(CacheBackend):
             db=settings.db,
         )
 
+    async def scan_keys(self, pattern: str, limit: Optional[int] = None) -> list[str]:
+        """Scan for keys matching pattern using Redis SCAN."""
+        try:
+            client = await self._get_client()
+            keys = []
+
+            cursor = 0
+            while True:
+                cursor, batch_keys = await client.scan(
+                    cursor=cursor,
+                    match=pattern,
+                    count=100,  # Redis SCAN batch size
+                )
+
+                keys.extend(
+                    [
+                        key.decode("utf-8") if isinstance(key, bytes) else key
+                        for key in batch_keys
+                    ]
+                )
+
+                if cursor == 0:  # Full scan complete
+                    break
+
+                if limit and len(keys) >= limit:
+                    keys = keys[:limit]
+                    break
+
+            return keys
+
+        except CacheBackendUnavailable:
+            raise
+        except Exception as e:
+            logger.error(f"Redis scan error for pattern {pattern}: {e}")
+            raise CacheError(f"Failed to scan keys for pattern {pattern}: {e}") from e
+
+    async def get_key_info(self, key: str) -> Optional[dict[str, Any]]:
+        """Get Redis key information."""
+        try:
+            client = await self._get_client()
+
+            # Check if key exists
+            if not await client.exists(key):
+                return None
+
+            # Get TTL (-1 = no expiry, -2 = doesn't exist)
+            ttl = await client.ttl(key)
+            ttl_seconds = ttl if ttl >= 0 else None
+
+            # Get key type and try to get size
+            key_type = await client.type(key)
+            size_bytes = None
+
+            try:
+                # For string values, get memory usage (Redis 4.0+)
+                if hasattr(client, "memory_usage"):
+                    size_bytes = await client.memory_usage(key)
+                else:
+                    # Fallback: estimate size for strings
+                    if key_type == "string":
+                        value = await client.strlen(key)
+                        size_bytes = value
+            except Exception:
+                pass  # Size estimation failed, skip
+
+            return {
+                "key": key,
+                "type": key_type.decode("utf-8")
+                if isinstance(key_type, bytes)
+                else key_type,
+                "ttl": ttl_seconds,
+                "size": size_bytes,
+                "exists": True,
+            }
+
+        except CacheBackendUnavailable:
+            raise
+        except Exception as e:
+            logger.error(f"Redis key info error for key {key}: {e}")
+            return None
+
     async def close(self):
         """Close Redis connection."""
         if self._client:

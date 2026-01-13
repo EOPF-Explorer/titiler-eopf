@@ -194,9 +194,17 @@ class TileCacheMiddleware(BaseHTTPMiddleware):
                 response_data = cached_data
 
             if isinstance(response_data, dict):
+                content = response_data.get("content", b"")
+
+                # Decode base64 content if needed
+                if response_data.get("content_type") == "base64":
+                    import base64
+
+                    content = base64.b64decode(content)
+
                 # Reconstruct response
                 response = Response(
-                    content=response_data.get("content", b""),
+                    content=content,
                     status_code=response_data.get("status_code", 200),
                     headers=response_data.get("headers", {}),
                     media_type=response_data.get("media_type"),
@@ -223,15 +231,35 @@ class TileCacheMiddleware(BaseHTTPMiddleware):
         try:
             # Read response body
             response_body = b""
-            async for chunk in response.body_iterator:
-                response_body += chunk
 
-            # Replace original response body iterator
-            response.body_iterator = iter([response_body])
+            # Handle both async and sync iterators
+            if hasattr(response.body_iterator, "__aiter__"):
+                async for chunk in response.body_iterator:
+                    response_body += chunk
+            else:
+                for chunk in response.body_iterator:
+                    response_body += chunk
+
+            # Replace original response body iterator with an async generator
+            async def body_generator():
+                yield response_body
+
+            response.body_iterator = body_generator()
+
+            # Convert bytes to base64 for JSON serialization
+            if isinstance(response_body, bytes):
+                import base64
+
+                content_data = base64.b64encode(response_body).decode("ascii")
+                content_type = "base64"
+            else:
+                content_data = response_body
+                content_type = "text"
 
             # Serialize response data
             response_data = {
-                "content": response_body,
+                "content": content_data,
+                "content_type": content_type,
                 "status_code": response.status_code,
                 "headers": dict(response.headers),
                 "media_type": response.media_type,

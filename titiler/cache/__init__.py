@@ -7,6 +7,7 @@ invalidation, and integrated health check monitoring.
 
 __version__ = "0.1.0"
 
+from .admin import create_cache_admin_router
 from .backends.base import CacheBackend
 from .decorators import CacheManager, cache_control, cached_metadata, cached_tile
 from .middleware import CacheControlMiddleware, TileCacheMiddleware
@@ -25,4 +26,5 @@ __all__ = [
     "cached_metadata",
     "cache_control",
     "CacheManager",
+    "create_cache_admin_router",
 ]
