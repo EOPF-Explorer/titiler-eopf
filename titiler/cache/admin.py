@@ -107,6 +107,9 @@ def _create_invalidate_endpoint(cache_backend: CacheBackend):
                     if hasattr(cache_backend, "delete_pattern"):
                         count = await cache_backend.delete_pattern(pattern)
                         invalidated_count += count
+                    elif hasattr(cache_backend, "clear_pattern"):
+                        count = await cache_backend.clear_pattern(pattern)
+                        invalidated_count += count
                     elif hasattr(cache_backend, "scan_keys"):
                         keys = await cache_backend.scan_keys(pattern)
                         for key in keys:
