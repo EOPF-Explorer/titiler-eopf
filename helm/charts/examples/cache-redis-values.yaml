@@ -1,0 +1,33 @@
+# Development configuration with Redis-only cache using internal Redis deployment
+cache:
+  enabled: true
+  backend: redis
+  
+  # Redis configuration with internal deployment
+  redis:
+    internal:
+      enabled: true
+    external:
+      enabled: false
+  
+  # Cache settings
+  ttl:
+    default: 3600
+    tiles: 3600
+    datasets: 1800
+  
+  namespace: "dev-cache"
+  
+  # Admin API
+  admin:
+    enabled: true
+    path_prefix: "/admin/cache"
+
+# Enable internal Redis deployment using legacy configuration
+redis:
+  enabled: false  # Will be handled by cache.redis.internal.enabled
+
+# Application environment
+env:
+  LOG_LEVEL: "INFO"
+  TITILER_EOPF_STORE_URL: "s3://dev-bucket/data/"

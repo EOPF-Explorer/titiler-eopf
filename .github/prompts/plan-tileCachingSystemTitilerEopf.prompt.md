@@ -451,17 +451,91 @@ curl -I "http://localhost:8000/collections/test/items/test/tiles/WebMercatorQuad
 - [x] Phase 3: Key Generation & Middleware *(✅ COMMITTED: 44a1270)*
 - [x] Phase 4: EOPF Integration *(✅ COMMITTED: 66011ae)*
 - [x] Phase 5: Invalidation API *(✅ COMMITTED: 303e5be)*
+- [x] **Phase 5 Post-Implementation**: S3 Backend Resolution *(✅ COMMITTED: d068c4b, f35e4c2)*
 - [ ] Phase 6: Monitoring & OpenEO *(Not Started)*
+- [ ] **Phase 7: Helm Chart Cache Configuration** *(🔄 PLANNED)*
+
+### Phase 7: Helm Chart Cache Configuration Support
+- [ ] **7.1** Update Helm chart values.yaml structure
+  - [ ] Add dedicated `cache` section with all backend options
+  - [ ] Configure Redis subchart integration (internal/external)
+  - [ ] Add S3 configuration with proper secret management
+  - [ ] Include TTL, namespace, and advanced cache settings
+
+- [ ] **7.2** Enhance chart templates for cache environment variables  
+  - [ ] Update ConfigMap template with cache settings
+  - [ ] Enhance Secret template for S3/Redis credentials
+  - [ ] Modify Deployment template with cache environment variables
+  - [ ] Add helper functions for cache configuration generation
+
+- [ ] **7.3** Add chart validation and dependencies
+  - [ ] Implement backend validation (redis/s3/s3-redis)
+  - [ ] Add Redis/S3 configuration cross-validation
+  - [ ] Include optional Redis subchart dependency
+  - [ ] Create validation rules for authentication requirements
+
+- [ ] **7.4** Create documentation and examples
+  - [ ] Add cache configuration examples for different environments
+  - [ ] Document Redis-only, S3-only, and S3+Redis hybrid scenarios
+  - [ ] Create migration guide from environment variables to Helm values
+  - [ ] Add troubleshooting guide for cache configuration issues
+
+**🧪 Checkpoint 7.1**: Helm chart cache configuration validation
+```bash
+# Test Redis-only configuration
+helm template . -f examples/cache-redis-values.yaml | grep CACHE
+
+# Test S3+Redis hybrid configuration
+helm template . -f examples/cache-s3-redis-values.yaml | grep CACHE
+
+# Validate backend type validation
+helm template . --set cache.backend=invalid 2>&1 | grep "Invalid cache backend"
+```
+
+**Cache Configuration Examples**:
+```yaml
+# Development: Redis-only with internal Redis
+cache:
+  enabled: true
+  backend: redis
+redis:
+  enabled: true
+
+# Staging: External Redis  
+cache:
+  enabled: true
+  backend: redis
+  redis:
+    external:
+      enabled: true
+      host: "redis.staging.example.com"
+
+# Production: S3+Redis hybrid
+cache:
+  enabled: true
+  backend: s3-redis
+  s3:
+    enabled: true
+    bucket: "prod-tile-cache"
+    auth:
+      existingSecret: "s3-cache-secret"
+  redis:
+    external:
+      enabled: true
+      host: "cache-cluster.prod.amazonaws.com"
+```
 
 ## Resume Point
-**Current Focus**: Phase 6 - Implement monitoring endpoints with Prometheus metrics
+**Current Focus**: Phase 7 - Helm chart cache configuration for production deployment
 
 ## Next Steps
-1. Create monitoring endpoints (`/_mgmt/cache/...`)
-2. Add Prometheus metrics collection for cache operations
-3. Implement health check integration hooks
-4. Add OpenEO service cache integration  
-5. Run Checkpoint 6.1 to verify monitoring works
+1. Update values.yaml with dedicated cache section structure
+2. Enhance chart templates for cache environment variable injection
+3. Add Redis subchart dependency and validation rules
+4. Create cache configuration examples and documentation  
+5. Run Checkpoint 7.1 to verify Helm template generation works
+
+**Post Phase 7**: Return to Phase 6 for monitoring endpoints implementation
 
 ## Major Achievements ✅
 - **Complete Cache System**: Redis/S3/S3+Redis backends with full CRUD operations

@@ -1,0 +1,50 @@
+# Staging configuration with external Redis-only cache  
+cache:
+  enabled: true
+  backend: redis
+  
+  # Redis configuration with external service
+  redis:
+    internal:
+      enabled: false
+    external:
+      enabled: true
+      host: "redis.staging.example.com"
+      port: 6379
+      database: 1
+      auth:
+        enabled: true
+        existingSecret: "staging-redis-secret"
+        existingSecretKey: "password"
+  
+  # Cache settings for staging
+  ttl:
+    default: 1800  # 30 minutes
+    tiles: 3600    # 1 hour
+    datasets: 900  # 15 minutes
+  
+  namespace: "staging-cache"
+  exclude_params:
+    - "debug"
+    - "timestamp"
+    - "user_id"
+    - "session"
+  
+  # Admin API
+  admin:
+    enabled: true
+    path_prefix: "/admin/cache"
+
+# Application environment
+env:
+  LOG_LEVEL: "DEBUG"
+  TITILER_EOPF_STORE_URL: "s3://staging-bucket/data/"
+
+# Staging resource allocation
+resources:
+  limits:
+    cpu: 1
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
