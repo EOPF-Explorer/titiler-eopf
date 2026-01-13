@@ -99,6 +99,122 @@ factory = TilerFactory(
 )
 ```
 
+### S3+Redis Cache Architecture
+
+#### Two-Tier Design Overview
+The S3+Redis cache backend implements a sophisticated 2-tier architecture that optimizes for both performance and cost-effectiveness:
+
+**Tier 1 (Redis): Metadata & Fast Access**
+- Stores cache metadata: TTL, content-type, content-length, creation timestamp
+- Provides millisecond-latency lookups for cache hit/miss determination
+- Handles cache key management and expiration logic
+- Memory-efficient: Only stores small metadata objects (~100-200 bytes each)
+
+**Tier 2 (S3): Bulk Data Storage**
+- Stores actual tile data (PNG/JPEG images, typically 5-50KB each)
+- Provides cost-effective storage for large tile datasets (1TB+)
+- Leverages S3's durability and availability guarantees
+- Supports object tagging for TTL metadata redundancy
+
+#### Cache Flow & Self-Healing Behavior
+
+**Cache Hit Flow:**
+```python
+# 1. Check Redis for metadata
+metadata = redis_client.hgetall(f"cache:metadata:{cache_key}")
+if metadata and not_expired(metadata['ttl']):
+    # 2. Fetch tile data from S3
+    tile_data = s3_client.get_object(Bucket=bucket, Key=cache_key)
+    return tile_data, metadata
+```
+
+**Cache Miss Flow:**
+```python
+# 1. Generate tile from EOPF data
+tile_data = await original_tile_function(...)
+
+# 2. Store in both tiers atomically
+redis_client.hset(f"cache:metadata:{cache_key}", {
+    'ttl': current_time + cache_ttl,
+    'content_type': 'image/png',
+    'content_length': len(tile_data)
+})
+s3_client.put_object(
+    Bucket=bucket, 
+    Key=cache_key, 
+    Body=tile_data,
+    Tagging=f"ttl={ttl_timestamp}"
+)
+```
+
+**Self-Healing & Inconsistency Recovery:**
+- **Redis metadata exists, S3 object missing**: Treats as cache miss, regenerates tile
+- **S3 object exists, Redis metadata missing**: Validates S3 object TTL, restores Redis metadata if valid
+- **TTL mismatch between tiers**: Uses Redis TTL as authoritative, updates S3 tags if needed
+- **Redis unavailable**: Falls back to S3-only mode with object tagging for TTL
+- **S3 unavailable**: Falls back to Redis-only mode with reduced cache capacity
+
+#### Redis Eviction Policy: allkeys-lru Safety
+
+**Why allkeys-lru is Safe and Beneficial:**
+
+The `allkeys-lru` Redis eviction policy is not only safe but recommended for this architecture because:
+
+1. **Metadata-Only Storage**: Redis only contains small metadata objects, not the actual tile data
+2. **S3 as Ground Truth**: Tile data remains safely stored in S3 even when Redis metadata is evicted
+3. **Automatic Recovery**: When Redis metadata is evicted but S3 object exists:
+   ```python
+   # Recovery flow when Redis metadata missing
+   if not redis_metadata:
+       s3_object = s3_client.head_object(Bucket=bucket, Key=cache_key)
+       if s3_object and not_expired(s3_object['TagSet']['ttl']):
+           # Restore Redis metadata from S3 object
+           redis_client.hset(f"cache:metadata:{cache_key}", {
+               'ttl': s3_object['TagSet']['ttl'],
+               'content_type': s3_object['ContentType'],
+               'content_length': s3_object['ContentLength']
+           })
+   ```
+
+4. **Memory Efficiency**: LRU eviction prevents Redis memory exhaustion, ensuring consistent performance
+5. **Cost Optimization**: Evicted metadata can always be reconstructed from S3, avoiding expensive data regeneration
+
+**Eviction Benefits:**
+- **Prevents Redis OOM**: Automatic memory management prevents Redis crashes
+- **Maintains Hot Data**: Frequently accessed tiles keep their fast Redis lookups
+- **Graceful Degradation**: Evicted tiles become S3-only temporarily, still cached vs regenerating
+- **No Data Loss**: Actual tile data never lost due to Redis eviction
+
+#### Cache Consistency & TTL Management
+
+**Atomic Operations:**
+- Cache writes use Redis transactions to ensure metadata/data consistency
+- S3 object tagging provides TTL redundancy for disaster recovery
+- Failed writes to either tier result in complete rollback
+
+**TTL Synchronization:**
+- Redis metadata TTL is authoritative for active cache decisions
+- S3 object tags store TTL for offline/recovery scenarios
+- Background cleanup processes handle expired objects in both tiers
+
+**Monitoring & Observability:**
+- Cache hit/miss/error rates tracked per tier
+- Redis memory usage and eviction metrics
+- S3 storage utilization and request patterns
+- Recovery event frequency and success rates
+
+#### Performance Characteristics
+
+**Typical Latencies:**
+- **Cache hit (hot)**: 1-3ms (Redis metadata + S3 GET)
+- **Cache hit (warm)**: 5-15ms (Redis metadata miss, S3 object recovery)
+- **Cache miss**: 200-500ms (EOPF data processing + dual storage)
+
+**Throughput Scaling:**
+- **Redis**: 10,000+ metadata ops/second per instance
+- **S3**: 3,500+ GET/PUT ops/second per prefix
+- **Combined**: Scales horizontally with Redis cluster and S3 prefix sharding
+
 ### Isolated S3 Cache Configuration
 The cache S3 backend will use separate configuration from the data source S3, requiring dedicated environment variables:
 
