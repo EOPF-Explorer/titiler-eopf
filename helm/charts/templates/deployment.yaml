@@ -131,22 +131,6 @@ spec:
             - name: TITILER_EOPF_CACHE_ADMIN_PREFIX
               value: {{ .Values.cache.admin.path_prefix | quote }}
             {{- end }}
-          {{- /* Legacy Redis Support for Backward Compatibility */ -}}
-          {{- else if or .Values.redis.enabled .Values.redis.external.enabled }}
-            - name: TITILER_EOPF_CACHE_HOST
-              value: '{{- if .Values.redis.enabled -}}{{ include "titiler-eopf.redis.fullname" . }}{{- else -}}{{ .Values.redis.external.host | quote }}{{- end }}'
-            - name: TITILER_EOPF_CACHE_PORT
-              value: "{{- if .Values.redis.enabled -}}{{ .Values.redis.service.port }}{{- else -}}{{ .Values.redis.external.port }}{{- end }}"
-            - name: TITILER_EOPF_CACHE_ENABLE
-              value: "true"
-          {{- end }}
-          {{- if and .Values.redis.auth.enabled (or .Values.redis.auth.password .Values.redis.auth.existingSecret) }}
-            - name: TITILER_EOPF_CACHE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ if .Values.redis.auth.existingSecret }}{{ .Values.redis.auth.existingSecret }}{{ else }}{{ include "titiler-eopf.redis.fullname" . }}{{ end }}
-                  key: {{ default "redis-password" .Values.redis.auth.existingSecretKey }}
-          {{- end }}
           ports:
             - name: http
               containerPort: 80

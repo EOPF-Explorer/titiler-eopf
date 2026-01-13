@@ -78,7 +78,7 @@ class CacheSettings(BaseSettings):
     enable: bool = False
 
     model_config = SettingsConfigDict(
-        env_prefix="TITILER_EOPF_CACHE_", env_file=".env", extra="ignore"
+        env_prefix="TITILER_EOPF_CACHE_REDIS_", env_file=".env", extra="ignore"
     )
 
     @model_validator(mode="after")
