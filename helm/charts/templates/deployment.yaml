@@ -74,7 +74,7 @@ spec:
             - name: TITILER_EOPF_CACHE_REDIS_PASSWORD
               value: {{ .Values.cache.redis.external.auth.password | quote }}
               {{- else if .Values.cache.redis.internal.enabled }}
-                {{- else if and .Values.redis.auth.enabled (or .Values.redis.auth.password .Values.redis.auth.existingSecret) }}
+                {{- if and .Values.redis.auth.enabled (or .Values.redis.auth.password .Values.redis.auth.existingSecret) }}
             - name: TITILER_EOPF_CACHE_REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
