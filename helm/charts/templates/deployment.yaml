@@ -44,11 +44,6 @@ spec:
               value: "true"
             - name: TITILER_EOPF_CACHE_BACKEND
               value: {{ .Values.cache.backend | quote }}
-          {{- else }}
-            - name: TITILER_EOPF_CACHE_ENABLE
-              value: "false"
-          {{- end }}
-          {{- if .Values.cache.enabled }}
             - name: TITILER_EOPF_CACHE_TTL_DEFAULT
               value: {{ .Values.cache.ttl.default | quote }}
             - name: TITILER_EOPF_CACHE_TTL_TILES
@@ -68,12 +63,17 @@ spec:
               value: {{ .Values.cache.redis.external.database | quote }}
               {{- end }}
               {{- /* Redis Authentication */ -}}
-              {{- if eq (include "titiler-eopf.redis.auth.enabled" .) "true" }}
+              {{- if .Values.cache.redis.external.auth.enabled }}
+                {{- if .Values.cache.redis.external.auth.existingSecret }}
             - name: TITILER_EOPF_CACHE_REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "titiler-eopf.redis.auth.secretName" . }}
-                  key: {{ include "titiler-eopf.redis.auth.secretPasswordKey" . }}
+                  name: {{ .Values.cache.redis.external.auth.existingSecret }}
+                  key: {{ .Values.cache.redis.external.auth.existingSecretKey | default "redis-password" }}
+                {{- else if .Values.cache.redis.external.auth.password }}
+            - name: TITILER_EOPF_CACHE_REDIS_PASSWORD
+              value: {{ .Values.cache.redis.external.auth.password | quote }}
+                {{- end }}
               {{- end }}
             {{- end }}
             {{- /* S3 Configuration */ -}}
@@ -131,6 +131,21 @@ spec:
             - name: TITILER_EOPF_CACHE_ADMIN_PREFIX
               value: {{ .Values.cache.admin.path_prefix | quote }}
             {{- end }}
+          {{- /* Legacy Redis Support for Backward Compatibility */ -}}
+          {{- else if or .Values.redis.enabled .Values.redis.external.enabled }}
+            - name: TITILER_EOPF_CACHE_HOST
+              value: '{{- if .Values.redis.enabled -}}{{ include "titiler-eopf.redis.fullname" . }}{{- else -}}{{ .Values.redis.external.host | quote }}{{- end }}'
+            - name: TITILER_EOPF_CACHE_PORT
+              value: "{{- if .Values.redis.enabled -}}{{ .Values.redis.service.port }}{{- else -}}{{ .Values.redis.external.port }}{{- end }}"
+            - name: TITILER_EOPF_CACHE_ENABLE
+              value: "true"
+          {{- end }}
+          {{- if and .Values.redis.auth.enabled (or .Values.redis.auth.password .Values.redis.auth.existingSecret) }}
+            - name: TITILER_EOPF_CACHE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ if .Values.redis.auth.existingSecret }}{{ .Values.redis.auth.existingSecret }}{{ else }}{{ include "titiler-eopf.redis.fullname" . }}{{ end }}
+                  key: {{ default "redis-password" .Values.redis.auth.existingSecretKey }}
           {{- end }}
           ports:
             - name: http
@@ -189,3 +204,74 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+---
+{{- if or .Values.redis.enabled .Values.cache.redis.internal.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "titiler-eopf.redis.fullname" . }}
+  labels:
+    {{- include "titiler-eopf.redis.labels" . | nindent 4 }}
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "titiler-eopf.redis.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "titiler-eopf.redis.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: redis
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          ports:
+            - name: redis
+              containerPort: {{ .Values.redis.service.port }}
+          {{- if and .Values.redis.auth.enabled (or .Values.redis.auth.password .Values.redis.auth.existingSecret) }}
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ if .Values.redis.auth.existingSecret }}{{ .Values.redis.auth.existingSecret }}{{ else }}{{ include "titiler-eopf.redis.fullname" . }}{{ end }}
+                  key: {{ default "redis-password" .Values.redis.auth.existingSecretKey }}
+          {{- end }}
+          args:
+            - "redis-server"
+            - "--appendonly"
+            - "yes"
+            - "--dir"
+            - "/data"
+          {{- if and .Values.redis.auth.enabled (or .Values.redis.auth.password .Values.redis.auth.existingSecret) }}
+            - "--requirepass"
+            - "$(REDIS_PASSWORD)"
+          {{- end }}
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          volumeMounts:
+            {{- if .Values.redis.persistence.enabled }}
+            - name: redis-data
+              mountPath: /data
+            {{- end }}
+      {{- with .Values.redis.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.redis.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        {{- if .Values.redis.persistence.enabled }}
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: {{ include "titiler-eopf.redis.fullname" . }}-data
+        {{- end }}
+      {{- with .Values.redis.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

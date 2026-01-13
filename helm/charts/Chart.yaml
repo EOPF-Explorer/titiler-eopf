@@ -2,17 +2,11 @@ apiVersion: v2
 appVersion: "0.4.0"
 description: A dynamic Web Map tile server for EOPF data with caching support
 name: titiler-eopf
-version: 0.5.0  # Bump version for Redis infrastructure upgrade
+version: 0.4.0
 icon: https://raw.githubusercontent.com/EOPF-Explorer/titiler-eopf/main/docs/img/landing.png
 maintainers:
   - name: emmanuelmathot
     url: https://github.com/emmanuelmathot
-
-dependencies:
-  - name: redis
-    version: "20.x"  # Use latest stable 20.x version
-    repository: "oci://registry-1.docker.io/bitnamicharts"
-    condition: redis.enabled
 
 keywords:
   - titiler

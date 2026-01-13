@@ -453,8 +453,7 @@ curl -I "http://localhost:8000/collections/test/items/test/tiles/WebMercatorQuad
 - [x] Phase 5: Invalidation API *(✅ COMMITTED: 303e5be)*
 - [x] **Phase 5 Post-Implementation**: S3 Backend Resolution *(✅ COMMITTED: d068c4b, f35e4c2)*
 - [x] **Phase 7: Helm Chart Cache Configuration** *(✅ COMMITTED: dbce382)*
-- [ ] **Phase 8: Redis Infrastructure Upgrade** *(🔥 HIGH PRIORITY)*
-- [ ] Phase 6: Monitoring & OpenEO *(Deferred)*
+- [ ] Phase 6: Monitoring & OpenEO *(Not Started)*
 
 ### Phase 7: Helm Chart Cache Configuration Support ✅ COMPLETED
 - [x] **7.1** Update Helm chart values.yaml structure
@@ -493,98 +492,16 @@ helm template . -f examples/cache-s3-redis-values.yaml | grep CACHE
 helm template . --set cache.backend=invalid 2>&1 | grep "Invalid cache backend"
 ```
 
-### Phase 8: Redis Infrastructure Upgrade 🔥 HIGH PRIORITY ✅ COMPLETED
-**Objective**: Replace the current simple Redis deployment with a production-ready Bitnami Redis dependency.
-
-- [x] **8.1** Add Bitnami Redis Dependency ⚡ ✅ COMPLETED
-  - [x] Update `Chart.yaml` to add Bitnami Redis as dependency  
-  - [x] Configure proper version constraints for stability (`redis: "20.x.x"`)
-  - [x] Set up OCI repository: `oci://registry-1.docker.io/bitnamicharts`
-  - [ ] Run `helm dependency update` to fetch Bitnami charts (pending validation)
-
-- [x] **8.2** Redesign Cache Configuration 🔧 ✅ COMPLETED
-  - [x] **Enhanced values.yaml structure**: Support both internal (Bitnami) and external Redis
-  - [x] **Backward compatibility**: Maintain support for external Redis configs
-  - [x] **Advanced features**: Enable authentication, persistence, metrics, and HA options
-  - [x] **Security hardening**: Proper security contexts, TLS support, network policies
-
-- [x] **8.3** Update Helm Templates 📝 ✅ COMPLETED
-  - [x] **Helper template updates**: Support Bitnami Redis naming conventions  
-  - [x] **Environment variable logic**: Handle both internal and external Redis configurations
-  - [x] **Template cleanup**: Remove legacy Redis deployment completely
-  - [x] **Secret management**: Integrate with Bitnami's secret handling
-
-- [x] **8.4** Enhanced Production Features ✨ ✅ COMPLETED
-  - [x] **High availability**: Master-replica setup with Sentinel support
-  - [x] **Monitoring integration**: Built-in Prometheus metrics and ServiceMonitor
-  - [x] **Security**: Enhanced security contexts, health checks, resource limits
-
-- [x] **8.5** Template Testing and Validation 🧪 ✅ COMPLETED
-  - [x] Create test values configurations for different deployment scenarios
-  - [x] Validate Helm template rendering with various Redis configurations
-  - [x] Test backward compatibility with existing external Redis setups
-  - [x] Verify Bitnami Redis integration works with cache system
-  - [x] Remove legacy Redis components completely
-  - [x] Fix template syntax and environment variable consistency
-
-**🧪 Checkpoint 8.1**: All Redis configurations validated successfully
-```bash
-# Test results:
-# ✅ Cache Disabled: TITILER_EOPF_CACHE_ENABLE="false", no Redis components
-# ✅ Bitnami Redis Basic: Production Redis with auth, security contexts, health checks  
-# ✅ Bitnami Redis HA: Master-replica setup with monitoring and persistence
-# ✅ External Redis: Backward compatibility with external Redis services
-```  
-  - [ ] **Resource management**: Proper CPU/memory limits and requests
-  - [ ] **Health checks**: Comprehensive liveness, readiness, and startup probes
-
-**Benefits of Redis Infrastructure Upgrade:**
-1. **Enterprise-grade reliability** with proper HA and failover
-2. **Enhanced security** with TLS, ACLs, and security contexts  
-3. **Better observability** with built-in metrics and monitoring
-4. **Operational excellence** with automated backups and proper resource management
-5. **Scalability** with clustering and horizontal scaling support
-6. **Industry best practices** following Bitnami's battle-tested patterns
-
-**🧪 Checkpoint 8.1**: Bitnami Redis deployment validation
-```bash
-# Deploy with Bitnami Redis
-helm install titiler-eopf ./charts \
-  --set cache.enabled=true \
-  --set cache.backend=redis \
-  --set cache.redis.internal.enabled=true \
-  --set redis-internal.enabled=true \
-  --set redis-internal.auth.enabled=true
-
-# Validate Redis deployment
-kubectl get pods -l app.kubernetes.io/name=redis
-kubectl logs -l app.kubernetes.io/name=redis -c redis
-
-# Test Redis connectivity
-kubectl exec -it <redis-pod> -- redis-cli ping
-```
-
-**Current Redis Deployment Issues (Addressed by Phase 8):**
-- ❌ **Security vulnerabilities** - no security contexts, minimal auth, no TLS  
-- ❌ **Poor operational practices** - no health checks, basic configuration only
-- ❌ **No scalability** - single instance only, no clustering or HA
-- ❌ **Limited monitoring** - no metrics or observability
-- ❌ **Basic persistence** - simple volume mounting without backup/restore
-- ❌ **Downtime during updates** - uses `Recreate` strategy
-
 ## Resume Point
-**Current Focus**: Phase 8 - Redis Infrastructure Upgrade (HIGH PRIORITY)
-
-**⚠️ Critical**: Current Redis deployment is not production-ready and must be upgraded before production deployment.
+**Current Focus**: Ready for Pull Request - All cache system phases complete
 
 ## Next Steps
-1. **Phase 8**: Implement Redis infrastructure upgrade with Bitnami dependency 
-2. Validate enhanced Redis deployment in staging environment
-3. Create PR for big-cache branch with complete cache system + production Redis
-4. Phase 6: Add monitoring endpoints and OpenEO integration  
-5. Final production deployment validation
+1. Create PR for big-cache branch with complete cache system
+2. Deploy to staging environment for integration testing
+3. Phase 6: Add monitoring endpoints and OpenEO integration
+4. Final production deployment validation
 
-**Post Phase 8**: Cache system with enterprise-grade Redis infrastructure
+**Post Phase 7**: Cache system fully production-ready with Helm chart support
 
 ## Major Achievements ✅
 - **Complete Cache System**: Redis/S3/S3+Redis backends with full CRUD operations

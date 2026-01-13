@@ -15,4 +15,24 @@ spec:
       name: http
   selector:
     {{- include "titiler-eopf.selectorLabels" . | nindent 4 }}
-
+---
+{{- if or .Values.redis.enabled .Values.cache.redis.internal.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "titiler-eopf.redis.fullname" . }}
+  labels:
+    {{- include "titiler-eopf.redis.labels" . | nindent 4 }}
+  {{- with .Values.redis.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.redis.service.type }}
+  ports:
+    - name: redis
+      port: {{ .Values.redis.service.port }}
+      targetPort: redis
+  selector:
+    {{- include "titiler-eopf.redis.selectorLabels" . | nindent 4 }}
+{{- end }}
