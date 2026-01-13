@@ -1,12 +1,4 @@
 {{- /*
-Validation: internal Redis and external Redis cannot both be enabled.
-*/ -}}
-
-{{- if and .Values.redis.enabled .Values.redis.external.enabled }}
-{{- fail "Invalid configuration: redis.enabled=true and redis.external.enabled=true cannot both be set. Choose one." }}
-{{- end }}
-
-{{- /*
 Cache Configuration Validations
 */ -}}
 
@@ -20,33 +12,14 @@ Cache Configuration Validations
 
   {{- /* Validate Redis configuration for redis and s3-redis backends */ -}}
   {{- if or (eq .Values.cache.backend "redis") (eq .Values.cache.backend "s3-redis") }}
-    {{- $redisConfigured := false }}
-    
-    {{- /* Check new cache.redis configuration */ -}}
-    {{- if or .Values.cache.redis.internal.enabled .Values.cache.redis.external.enabled }}
-      {{- $redisConfigured = true }}
-    {{- end }}
-    
-    {{- /* Check legacy redis configuration for backward compatibility */ -}}
-    {{- if or .Values.redis.enabled .Values.redis.external.enabled }}
-      {{- $redisConfigured = true }}
-    {{- end }}
-    
-    {{- if not $redisConfigured }}
-    {{- fail (printf "Redis configuration required for backend '%s'. Enable either cache.redis.internal.enabled, cache.redis.external.enabled, or legacy redis.enabled" .Values.cache.backend) }}
+    {{- if not (or .Values.cache.redis.internal.enabled .Values.cache.redis.external.enabled) }}
+    {{- fail (printf "Redis configuration required for backend '%s'. Enable either cache.redis.internal.enabled or cache.redis.external.enabled" .Values.cache.backend) }}
     {{- end }}
 
     {{- /* Validate external Redis has host configured */ -}}
     {{- if .Values.cache.redis.external.enabled }}
       {{- if not .Values.cache.redis.external.host }}
       {{- fail "cache.redis.external.host is required when cache.redis.external.enabled=true" }}
-      {{- end }}
-    {{- end }}
-
-    {{- /* Validate legacy external Redis has host configured */ -}}
-    {{- if .Values.redis.external.enabled }}
-      {{- if not .Values.redis.external.host }}
-      {{- fail "redis.external.host is required when redis.external.enabled=true" }}
       {{- end }}
     {{- end }}
   {{- end }}

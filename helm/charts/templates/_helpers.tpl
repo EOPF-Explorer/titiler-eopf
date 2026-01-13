@@ -68,23 +68,6 @@ Environment variables with secret override capability
 {{- end }}
 
 {{/*
-Redis specific additions
-*/}}
-{{- define "titiler-eopf.redis.fullname" -}}
-{{- printf "%s-redis" (include "titiler-eopf.fullname" .) -}}
-{{- end -}}
-
-{{- define "titiler-eopf.redis.labels" -}}
-{{ include "titiler-eopf.labels" . | nindent 0 }}
-app.kubernetes.io/component: redis
-{{- end -}}
-
-{{- define "titiler-eopf.redis.selectorLabels" -}}
-{{ include "titiler-eopf.selectorLabels" . | nindent 0 }}
-app.kubernetes.io/component: redis
-{{- end -}}
-
-{{/*
 Cache configuration helpers
 */}}
 {{- define "titiler-eopf.cache.enabled" -}}
@@ -107,27 +90,33 @@ false
 {{- end -}}
 {{- end -}}
 
+{{/*
+Auto-enable redis subchart when cache.redis.internal is enabled
+*/}}
+{{- define "titiler-eopf.redis.enabled" -}}
+{{- if .Values.cache.redis.internal.enabled -}}
+{{- if not (hasKey .Values "redis") -}}
+{{- $_ := set .Values "redis" (dict "enabled" true) -}}
+{{- else -}}
+{{- $_ := set .Values "redis" (mergeOverwrite .Values.redis (dict "enabled" true)) -}}
+{{- end -}}
+{{- end -}}
+{{- .Values.redis.enabled | default false -}}
+{{- end -}}
+
 {{- define "titiler-eopf.cache.redis.host" -}}
 {{- if .Values.cache.redis.internal.enabled -}}
-{{- include "titiler-eopf.redis.fullname" . -}}
+{{- printf "%s-redis-master" .Release.Name -}}
 {{- else if .Values.cache.redis.external.enabled -}}
 {{- .Values.cache.redis.external.host -}}
-{{- else if .Values.redis.enabled -}}
-{{- include "titiler-eopf.redis.fullname" . -}}
-{{- else if .Values.redis.external.enabled -}}
-{{- .Values.redis.external.host -}}
 {{- end -}}
 {{- end -}}
 
 {{- define "titiler-eopf.cache.redis.port" -}}
 {{- if .Values.cache.redis.internal.enabled -}}
-{{- .Values.redis.service.port | default 6379 -}}
+6379
 {{- else if .Values.cache.redis.external.enabled -}}
 {{- .Values.cache.redis.external.port | default 6379 -}}
-{{- else if .Values.redis.enabled -}}
-{{- .Values.redis.service.port | default 6379 -}}
-{{- else if .Values.redis.external.enabled -}}
-{{- .Values.redis.external.port | default 6379 -}}
 {{- end -}}
 {{- end -}}
 
@@ -136,5 +125,36 @@ false
 true
 {{- else -}}
 false
+{{- end -}}
+{{- end -}}
+
+{{/*
+Redis authentication helpers
+*/}}
+{{- define "titiler-eopf.redis.auth.enabled" -}}
+{{- if .Values.cache.redis.internal.enabled -}}
+{{- .Values.redis.auth.enabled | default false -}}
+{{- else if .Values.cache.redis.external.enabled -}}
+{{- .Values.cache.redis.external.auth.enabled | default false -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "titiler-eopf.redis.auth.secretName" -}}
+{{- if .Values.cache.redis.internal.enabled -}}
+{{- if .Values.redis.auth.existingSecret -}}
+{{- .Values.redis.auth.existingSecret -}}
+{{- else -}}
+{{- printf "%s-redis" .Release.Name -}}
+{{- end -}}
+{{- else if .Values.cache.redis.external.enabled -}}
+{{- .Values.cache.redis.external.auth.existingSecret -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "titiler-eopf.redis.auth.secretPasswordKey" -}}
+{{- if .Values.cache.redis.internal.enabled -}}
+{{- .Values.redis.auth.existingSecretPasswordKey | default "redis-password" -}}
+{{- else if .Values.cache.redis.external.enabled -}}
+{{- .Values.cache.redis.external.auth.existingSecretKey | default "redis-password" -}}
 {{- end -}}
 {{- end -}}

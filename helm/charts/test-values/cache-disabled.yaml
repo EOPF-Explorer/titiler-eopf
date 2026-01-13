@@ -1,0 +1,31 @@
+# Test configuration: Cache disabled (no Redis)
+nameOverride: "test-no-cache"
+
+# Disable cache completely
+cache:
+  enabled: false
+  
+  redis:
+    internal:
+      enabled: false
+    external:
+      enabled: false
+  
+  s3:
+    enabled: false
+
+# No Redis deployment
+redis:
+  enabled: false
+
+# Application without cache
+env:
+  TITILER_EOPF_LOG_LEVEL: "DEBUG"
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1
+    memory: 1Gi

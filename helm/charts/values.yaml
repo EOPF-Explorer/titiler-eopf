@@ -100,7 +100,8 @@ cache:
   
   # Redis cache configuration
   redis:
-    # Use internal Redis deployment (managed by this chart)
+    # Use internal Redis deployment (managed by this chart - legacy simple Redis)
+    # Note: For production use, enable redis-internal below for enterprise-grade Redis
     internal:
       enabled: false
     
@@ -178,46 +179,117 @@ securityContext: {}
 
 podSecurityContext: {}
 
-# Redis deployment (legacy - use cache.redis for new deployments)
+
+
+# Production Redis deployment (managed via Bitnami Redis subchart)
+# For production deployments, enable this instead of cache.redis.internal
 redis:
-  # Only one of redis.enabled or redis.external.enabled may be true at one time
-  enabled: false
-  external:
-    enabled: false
-    host: ""
-    port: 6379
-
-  image:
-    repository: redis
-    tag: "8.4.0-alpine"
-    pullPolicy: IfNotPresent
-
-  service:
-    port: 6379
-    type: ClusterIP
-    annotations: {}
-
-  resources:
-    limits:
-      cpu: 1
-      memory: 2Gi
-    requests:
-      cpu: 500m
-      memory: 1Gi
-
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
-
-  persistence:
-    enabled: false
-    size: 1Gi
-    storageClass: ""
-    accessModes:
-      - ReadWriteOnce
-
+  enabled: false  # Default to disabled - set to true for production Redis
+  
+  # Architecture: standalone (single instance) or replication (master-replica with HA)
+  architecture: standalone
+  
+  # Authentication
   auth:
-    enabled: false
-    password: ""  # Only use when deploying redis via this chart, otherwise, use `existingSecret` for external redis usages
+    enabled: true
+    password: ""  # Leave empty to auto-generate secure password
     existingSecret: ""
-    existingSecretKey: "redis-password"
+    existingSecretPasswordKey: "redis-password"
+  
+  # Master configuration (primary Redis instance)
+  master:
+    persistence:
+      enabled: false  # Match current behavior, enable for production data durability
+      size: 1Gi
+      storageClass: ""
+      accessModes:
+        - ReadWriteOnce
+    
+    resources:
+      limits:
+        cpu: 1
+        memory: 2Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+    
+    # Security context for enhanced security
+    podSecurityContext:
+      enabled: true
+      fsGroup: 1001
+    
+    containerSecurityContext:
+      enabled: true
+      runAsUser: 1001
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
+    
+    # Enhanced health checks
+    livenessProbe:
+      enabled: true
+      initialDelaySeconds: 20
+      periodSeconds: 5
+      timeoutSeconds: 5
+      failureThreshold: 5
+    
+    readinessProbe:
+      enabled: true
+      initialDelaySeconds: 20
+      periodSeconds: 5
+      timeoutSeconds: 1
+      failureThreshold: 5
+    
+    # Service configuration
+    service:
+      type: ClusterIP
+      ports:
+        redis: 6379
+  
+  # Monitoring and observability
+  metrics:
+    enabled: false  # Enable for Prometheus monitoring
+    service:
+      type: ClusterIP
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9121"
+    
+    serviceMonitor:
+      enabled: false  # Enable if using Prometheus Operator
+      namespace: ""
+      additionalLabels: {}
+  
+  # Common Redis configuration optimized for cache workloads
+  commonConfiguration: |
+    # Enable AOF persistence for durability
+    appendonly yes
+    # Optimize memory usage for cache workloads
+    maxmemory-policy allkeys-lru
+    # Increase timeout for better connection handling
+    timeout 0
+    # Optimize for cache performance
+    save ""
+    # Enable keyspace notifications for monitoring
+    notify-keyspace-events Ex
+  
+  # High Availability configuration (only applies when architecture: replication)
+  replica:
+    persistence:
+      enabled: false
+      size: 1Gi
+      storageClass: ""
+    
+    resources:
+      limits:
+        cpu: 1
+        memory: 2Gi
+      requests:
+        cpu: 250m
+        memory: 512Mi
+    
+    # Number of read replicas (HA setup)
+    replicaCount: 1
+  
+  # Sentinel configuration for automatic failover (when architecture: replication)
+  sentinel:
+    enabled: false  # Enable for automatic failover in HA setup

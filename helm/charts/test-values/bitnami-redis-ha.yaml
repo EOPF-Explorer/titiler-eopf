@@ -1,0 +1,100 @@
+# Test configuration: High Availability Redis with monitoring
+nameOverride: "test-ha"
+
+# Enable cache system
+cache:
+  enabled: true
+  backend: "s3-redis"
+  
+  redis:
+    internal:
+      enabled: true
+    external:
+      enabled: false
+  
+  s3:
+    enabled: true
+    bucket: "prod-titiler-cache"
+    region: "eu-west-1"
+    auth:
+      existingSecret: "s3-credentials"
+      existingSecretKeys:
+        access_key_id: "access-key-id"
+        secret_access_key: "secret-access-key"
+
+# Production HA Redis with monitoring
+redis:
+  enabled: true
+  architecture: replication  # Master-replica for HA
+  
+  auth:
+    enabled: true
+    
+  master:
+    persistence:
+      enabled: true
+      size: 2Gi
+      storageClass: "fast-ssd"
+    
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 2
+        memory: 2Gi
+    
+    # Enhanced health checks
+    livenessProbe:
+      enabled: true
+      initialDelaySeconds: 30
+      periodSeconds: 10
+    
+    readinessProbe:
+      enabled: true
+      initialDelaySeconds: 5
+      periodSeconds: 5
+
+  # Read replicas for HA
+  replica:
+    persistence:
+      enabled: true
+      size: 2Gi
+      storageClass: "fast-ssd"
+    
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1
+        memory: 1Gi
+    
+    replicaCount: 2
+
+  # Enable monitoring
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      namespace: "monitoring"
+      additionalLabels:
+        app: "titiler-eopf"
+        component: "redis"
+
+  # Sentinel for automatic failover
+  sentinel:
+    enabled: true
+
+# Application with production settings
+env:
+  TITILER_EOPF_CACHE_TTL_DEFAULT: "7200"
+  TITILER_EOPF_LOG_LEVEL: "INFO"
+
+resources:
+  requests:
+    cpu: 1
+    memory: 2Gi
+  limits:
+    cpu: 4
+    memory: 4Gi
