@@ -212,11 +212,6 @@ app.include_router(
 )
 TITILER_CONFORMS_TO.update(cmaps.conforms_to)
 
-# Cache Admin endpoints
-if cache_backend and cache_key_generator:
-    cache_admin = create_cache_admin_router(cache_backend, cache_key_generator)
-    app.include_router(cache_admin)
-
 add_exception_handlers(app, DEFAULT_STATUS_CODES)
 
 # Set all CORS enabled origins
@@ -252,6 +247,10 @@ if cache_backend and cache_key_generator:
         cache_status_header="X-Cache",
     )
     logger.info("Tile cache middleware enabled")
+
+    # Cache Admin endpoints
+    cache_admin = create_cache_admin_router(cache_backend, cache_key_generator)
+    app.include_router(cache_admin)
 
 app.add_middleware(
     CacheControlMiddleware,
