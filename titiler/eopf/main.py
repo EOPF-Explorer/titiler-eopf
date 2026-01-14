@@ -14,6 +14,14 @@ from starlette.requests import Request
 from starlette.templating import Jinja2Templates
 from starlette_cramjam.middleware import CompressionMiddleware
 
+from titiler.cache import (
+    CacheKeyGenerator,
+    TileCacheMiddleware,
+    create_cache_admin_router,
+)
+from titiler.cache.backends.redis import RedisCacheBackend
+from titiler.cache.backends.s3 import S3StorageBackend
+from titiler.cache.backends.s3_redis import S3RedisCacheBackend
 from titiler.core.errors import DEFAULT_STATUS_CODES, add_exception_handlers
 from titiler.core.factory import AlgorithmFactory, ColorMapFactory, TMSFactory
 from titiler.core.middleware import CacheControlMiddleware, TotalTimeMiddleware
@@ -22,6 +30,7 @@ from titiler.core.resources.enums import MediaType
 from titiler.core.utils import accept_media_type, create_html_response, update_openapi
 
 from . import __version__ as titiler_version
+from .cache_deps import setup_cache
 from .dependencies import DatasetPathParams
 from .extensions import (
     DatasetMetadataExtension,
@@ -29,7 +38,7 @@ from .extensions import (
     EOPFViewerExtension,
 )
 from .factory import TilerFactory
-from .settings import ApiSettings
+from .settings import ApiSettings, EOPFCacheSettings
 
 # Configure logging
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -44,6 +53,97 @@ logger = logging.getLogger(__name__)
 logger.info(f"Starting TiTiler EOPF application with log level: {log_level}")
 
 settings = ApiSettings()
+cache_settings = EOPFCacheSettings()
+
+
+def setup_cache_system():
+    """Setup cache backend and key generator."""
+    if not cache_settings.enable:
+        logger.info("Cache system disabled")
+        return None, None
+
+    logger.info(f"Setting up cache system with backend: {cache_settings.backend}")
+
+    # Create cache key generator
+    key_generator = CacheKeyGenerator(
+        namespace=cache_settings.namespace,
+        exclude_params=cache_settings.exclude_params,
+        max_key_length=2048,
+    )
+
+    # Create cache backend based on configuration
+    if cache_settings.backend == "redis" and cache_settings.redis:
+        cache_backend = RedisCacheBackend(
+            host=cache_settings.redis.host,
+            port=cache_settings.redis.port,
+            password=cache_settings.redis.password.get_secret_value()
+            if cache_settings.redis.password
+            else None,
+            db=cache_settings.redis.db,
+        )
+        logger.info(
+            f"Redis cache configured: {cache_settings.redis.host}:{cache_settings.redis.port}"
+        )
+
+    elif cache_settings.backend == "s3" and cache_settings.s3:
+        cache_backend = S3StorageBackend(
+            bucket=cache_settings.s3.bucket,
+            region=cache_settings.s3.region,
+            endpoint_url=cache_settings.s3.endpoint_url,
+            access_key_id=cache_settings.s3.access_key_id,
+            secret_access_key=cache_settings.s3.secret_access_key.get_secret_value()
+            if cache_settings.s3.secret_access_key
+            else None,
+            session_token=cache_settings.s3.session_token,
+        )
+        logger.info(f"S3 cache configured: {cache_settings.s3.bucket}")
+
+    elif (
+        cache_settings.backend == "s3-redis"
+        and cache_settings.redis
+        and cache_settings.s3
+    ):
+        redis_backend = RedisCacheBackend(
+            host=cache_settings.redis.host,
+            port=cache_settings.redis.port,
+            password=cache_settings.redis.password.get_secret_value()
+            if cache_settings.redis.password
+            else None,
+            db=cache_settings.redis.db,
+        )
+        s3_backend = S3StorageBackend(
+            bucket=cache_settings.s3.bucket,
+            region=cache_settings.s3.region,
+            endpoint_url=cache_settings.s3.endpoint_url,
+            access_key_id=cache_settings.s3.access_key_id,
+            secret_access_key=cache_settings.s3.secret_access_key.get_secret_value()
+            if cache_settings.s3.secret_access_key
+            else None,
+            session_token=cache_settings.s3.session_token,
+        )
+        s3_backend = S3StorageBackend.from_settings(cache_settings.s3)
+        cache_backend = S3RedisCacheBackend(
+            redis_backend=redis_backend, s3_backend=s3_backend
+        )
+        logger.info(
+            f"S3+Redis cache configured: Redis {cache_settings.redis.host}, S3 {cache_settings.s3.bucket}"
+        )
+
+    else:
+        logger.warning(
+            f"Invalid cache configuration for backend: {cache_settings.backend}"
+        )
+        return None, None
+
+    # Setup dependency injection
+    setup_cache(cache_backend, key_generator)
+
+    logger.info("Cache system setup complete")
+    return cache_backend, key_generator
+
+
+# Initialize cache system
+cache_backend, cache_key_generator = setup_cache_system()
 
 # HTML templates
 templates = Jinja2Templates(
@@ -122,6 +222,11 @@ app.include_router(
 )
 TITILER_CONFORMS_TO.update(cmaps.conforms_to)
 
+# Cache Admin endpoints
+if cache_backend and cache_key_generator:
+    cache_admin = create_cache_admin_router(cache_backend, cache_key_generator)
+    app.include_router(cache_admin)
+
 add_exception_handlers(app, DEFAULT_STATUS_CODES)
 
 # Set all CORS enabled origins
@@ -145,6 +250,18 @@ app.add_middleware(
     },
     compression_level=6,
 )
+
+# Add tile cache middleware if caching is enabled
+if cache_backend and cache_key_generator:
+    app.add_middleware(
+        TileCacheMiddleware,
+        cache_backend=cache_backend,
+        key_generator=cache_key_generator,
+        cache_paths=cache_settings.cache_paths,
+        default_ttl=cache_settings.default_ttl,
+        cache_status_header="X-Cache",
+    )
+    logger.info("Tile cache middleware enabled")
 
 app.add_middleware(
     CacheControlMiddleware,
@@ -179,6 +296,47 @@ def health():
             "zarr": zarr.__version__,
         },
     }
+
+
+@app.get("/_mgmt/cache", description="Cache Status", tags=["Cache Management"])
+async def cache_status():
+    """Get cache system status."""
+    if not cache_backend:
+        return {"cache": {"status": "disabled"}}
+
+    try:
+        # Try to get cache health
+        is_healthy = await cache_backend.health_check()
+        stats = (
+            await cache_backend.get_stats()
+            if hasattr(cache_backend, "get_stats")
+            else {}
+        )
+
+        return {
+            "cache": {
+                "status": "enabled",
+                "backend": cache_settings.backend,
+                "healthy": is_healthy,
+                "namespace": cache_settings.namespace,
+                "default_ttl": cache_settings.default_ttl,
+                "stats": stats,
+                "settings": {
+                    "tile_ttl": cache_settings.tile_ttl,
+                    "metadata_ttl": cache_settings.metadata_ttl,
+                    "exclude_params": cache_settings.exclude_params,
+                    "cache_paths": cache_settings.cache_paths,
+                },
+            }
+        }
+    except Exception as e:
+        return {
+            "cache": {
+                "status": "error",
+                "error": str(e),
+                "backend": cache_settings.backend,
+            }
+        }
 
 
 @app.get(

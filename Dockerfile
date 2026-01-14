@@ -16,7 +16,7 @@ COPY README.md README.md
 COPY LICENSE LICENSE
 
 RUN echo "yo"
-RUN python -m pip install ".[cache,openeo]" --no-cache-dir --upgrade
+RUN python -m pip install ".[cache,openeo]" boto3 --no-cache-dir --upgrade
 RUN rm -rf titiler/ pyproject.toml README.md LICENSE
 
 ###################################################

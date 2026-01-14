@@ -1,0 +1,56 @@
+# Production configuration with S3+Redis hybrid cache using external services
+cache:
+  enabled: true
+  backend: s3-redis
+  
+  # Redis configuration with external service
+  redis:
+    internal:
+      enabled: false
+    external:
+      enabled: true
+      host: "cache-cluster.prod.amazonaws.com"
+      port: 6379
+      database: 0
+      auth:
+        enabled: true
+        existingSecret: "redis-cache-secret"
+        existingSecretKey: "redis-password"
+  
+  # S3 configuration
+  s3:
+    enabled: true
+    bucket: "prod-tile-cache"
+    region: "us-west-2"
+    prefix: "tiles/"
+    auth:
+      existingSecret: "s3-cache-secret"
+      accessKeyIdKey: "access-key-id"
+      secretAccessKeyKey: "secret-access-key"
+  
+  # Cache settings for production
+  ttl:
+    default: 7200  # 2 hours
+    tiles: 14400   # 4 hours  
+    datasets: 3600 # 1 hour
+  
+  namespace: "prod-cache"
+  
+  # Admin API
+  admin:
+    enabled: true
+    path_prefix: "/admin/cache"
+
+# Application environment
+env:
+  LOG_LEVEL: "INFO"
+  TITILER_EOPF_STORE_URL: "s3://prod-bucket/data/"
+
+# Production resource limits
+resources:
+  limits:
+    cpu: 2
+    memory: 4Gi
+  requests:
+    cpu: 1
+    memory: 2Gi

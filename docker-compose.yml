@@ -9,6 +9,9 @@ services:
     ports:
       - "8000:8000"
     command: ["uvicorn", "titiler.eopf.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    env_file:
+      - path: .env
+        required: false
     environment:
       # GDAL Config
       # This option controls the default GDAL raster block cache size.
@@ -42,6 +45,7 @@ services:
       - TITILER_EOPF_STORE_SCHEME=s3
       - TITILER_EOPF_STORE_HOST=esa-zarr-sentinel-explorer-fra
       - TITILER_EOPF_STORE_PATH=tests-output
+      # Cache environment variables (will be overridden by .env file)
       - TITILER_EOPF_CACHE_HOST=cache
       - TITILER_EOPF_CACHE_ENABLE=True
     volumes:

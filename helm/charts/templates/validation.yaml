@@ -5,3 +5,78 @@ Validation: internal Redis and external Redis cannot both be enabled.
 {{- if and .Values.redis.enabled .Values.redis.external.enabled }}
 {{- fail "Invalid configuration: redis.enabled=true and redis.external.enabled=true cannot both be set. Choose one." }}
 {{- end }}
+
+{{- /*
+Cache Configuration Validations
+*/ -}}
+
+{{- if .Values.cache.enabled }}
+
+  {{- /* Validate cache backend type */ -}}
+  {{- $validBackends := list "redis" "s3" "s3-redis" }}
+  {{- if not (has .Values.cache.backend $validBackends) }}
+  {{- fail (printf "Invalid cache backend '%s'. Must be one of: %s" .Values.cache.backend (join ", " $validBackends)) }}
+  {{- end }}
+
+  {{- /* Validate Redis configuration for redis and s3-redis backends */ -}}
+  {{- if or (eq .Values.cache.backend "redis") (eq .Values.cache.backend "s3-redis") }}
+    {{- $redisConfigured := false }}
+    
+    {{- /* Check new cache.redis configuration */ -}}
+    {{- if or .Values.cache.redis.internal.enabled .Values.cache.redis.external.enabled }}
+      {{- $redisConfigured = true }}
+    {{- end }}
+    
+    {{- /* Check legacy redis configuration for backward compatibility */ -}}
+    {{- if or .Values.redis.enabled .Values.redis.external.enabled }}
+      {{- $redisConfigured = true }}
+    {{- end }}
+    
+    {{- if not $redisConfigured }}
+    {{- fail (printf "Redis configuration required for backend '%s'. Enable either cache.redis.internal.enabled, cache.redis.external.enabled, or legacy redis.enabled" .Values.cache.backend) }}
+    {{- end }}
+
+    {{- /* Validate external Redis has host configured */ -}}
+    {{- if .Values.cache.redis.external.enabled }}
+      {{- if not .Values.cache.redis.external.host }}
+      {{- fail "cache.redis.external.host is required when cache.redis.external.enabled=true" }}
+      {{- end }}
+    {{- end }}
+
+    {{- /* Validate legacy external Redis has host configured */ -}}
+    {{- if .Values.redis.external.enabled }}
+      {{- if not .Values.redis.external.host }}
+      {{- fail "redis.external.host is required when redis.external.enabled=true" }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+
+  {{- /* Validate S3 configuration for s3 and s3-redis backends */ -}}
+  {{- if or (eq .Values.cache.backend "s3") (eq .Values.cache.backend "s3-redis") }}
+    {{- if not .Values.cache.s3.enabled }}
+    {{- fail (printf "S3 configuration required for backend '%s'. Set cache.s3.enabled=true" .Values.cache.backend) }}
+    {{- end }}
+
+    {{- if not .Values.cache.s3.bucket }}
+    {{- fail "cache.s3.bucket is required when cache.s3.enabled=true" }}
+    {{- end }}
+
+    {{- /* Validate S3 authentication is configured */ -}}
+    {{- $s3AuthConfigured := false }}
+    {{- if .Values.cache.s3.auth.existingSecret }}
+      {{- $s3AuthConfigured = true }}
+    {{- else if and .Values.cache.s3.auth.access_key_id .Values.cache.s3.auth.secret_access_key }}
+      {{- $s3AuthConfigured = true }}
+    {{- end }}
+
+    {{- if not $s3AuthConfigured }}
+    {{- fail "S3 authentication required. Configure cache.s3.auth.existingSecret or cache.s3.auth.access_key_id/secret_access_key" }}
+    {{- end }}
+  {{- end }}
+
+  {{- /* Validate cache.redis configuration consistency */ -}}
+  {{- if and .Values.cache.redis.internal.enabled .Values.cache.redis.external.enabled }}
+  {{- fail "Invalid cache configuration: cache.redis.internal.enabled and cache.redis.external.enabled cannot both be true" }}
+  {{- end }}
+
+{{- end }}
