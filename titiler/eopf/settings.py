@@ -119,6 +119,7 @@ class EOPFCacheSettings(BaseCacheSettings):
         "/crop/",
         "/statistics",
         "/info.json",
+        "/info.geojson",
     ]
 
     # Nested settings for backends

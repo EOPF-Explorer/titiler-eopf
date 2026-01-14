@@ -69,7 +69,7 @@ env:
 
   # AWS Configuration
   AWS_ACCESS_KEY_ID: ""  # To be provided via secrets
-  AWS_SECRET_ACCESS_KEY: ""  # To be provided via secrets
+  AWS_SECRET_ACCESS_KEY: ""   # To be provided via secrets
   AWS_DEFAULT_REGION: "de"
   AWS_ENDPOINT_URL: "https://s3.de.io.cloud.ovh.net/"
   AWS_EC2_METADATA_DISABLED: "true"
@@ -78,16 +78,16 @@ env:
 cache:
   # Enable tile caching system
   enabled: false
-  
+
   # Cache backend type: "redis", "s3", or "s3-redis"
   backend: "redis"
-  
+
   # TTL settings (seconds)
   ttl:
     default: 3600  # 1 hour
     tiles: 3600
     datasets: 1800  # 30 minutes
-  
+
   # Cache namespace and key generation
   namespace: "titiler-eopf"
   exclude_params:
@@ -97,13 +97,13 @@ cache:
     - "user_id"
     - "session"
     - "token"
-  
+
   # Redis cache configuration
   redis:
     # Use internal Redis deployment (managed by this chart)
     internal:
       enabled: false
-    
+
     # Use external Redis instance
     external:
       enabled: false
@@ -115,7 +115,7 @@ cache:
         password: ""
         existingSecret: ""
         existingSecretKey: "redis-password"
-  
+
   # S3 cache configuration
   s3:
     enabled: false
@@ -123,25 +123,25 @@ cache:
     region: "us-east-1"
     endpoint_url: ""
     prefix: "cache/"
-    
+
     # S3 Authentication
     auth:
       # Use inline credentials (not recommended for production)
       access_key_id: ""
       secret_access_key: ""
       session_token: ""
-      
+
       # Use existing secret (recommended)
       existingSecret: ""
       accessKeyIdKey: "access-key-id"
-      secretAccessKeyKey: "secret-access-key" 
+      secretAccessKeyKey: "secret-access-key"
       sessionTokenKey: "session-token"
 
   # Admin API configuration
   admin:
     enabled: true
     path_prefix: "/admin/cache"
-  
+
   # Monitoring and metrics
   monitoring:
     enabled: false
