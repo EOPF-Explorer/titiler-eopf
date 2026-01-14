@@ -153,7 +153,6 @@ class S3StorageBackend(CacheBackend):
                             logger.warning(
                                 "No explicit credentials found with EC2 metadata disabled - boto3 will handle credential resolution"
                             )
-                            pass
 
                     # Add any additional client kwargs
                     client_kwargs.update(self.client_kwargs)
