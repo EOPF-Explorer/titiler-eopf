@@ -2385,7 +2385,7 @@ requires-dist = [
     { name = "sqlalchemy", marker = "extra == 'openeo'", specifier = ">=2.0.0" },
     { name = "starlette-cramjam", specifier = ">=0.4,<1.0" },
     { name = "titiler-core", specifier = ">=0.24,<0.25" },
-    { name = "titiler-openeo", marker = "extra == 'openeo'", specifier = "==0.7.0" },
+    { name = "titiler-openeo", marker = "extra == 'openeo'", git = "https://github.com/sentinel-hub/titiler-openeo.git?rev=all-parameters" },
     { name = "titiler-xarray", specifier = ">=0.24,<0.25" },
     { name = "zarr", specifier = ">=3.1.3" },
 ]
@@ -2403,7 +2403,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
-    { name = "titiler-openeo", specifier = "==0.7.0" },
+    { name = "titiler-openeo", git = "https://github.com/sentinel-hub/titiler-openeo.git?rev=all-parameters" },
 ]
 notebook = [
     { name = "folium" },
@@ -2417,7 +2417,7 @@ server = [{ name = "uvicorn", extras = ["standard"] }]
 [[package]]
 name = "titiler-openeo"
 version = "0.7.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/sentinel-hub/titiler-openeo.git?rev=all-parameters#6fa5fd67652f7beefb2930efd42b3f826c9d9c43" }
 dependencies = [
     { name = "jsonpath-ng" },
     { name = "openeo-pg-parser-networkx" },
@@ -2425,10 +2425,6 @@ dependencies = [
     { name = "pystac-client" },
     { name = "starlette-cramjam" },
     { name = "titiler-core" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/a9/9c/5ccd05d32924af992bb69aeaec5dca14f3d1f70d5a443615ab6e258f0557/titiler_openeo-0.7.0.tar.gz", hash = "sha256:e21d219fa3987e8814c7325d9ba5aed266cf75ce4aca2d9ca9ab464b40935381", size = 180373 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f0/cb/ee052d7009332135f817fb89bf92555ff3fe6847da5a6caa270258b5cd72/titiler_openeo-0.7.0-py3-none-any.whl", hash = "sha256:fc91877b8b8787c653c55dcab707c943a98ac5bdb8214ab362b88be45f7e3f11", size = 242963 },
 ]
 
 [[package]]
