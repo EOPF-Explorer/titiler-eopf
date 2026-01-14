@@ -116,8 +116,14 @@ def _create_invalidate_endpoint(cache_backend: CacheBackend):
                             try:
                                 await cache_backend.delete(key)
                                 invalidated_count += 1
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.error(
+                                    "Failed to delete cache key %s for pattern %s: %s",
+                                    key,
+                                    pattern,
+                                    e,
+                                )
+                                failed_patterns.append(pattern)
                     else:
                         failed_patterns.append(pattern)
                         logger.warning(f"Pattern deletion not supported for: {pattern}")
