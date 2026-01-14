@@ -252,6 +252,47 @@ if cache_backend and cache_key_generator:
     cache_admin = create_cache_admin_router(cache_backend, cache_key_generator)
     app.include_router(cache_admin)
 
+    @app.get("/_mgmt/cache", description="Cache Status", tags=["Cache Management"])
+    async def cache_status():
+        """Get cache system status."""
+        if not cache_backend:
+            return {"cache": {"status": "disabled"}}
+
+        try:
+            # Try to get cache health
+            is_healthy = await cache_backend.health_check()
+            stats = (
+                await cache_backend.get_stats()
+                if hasattr(cache_backend, "get_stats")
+                else {}
+            )
+
+            return {
+                "cache": {
+                    "status": "enabled",
+                    "backend": cache_settings.backend,
+                    "healthy": is_healthy,
+                    "namespace": cache_settings.namespace,
+                    "default_ttl": cache_settings.default_ttl,
+                    "stats": stats,
+                    "settings": {
+                        "tile_ttl": cache_settings.tile_ttl,
+                        "metadata_ttl": cache_settings.metadata_ttl,
+                        "exclude_params": cache_settings.exclude_params,
+                        "cache_paths": cache_settings.cache_paths,
+                    },
+                }
+            }
+        except Exception as e:
+            return {
+                "cache": {
+                    "status": "error",
+                    "error": str(e),
+                    "backend": cache_settings.backend,
+                }
+            }
+
+
 app.add_middleware(
     CacheControlMiddleware,
     cachecontrol=settings.cachecontrol,
@@ -285,47 +326,6 @@ def health():
             "zarr": zarr.__version__,
         },
     }
-
-
-@app.get("/_mgmt/cache", description="Cache Status", tags=["Cache Management"])
-async def cache_status():
-    """Get cache system status."""
-    if not cache_backend:
-        return {"cache": {"status": "disabled"}}
-
-    try:
-        # Try to get cache health
-        is_healthy = await cache_backend.health_check()
-        stats = (
-            await cache_backend.get_stats()
-            if hasattr(cache_backend, "get_stats")
-            else {}
-        )
-
-        return {
-            "cache": {
-                "status": "enabled",
-                "backend": cache_settings.backend,
-                "healthy": is_healthy,
-                "namespace": cache_settings.namespace,
-                "default_ttl": cache_settings.default_ttl,
-                "stats": stats,
-                "settings": {
-                    "tile_ttl": cache_settings.tile_ttl,
-                    "metadata_ttl": cache_settings.metadata_ttl,
-                    "exclude_params": cache_settings.exclude_params,
-                    "cache_paths": cache_settings.cache_paths,
-                },
-            }
-        }
-    except Exception as e:
-        return {
-            "cache": {
-                "status": "error",
-                "error": str(e),
-                "backend": cache_settings.backend,
-            }
-        }
 
 
 @app.get(
