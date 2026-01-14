@@ -45,6 +45,7 @@ openeo = [
 ]
 cache = [
     "redis",
+    "boto3",
 ]
 
 [dependency-groups]
