@@ -225,10 +225,7 @@ TITILER_CONFORMS_TO.update(cmaps.conforms_to)
 # Cache Admin endpoints
 if cache_backend and cache_key_generator:
     cache_admin = create_cache_admin_router(cache_backend, cache_key_generator)
-    app.include_router(
-        cache_admin,
-        tags=["Cache Admin"],
-    )
+    app.include_router(cache_admin)
 
 add_exception_handlers(app, DEFAULT_STATUS_CODES)
 
