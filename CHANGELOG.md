@@ -1,4 +1,12 @@
+## 0.5.0 (2026-01-15)
 
+## What's Changed
+* Update titiler-openeo dependency to use all-parameters support by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/54
+* feat(cache): Implement S3+Redis composite cache backend by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/57
+* feat: update project metadata and add release automation by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/58
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.4.0...v0.5.0
 
 ## [Unreleased]
 
