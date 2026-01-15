@@ -83,3 +83,58 @@ app.kubernetes.io/component: redis
 {{ include "titiler-eopf.selectorLabels" . | nindent 0 }}
 app.kubernetes.io/component: redis
 {{- end -}}
+
+{{/*
+Cache configuration helpers
+*/}}
+{{- define "titiler-eopf.cache.enabled" -}}
+{{- if .Values.cache.enabled -}}
+true
+{{- else -}}
+false
+{{- end -}}
+{{- end -}}
+
+{{- define "titiler-eopf.cache.backend" -}}
+{{- .Values.cache.backend | default "redis" -}}
+{{- end -}}
+
+{{- define "titiler-eopf.cache.redis.enabled" -}}
+{{- if or .Values.cache.redis.internal.enabled .Values.cache.redis.external.enabled -}}
+true
+{{- else -}}
+false
+{{- end -}}
+{{- end -}}
+
+{{- define "titiler-eopf.cache.redis.host" -}}
+{{- if .Values.cache.redis.internal.enabled -}}
+{{- include "titiler-eopf.redis.fullname" . -}}
+{{- else if .Values.cache.redis.external.enabled -}}
+{{- .Values.cache.redis.external.host -}}
+{{- else if .Values.redis.enabled -}}
+{{- include "titiler-eopf.redis.fullname" . -}}
+{{- else if .Values.redis.external.enabled -}}
+{{- .Values.redis.external.host -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "titiler-eopf.cache.redis.port" -}}
+{{- if .Values.cache.redis.internal.enabled -}}
+{{- .Values.redis.service.port | default 6379 -}}
+{{- else if .Values.cache.redis.external.enabled -}}
+{{- .Values.cache.redis.external.port | default 6379 -}}
+{{- else if .Values.redis.enabled -}}
+{{- .Values.redis.service.port | default 6379 -}}
+{{- else if .Values.redis.external.enabled -}}
+{{- .Values.redis.external.port | default 6379 -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "titiler-eopf.cache.s3.enabled" -}}
+{{- if .Values.cache.s3.enabled -}}
+true
+{{- else -}}
+false
+{{- end -}}
+{{- end -}}

@@ -35,7 +35,7 @@
         "titiler.eopf.main:app",
         "--reload",
         "--port",
-        "8081",
+        "8000",
         "--log-level",
         "info",
         "--access-log"
@@ -51,7 +51,8 @@
         "AWS_ENDPOINT_URL": "https://s3.de.io.cloud.ovh.net/",
         "AWS_EC2_METADATA_DISABLED": "true",
         "TITILER_EOPF_STORE_URL": "s3://esa-zarr-sentinel-explorer-fra/tests-output/"
-      }
+      },
+      "envFile": "${workspaceFolder}/.env"
     },
     {
       "name": "TiTiler EOPF openEO S3",
