@@ -120,6 +120,7 @@ class EOPFCacheSettings(BaseCacheSettings):
         "/statistics",
         "/info.json",
         "/info.geojson",
+        "/bounds",
     ]
 
     # Nested settings for backends

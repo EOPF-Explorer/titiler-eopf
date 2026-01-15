@@ -9,6 +9,7 @@ __version__ = "0.1.0"
 
 from .admin import create_cache_admin_router
 from .backends.base import CacheBackend
+from .datatree_helpers import get_cached_datatree, invalidate_datatree_cache
 from .decorators import CacheManager, cache_control, cached_metadata, cached_tile
 from .middleware import CacheControlMiddleware, TileCacheMiddleware
 from .settings import CacheRedisSettings, CacheS3Settings, CacheSettings
@@ -27,4 +28,6 @@ __all__ = [
     "cache_control",
     "CacheManager",
     "create_cache_admin_router",
+    "get_cached_datatree",
+    "invalidate_datatree_cache",
 ]

@@ -222,9 +222,85 @@ class CacheKeyGenerator:
         """Generate Redis pattern for specific cache type.
 
         Args:
-            cache_type: Cache type (e.g., "tile", "tilejson")
+            cache_type: Cache type (e.g., "tile", "tilejson", "datatree")
 
         Returns:
             Redis glob pattern string
         """
         return f"{self.namespace}:{cache_type}:*"
+
+    def get_pattern_for_datatree(self, src_path: str) -> str:
+        """Generate Redis pattern for datatree cache entries.
+
+        Args:
+            src_path: Source path of the dataset (http://, s3://, or file path)
+
+        Returns:
+            Redis glob pattern string
+        """
+        # For URLs with schemes (http://, s3://, etc.)
+        if "://" in src_path:
+            from urllib.parse import urlparse
+
+            parsed_url = urlparse(src_path)
+
+            if parsed_url.scheme in ("s3", "http", "https"):
+                # Extract meaningful components
+                if parsed_url.scheme == "s3":
+                    # For s3://bucket/path/to/file.zarr
+                    bucket = parsed_url.netloc
+                    path_parts = [
+                        part for part in parsed_url.path.strip("/").split("/") if part
+                    ]
+                    if path_parts:
+                        # Pattern: namespace:datatree:s3:bucket:path:*
+                        pattern_parts = (
+                            [self.namespace, "datatree", "s3", bucket]
+                            + path_parts[:-1]
+                            + ["*"]
+                        )
+                        return ":".join(pattern_parts)
+                else:
+                    # For http/https URLs
+                    host = parsed_url.netloc.replace(
+                        ".", "_"
+                    )  # Replace dots for Redis key compatibility
+                    path_parts = [
+                        part for part in parsed_url.path.strip("/").split("/") if part
+                    ]
+                    if path_parts:
+                        # Pattern: namespace:datatree:http:host:path:*
+                        pattern_parts = (
+                            [self.namespace, "datatree", parsed_url.scheme, host]
+                            + path_parts[:-1]
+                            + ["*"]
+                        )
+                        return ":".join(pattern_parts)
+
+        # For simple file paths like /test/file.zarr
+        if src_path.startswith("/"):
+            path_parts = [part for part in src_path.strip("/").split("/") if part]
+            if path_parts:
+                # Pattern: namespace:datatree:file:path:*
+                pattern_parts = (
+                    [self.namespace, "datatree", "file"] + path_parts[:-1] + ["*"]
+                )
+                return ":".join(pattern_parts)
+
+        # Fallback: use the filename for any unhandled cases
+        filename = src_path.split("/")[-1].split("\\")[
+            -1
+        ]  # Handle both / and \ separators
+        return f"{self.namespace}:datatree:*{filename}*"
+
+    def get_pattern_for_item_all_types(self, collection_id: str, item_id: str) -> str:
+        """Generate Redis pattern for all cache types of a specific item.
+
+        Args:
+            collection_id: Collection identifier
+            item_id: Item identifier
+
+        Returns:
+            Redis glob pattern string
+        """
+        return f"{self.namespace}:*:collections:{collection_id}:items:{item_id}:*"

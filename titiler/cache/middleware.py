@@ -167,6 +167,8 @@ class TileCacheMiddleware(BaseHTTPMiddleware):
             return "statistics"
         elif path.endswith("/info.json"):
             return "info"
+        elif "/bounds" in path:
+            return "bounds"
         else:
             return "unknown"
 

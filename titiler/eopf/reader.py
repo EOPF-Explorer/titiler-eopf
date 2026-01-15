@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import math
 import os
-import pickle
 import re
 import warnings
 from functools import cache, cached_property, lru_cache
@@ -37,7 +36,9 @@ from rio_tiler.reader import _get_width_height, _missing_size
 from rio_tiler.types import BBox
 from zarr.storage import ObjectStore
 
-from .cache import RedisCache
+from titiler.cache import get_cached_datatree
+
+from .cache_deps import get_cache_backend, get_cache_key_generator
 from .settings import CacheSettings
 
 logger = logging.getLogger(__name__)
@@ -120,24 +121,14 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
             engine="zarr",
         )
 
-    if cache_settings().enable and cache_settings().host:
-        pool = RedisCache.get_instance(
-            cache_settings().host,  # type: ignore
-            cache_settings().port,
-            cache_settings().password,
-        )
-        cache_client = redis.Redis(connection_pool=pool)
-        if data_bytes := cache_client.get(src_path):
-            logger.info(f"Cache - found dataset in Cache {src_path}")
-            dt = pickle.loads(data_bytes)
-        else:
-            dt = _open_dataset(src_path)
-            logger.info(f"Cache - adding dataset in Cache {src_path}")
-            cache_client.set(src_path, pickle.dumps(dt), ex=300)
-    else:
-        dt = _open_dataset(src_path)
-
-    return dt
+    # Use integrated cache system
+    return get_cached_datatree(
+        src_path=src_path,
+        loader_func=_open_dataset,
+        cache_backend=get_cache_backend(),
+        key_generator=get_cache_key_generator(),
+        ttl=300,
+    )
 
 
 def get_multiscale_level(
