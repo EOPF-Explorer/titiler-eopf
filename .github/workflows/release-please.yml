@@ -21,3 +21,15 @@ jobs:
         with:
           config-file: "release-please-config.json"
           manifest-file: ".release-please-manifest.json"
+
+  trigger-release:
+    runs-on: ubuntu-latest
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    steps:
+      - name: Trigger Docker and Helm workflow
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          event-type: release-created
+          client-payload: '{"tag_name": "${{ needs.release-please.outputs.tag_name }}"}'
