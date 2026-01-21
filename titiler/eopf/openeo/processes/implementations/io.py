@@ -495,6 +495,7 @@ class LoadCollection(stacapi.LoadCollection):
         height: Optional[int] = 1024,
         tile_buffer: Optional[float] = None,
         options: Optional[Dict] = None,
+        named_parameters: Optional[dict] = None,
     ) -> LazyRasterStack:
         """Load Collection."""
         options = options or {}
@@ -505,6 +506,7 @@ class LoadCollection(stacapi.LoadCollection):
             temporal_extent=temporal_extent,
             properties=properties,
             max_items=processing_settings.max_items,
+            named_parameters=named_parameters,
         )
         if not items:
             raise NoDataAvailable("There is no data available for the given extents.")
