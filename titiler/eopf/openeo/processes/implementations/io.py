@@ -34,7 +34,11 @@ from titiler.openeo.errors import (
 )
 from titiler.openeo.processes.implementations.data_model import LazyRasterStack
 from titiler.openeo.processes.implementations.utils import _props_to_datetime
-from titiler.openeo.reader import SimpleSTACReader, _estimate_output_dimensions
+from titiler.openeo.reader import (
+    SimpleSTACReader,
+    _apply_cutline_mask,
+    _estimate_output_dimensions,
+)
 from titiler.openeo.settings import ProcessingSettings
 
 from ....reader import GeoZarrReader
@@ -464,7 +468,20 @@ def _reader(item: Dict[str, Any], bbox: BBox, **kwargs: Any) -> ImageData:
     while True:
         try:
             with STACReader(item) as src_dst:  # type: ignore
-                return src_dst.part(bbox, **kwargs)
+                img = src_dst.part(bbox, **kwargs)
+
+                # Create cutline_mask from item geometry if available
+                # Handle both pystac.Item objects and dictionaries
+                geometry = None
+                if hasattr(item, "geometry"):
+                    geometry = item.geometry
+                elif isinstance(item, dict):
+                    geometry = item.get("geometry")
+
+                if geometry is not None:
+                    img = _apply_cutline_mask(img, geometry, kwargs.get("dst_crs"))
+
+                return img
         except RasterioIOError as e:
             retries += 1
             if retries >= max_retries:
@@ -495,6 +512,7 @@ class LoadCollection(stacapi.LoadCollection):
         height: Optional[int] = 1024,
         tile_buffer: Optional[float] = None,
         options: Optional[Dict] = None,
+        named_parameters: Optional[dict] = None,
     ) -> LazyRasterStack:
         """Load Collection."""
         options = options or {}
@@ -505,6 +523,7 @@ class LoadCollection(stacapi.LoadCollection):
             temporal_extent=temporal_extent,
             properties=properties,
             max_items=processing_settings.max_items,
+            named_parameters=named_parameters,
         )
         if not items:
             raise NoDataAvailable("There is no data available for the given extents.")
