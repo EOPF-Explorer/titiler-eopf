@@ -8,6 +8,15 @@
 
 **Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.4.0...v0.5.0
 
+## 0.6.0 (2026-01-21)
+
+## What's Changed
+* chore(deps): bump the all group across 1 directory with 4 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/63
+* chore(deps): update titiler-openeo dependency to v0.9.0 by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/65
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.5.0...v0.6.0
+
 ## [Unreleased]
 
 ## [0.4.0] - 2025-12-10
