@@ -1,0 +1,3919 @@
+{
+  "attributes": {},
+  "zarr_format": 3,
+  "consolidated_metadata": {
+    "kind": "inline",
+    "must_understand": false,
+    "metadata": {
+      "measurements": {
+        "attributes": {},
+        "zarr_format": 3,
+        "consolidated_metadata": {
+          "kind": "inline",
+          "must_understand": false,
+          "metadata": {}
+        },
+        "node_type": "group"
+      },
+      "measurements/reflectance": {
+        "attributes": {
+          "zarr_conventions": [
+            {
+              "uuid": "d35379db-88df-4056-af3a-620245f8e347",
+              "schema_url": "https://raw.githubusercontent.com/zarr-conventions/multiscales/refs/tags/v1/schema.json",
+              "spec_url": "https://github.com/zarr-conventions/multiscales/blob/v1/README.md",
+              "name": "multiscales",
+              "description": "Multiscale layout of zarr datasets"
+            },
+            {
+              "uuid": "689b58e2-cf7b-45e0-9fff-9cfc0883d6b4",
+              "schema_url": "https://raw.githubusercontent.com/zarr-conventions/spatial/refs/tags/v1/schema.json",
+              "spec_url": "https://github.com/zarr-conventions/spatial/blob/v1/README.md",
+              "name": "spatial:",
+              "description": "Spatial coordinate and transformation information"
+            },
+            {
+              "uuid": "f17cb550-5864-4468-aeb7-f3180cfb622f",
+              "schema_url": "https://raw.githubusercontent.com/zarr-experimental/geo-proj/refs/tags/v1/schema.json",
+              "spec_url": "https://github.com/zarr-experimental/geo-proj/blob/v1/README.md",
+              "name": "proj:",
+              "description": "Coordinate reference system information for geospatial data"
+            }
+          ],
+          "multiscales": {
+            "layout": [
+              {
+                "asset": "r120m",                
+                "spatial:shape": [
+                  915,
+                  915
+                ],
+                "spatial:transform": [
+                  120.0,
+                  0.0,
+                  699960.0,
+                  0.0,
+                  -120.0,
+                  4700040.0
+                ]
+              },
+              {
+                "asset": "r360m",
+                "derived_from": "r120m",
+                "transform": {
+                  "scale": [
+                    36.0,
+                    36.0
+                  ],
+                  "translation": [
+                    175.0,
+                    175.0
+                  ]
+                },
+                "spatial:shape": [
+                  305,
+                  305
+                ],
+                "spatial:transform": [
+                  360.0,
+                  0.0,
+                  699960.0,
+                  0.0,
+                  -360.0,
+                  4700040.0
+                ]
+              },
+              {
+                "asset": "r720m",
+                "derived_from": "r360m",
+                "transform": {
+                  "scale": [
+                    72.0,
+                    72.0
+                  ],
+                  "translation": [
+                    355.0,
+                    355.0
+                  ]
+                },
+                "spatial:shape": [
+                  152,
+                  152
+                ],
+                "spatial:transform": [
+                  720.0,
+                  0.0,
+                  699960.0,
+                  0.0,
+                  -720.0,
+                  4700040.0
+                ]
+              }
+            ],
+            "resampling_method": "average"
+          },  
+          "spatial:dimensions": [
+            "y",
+            "x"
+          ],
+          "spatial:bbox": [
+            699960.0,
+            4590240.0,
+            809760.0,
+            4700040.0
+          ],
+          "spatial:registration": "pixel",
+          "proj:code": "EPSG:32632"
+        },
+        "zarr_format": 3,
+        "consolidated_metadata": {
+          "kind": "inline",
+          "must_understand": false,
+          "metadata": {}
+        },
+        "node_type": "group"
+      },
+      "measurements/reflectance/r120m": {
+        "attributes": {
+          "spatial:dimensions": [
+            "y",
+            "x"
+          ],
+          "spatial:registration": "pixel",
+          "spatial:bbox": [
+            700020.0,
+            4590300.0,
+            809700.0,
+            4699980.0
+          ],
+          "spatial:transform": [
+            120.0,
+            0.0,
+            699960.0,
+            0.0,
+            -120.0,
+            4700040.0
+          ],
+          "spatial:shape": [
+            915,
+            915
+          ],
+          "proj:code": "EPSG:32632",
+          "grid_mapping": "spatial_ref"
+        },
+        "zarr_format": 3,
+        "consolidated_metadata": {
+          "kind": "inline",
+          "must_understand": false,
+          "metadata": {}
+        },
+        "node_type": "group"
+      },
+      "measurements/reflectance/r360m": {
+        "attributes": {
+          "spatial:dimensions": [
+            "y",
+            "x"
+          ],
+          "spatial:registration": "pixel",
+          "spatial:bbox": [
+            700140.0,
+            4590420.0,
+            809580.0,
+            4699860.0
+          ],
+          "spatial:transform": [
+            360.0,
+            0.0,
+            699960.0,
+            0.0,
+            -360.0,
+            4700040.0
+          ],
+          "spatial:shape": [
+            305,
+            305
+          ],
+          "proj:code": "EPSG:32632",
+          "grid_mapping": "spatial_ref"
+        },
+        "zarr_format": 3,
+        "consolidated_metadata": {
+          "kind": "inline",
+          "must_understand": false,
+          "metadata": {}
+        },
+        "node_type": "group"
+      },
+      "measurements/reflectance/r720m": {
+        "attributes": {
+          "spatial:dimensions": [
+            "y",
+            "x"
+          ],
+          "spatial:registration": "pixel",
+          "spatial:bbox": [
+            700320.0,
+            4590960.0,
+            809040.0,
+            4699680.0
+          ],
+          "spatial:transform": [
+            720.0,
+            0.0,
+            699960.0,
+            0.0,
+            -720.0,
+            4700040.0
+          ],
+          "spatial:shape": [
+            152,
+            152
+          ],
+          "proj:code": "EPSG:32632",
+          "grid_mapping": "spatial_ref"
+        },
+        "zarr_format": 3,
+        "consolidated_metadata": {
+          "kind": "inline",
+          "must_understand": false,
+          "metadata": {}
+        },
+        "node_type": "group"
+      },
+      "measurements/reflectance/r120m/b01": {
+        "shape": [
+          915,
+          915
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              915,
+              915
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                183,
+                183
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 01 443 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b01_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 01 443 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r120m/b02": {
+        "shape": [
+          915,
+          915
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              915,
+              915
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                183,
+                183
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 02 490 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b02_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 02 490 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r120m/b03": {
+        "shape": [
+          915,
+          915
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              915,
+              915
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                183,
+                183
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 03 560 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b03_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 03 560 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r120m/b04": {
+        "shape": [
+          915,
+          915
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              915,
+              915
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                183,
+                183
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 04 665 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b04_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 04 665 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r120m/b05": {
+        "shape": [
+          915,
+          915
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              915,
+              915
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                183,
+                183
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 05 705 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b05_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 05 705 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r120m/b06": {
+        "shape": [
+          915,
+          915
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              915,
+              915
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                183,
+                183
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 06 740 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b06_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 06 740 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r120m/b07": {
+        "shape": [
+          915,
+          915
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              915,
+              915
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                183,
+                183
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 07 783 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b07_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 07 783 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r120m/b09": {
+        "shape": [
+          915,
+          915
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              915,
+              915
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                183,
+                183
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 09 940 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b09_r60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 09 940 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r120m/b11": {
+        "shape": [
+          915,
+          915
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              915,
+              915
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                183,
+                183
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 11 1610 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b11_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 11 1610 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r120m/b12": {
+        "shape": [
+          915,
+          915
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              915,
+              915
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                183,
+                183
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 12 2190 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b12_r60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 12 2190 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r120m/b8a": {
+        "shape": [
+          915,
+          915
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              915,
+              915
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                183,
+                183
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 8A 842 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b8a_r60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 8A 842 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r120m/spatial_ref": {
+        "shape": [],
+        "data_type": "int64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": []
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": 0,
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          }
+        ],
+        "attributes": {
+          "crs_wkt": "PROJCS[\"WGS 84 / UTM zone 32N\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"latitude_of_origin\",0],PARAMETER[\"central_meridian\",9],PARAMETER[\"scale_factor\",0.9996],PARAMETER[\"false_easting\",500000],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH],AUTHORITY[\"EPSG\",\"32632\"]]",
+          "semi_major_axis": 6378137.0,
+          "semi_minor_axis": 6356752.314245179,
+          "inverse_flattening": 298.257223563,
+          "reference_ellipsoid_name": "WGS 84",
+          "longitude_of_prime_meridian": 0.0,
+          "prime_meridian_name": "Greenwich",
+          "geographic_crs_name": "WGS 84",
+          "horizontal_datum_name": "World Geodetic System 1984",
+          "projected_crs_name": "WGS 84 / UTM zone 32N",
+          "grid_mapping_name": "transverse_mercator",
+          "latitude_of_projection_origin": 0.0,
+          "longitude_of_central_meridian": 9.0,
+          "false_easting": 500000.0,
+          "false_northing": 0.0,
+          "scale_factor_at_central_meridian": 0.9996,
+          "spatial_ref": "PROJCS[\"WGS 84 / UTM zone 32N\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"latitude_of_origin\",0],PARAMETER[\"central_meridian\",9],PARAMETER[\"scale_factor\",0.9996],PARAMETER[\"false_easting\",500000],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH],AUTHORITY[\"EPSG\",\"32632\"]]"
+        },
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r120m/x": {
+        "shape": [
+          915
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              915
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          }
+        ],
+        "attributes": {
+          "dimensions": [
+            "x"
+          ],
+          "dtype": "<f4",
+          "long_name": "x coordinates of the image at 60m in meters from up-left pixel",
+          "units": "m",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r120m/y": {
+        "shape": [
+          915
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              915
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          }
+        ],
+        "attributes": {
+          "dimensions": [
+            "y"
+          ],
+          "dtype": "<f4",
+          "long_name": "y coordinates of the image at 60m in meters from up-left pixel",
+          "units": "m",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r360m/b01": {
+        "shape": [
+          305,
+          305
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              256,
+              256
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                256,
+                256
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 01 443 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b01_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 01 443 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r360m/b02": {
+        "shape": [
+          305,
+          305
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              256,
+              256
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                256,
+                256
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 02 490 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b02_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 02 490 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r360m/b03": {
+        "shape": [
+          305,
+          305
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              256,
+              256
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                256,
+                256
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 03 560 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b03_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 03 560 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r360m/b04": {
+        "shape": [
+          305,
+          305
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              256,
+              256
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                256,
+                256
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 04 665 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b04_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 04 665 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r360m/b05": {
+        "shape": [
+          305,
+          305
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              256,
+              256
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                256,
+                256
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 05 705 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b05_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 05 705 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r360m/b06": {
+        "shape": [
+          305,
+          305
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              256,
+              256
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                256,
+                256
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 06 740 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b06_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 06 740 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r360m/b07": {
+        "shape": [
+          305,
+          305
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              256,
+              256
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                256,
+                256
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 07 783 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b07_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 07 783 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r360m/b09": {
+        "shape": [
+          305,
+          305
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              256,
+              256
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                256,
+                256
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 09 940 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b09_r60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 09 940 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r360m/b11": {
+        "shape": [
+          305,
+          305
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              256,
+              256
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                256,
+                256
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 11 1610 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b11_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 11 1610 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r360m/b12": {
+        "shape": [
+          305,
+          305
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              256,
+              256
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                256,
+                256
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 12 2190 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b12_r60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 12 2190 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r360m/b8a": {
+        "shape": [
+          305,
+          305
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              256,
+              256
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                256,
+                256
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 8A 842 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b8a_r60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 8A 842 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r360m/spatial_ref": {
+        "shape": [],
+        "data_type": "int64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": []
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": 0,
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          }
+        ],
+        "attributes": {
+          "crs_wkt": "PROJCS[\"WGS 84 / UTM zone 32N\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"latitude_of_origin\",0],PARAMETER[\"central_meridian\",9],PARAMETER[\"scale_factor\",0.9996],PARAMETER[\"false_easting\",500000],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH],AUTHORITY[\"EPSG\",\"32632\"]]",
+          "semi_major_axis": 6378137.0,
+          "semi_minor_axis": 6356752.314245179,
+          "inverse_flattening": 298.257223563,
+          "reference_ellipsoid_name": "WGS 84",
+          "longitude_of_prime_meridian": 0.0,
+          "prime_meridian_name": "Greenwich",
+          "geographic_crs_name": "WGS 84",
+          "horizontal_datum_name": "World Geodetic System 1984",
+          "projected_crs_name": "WGS 84 / UTM zone 32N",
+          "grid_mapping_name": "transverse_mercator",
+          "latitude_of_projection_origin": 0.0,
+          "longitude_of_central_meridian": 9.0,
+          "false_easting": 500000.0,
+          "false_northing": 0.0,
+          "scale_factor_at_central_meridian": 0.9996,
+          "spatial_ref": "PROJCS[\"WGS 84 / UTM zone 32N\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"latitude_of_origin\",0],PARAMETER[\"central_meridian\",9],PARAMETER[\"scale_factor\",0.9996],PARAMETER[\"false_easting\",500000],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH],AUTHORITY[\"EPSG\",\"32632\"]]"
+        },
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r360m/x": {
+        "shape": [
+          305
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              305
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          }
+        ],
+        "attributes": {
+          "dimensions": [
+            "x"
+          ],
+          "dtype": "<f4",
+          "long_name": "x coordinates of the image at 60m in meters from up-left pixel",
+          "units": "m",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r360m/y": {
+        "shape": [
+          305
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              305
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          }
+        ],
+        "attributes": {
+          "dimensions": [
+            "y"
+          ],
+          "dtype": "<f4",
+          "long_name": "y coordinates of the image at 60m in meters from up-left pixel",
+          "units": "m",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r720m/b01": {
+        "shape": [
+          152,
+          152
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              152,
+              152
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                152,
+                152
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 01 443 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b01_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 01 443 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r720m/b02": {
+        "shape": [
+          152,
+          152
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              152,
+              152
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                152,
+                152
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 02 490 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b02_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 02 490 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r720m/b03": {
+        "shape": [
+          152,
+          152
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              152,
+              152
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                152,
+                152
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 03 560 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b03_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 03 560 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r720m/b04": {
+        "shape": [
+          152,
+          152
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              152,
+              152
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                152,
+                152
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 04 665 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b04_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 04 665 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r720m/b05": {
+        "shape": [
+          152,
+          152
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              152,
+              152
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                152,
+                152
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 05 705 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b05_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 05 705 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r720m/b06": {
+        "shape": [
+          152,
+          152
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              152,
+              152
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                152,
+                152
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 06 740 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b06_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 06 740 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r720m/b07": {
+        "shape": [
+          152,
+          152
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              152,
+              152
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                152,
+                152
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 07 783 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b07_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 07 783 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r720m/b09": {
+        "shape": [
+          152,
+          152
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              152,
+              152
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                152,
+                152
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 09 940 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b09_r60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 09 940 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r720m/b11": {
+        "shape": [
+          152,
+          152
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              152,
+              152
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                152,
+                152
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 11 1610 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b11_60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 11 1610 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r720m/b12": {
+        "shape": [
+          152,
+          152
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              152,
+              152
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                152,
+                152
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 12 2190 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b12_r60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 12 2190 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r720m/b8a": {
+        "shape": [
+          152,
+          152
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              152,
+              152
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                152,
+                152
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "_eopf_attrs": {
+            "add_offset": -0.1,
+            "coordinates": [
+              "y",
+              "x"
+            ],
+            "dimensions": [
+              "y",
+              "x"
+            ],
+            "dtype": "<u2",
+            "eopf_is_masked": true,
+            "eopf_target_dtype": "<f8",
+            "fill_value": 0,
+            "long_name": "BOA reflectance from MSI acquisition at spectral band 8A 842 nm",
+            "scale_factor": 0.0001,
+            "short_name": "b8a_r60m",
+            "units": "digital_counts",
+            "valid_max": 65535,
+            "valid_min": 1
+          },
+          "dtype": "<u2",
+          "long_name": "BOA reflectance from MSI acquisition at spectral band 8A 842 nm",
+          "units": "digital_counts",
+          "grid_mapping": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r720m/spatial_ref": {
+        "shape": [],
+        "data_type": "int64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": []
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": 0,
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          }
+        ],
+        "attributes": {
+          "crs_wkt": "PROJCS[\"WGS 84 / UTM zone 32N\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"latitude_of_origin\",0],PARAMETER[\"central_meridian\",9],PARAMETER[\"scale_factor\",0.9996],PARAMETER[\"false_easting\",500000],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH],AUTHORITY[\"EPSG\",\"32632\"]]",
+          "semi_major_axis": 6378137.0,
+          "semi_minor_axis": 6356752.314245179,
+          "inverse_flattening": 298.257223563,
+          "reference_ellipsoid_name": "WGS 84",
+          "longitude_of_prime_meridian": 0.0,
+          "prime_meridian_name": "Greenwich",
+          "geographic_crs_name": "WGS 84",
+          "horizontal_datum_name": "World Geodetic System 1984",
+          "projected_crs_name": "WGS 84 / UTM zone 32N",
+          "grid_mapping_name": "transverse_mercator",
+          "latitude_of_projection_origin": 0.0,
+          "longitude_of_central_meridian": 9.0,
+          "false_easting": 500000.0,
+          "false_northing": 0.0,
+          "scale_factor_at_central_meridian": 0.9996,
+          "spatial_ref": "PROJCS[\"WGS 84 / UTM zone 32N\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"latitude_of_origin\",0],PARAMETER[\"central_meridian\",9],PARAMETER[\"scale_factor\",0.9996],PARAMETER[\"false_easting\",500000],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH],AUTHORITY[\"EPSG\",\"32632\"]]"
+        },
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r720m/x": {
+        "shape": [
+          152
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              152
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          }
+        ],
+        "attributes": {
+          "dimensions": [
+            "x"
+          ],
+          "dtype": "<f4",
+          "long_name": "x coordinates of the image at 60m in meters from up-left pixel",
+          "units": "m",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "measurements/reflectance/r720m/y": {
+        "shape": [
+          152
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              152
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          }
+        ],
+        "attributes": {
+          "dimensions": [
+            "y"
+          ],
+          "dtype": "<f4",
+          "long_name": "y coordinates of the image at 60m in meters from up-left pixel",
+          "units": "m",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      }
+    }
+  },
+  "node_type": "group"
+}

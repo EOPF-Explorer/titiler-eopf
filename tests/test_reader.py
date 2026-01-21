@@ -5,6 +5,7 @@ import os
 import numpy
 import pytest
 import xarray
+from geojson_pydantic import Polygon
 from rio_tiler.errors import ExpressionMixingWarning
 
 from titiler.eopf.reader import GeoZarrReader, MissingVariables
@@ -13,7 +14,7 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 SENTINEL_2 = os.path.join(
     DATA_DIR,
     "eopf_geozarr",
-    "S2A_MSIL2A_20250704T094051_N0511_R036_T33SWB_20250704T115824.zarr",
+    "S2C_MSIL2A_20260117T101351_N0511_R022_T32TQM_20260117T135312.zarr",
 )
 
 
@@ -23,11 +24,19 @@ def test_open():
         assert src.input == SENTINEL_2
         assert isinstance(src.datatree, xarray.DataTree)
 
-        assert src.groups == ["/measurements/reflectance/r60m"]
+        assert src.groups == ["/measurements/reflectance"]
         assert src.variables == [
-            "/measurements/reflectance/r60m:b02",
-            "/measurements/reflectance/r60m:b03",
-            "/measurements/reflectance/r60m:b04",
+            "/measurements/reflectance:b01",
+            "/measurements/reflectance:b02",
+            "/measurements/reflectance:b03",
+            "/measurements/reflectance:b04",
+            "/measurements/reflectance:b05",
+            "/measurements/reflectance:b06",
+            "/measurements/reflectance:b07",
+            "/measurements/reflectance:b09",
+            "/measurements/reflectance:b11",
+            "/measurements/reflectance:b12",
+            "/measurements/reflectance:b8a",
         ]
 
         # We don't have the shape the whole dataset
@@ -52,8 +61,8 @@ def test_zooms_for_group():
         assert src.minzoom == 0
         assert src.maxzoom == 24
 
-        assert src.get_minzoom("/measurements/reflectance/r60m") == 9
-        assert src.get_maxzoom("/measurements/reflectance/r60m") == 11
+        assert src.get_minzoom("/measurements/reflectance") == 7
+        assert src.get_maxzoom("/measurements/reflectance") == 10
 
 
 def test_info():
@@ -62,12 +71,12 @@ def test_info():
         # Default to all variables
         info = src.info()
         assert src.variables == list(info)
-        info = src.info(variables=["/measurements/reflectance/r60m:b02"])
-        info_b02 = info["/measurements/reflectance/r60m:b02"]
-        assert info_b02.crs == "http://www.opengis.net/def/crs/EPSG/0/32633"
+        info = src.info(variables=["/measurements/reflectance:b02"])
+        info_b02 = info["/measurements/reflectance:b02"]
+        assert info_b02.crs == "http://www.opengis.net/def/crs/EPSG/0/32632"
         assert info_b02.band_descriptions == [("b1", "b02")]
-        assert info_b02.width == 1830
-        assert info_b02.height == 1830
+        assert info_b02.width == 915
+        assert info_b02.height == 915
 
 
 def test_tile():
@@ -78,15 +87,15 @@ def test_tile():
 
         tile = src.tms.tile(lon, lat, 9)
 
-        img = src.tile(*tile, variables=["/measurements/reflectance/r60m:b02"])
+        img = src.tile(*tile, variables=["/measurements/reflectance:b02"])
         assert img.band_names == ["b02"]
         assert img.data.shape == (1, 256, 256)
 
         img = src.tile(
             *tile,
             variables=[
-                "/measurements/reflectance/r60m:b02",
-                "/measurements/reflectance/r60m:b03",
+                "/measurements/reflectance:b02",
+                "/measurements/reflectance:b03",
             ],
         )
         assert img.band_names == ["b02", "b03"]
@@ -94,24 +103,25 @@ def test_tile():
 
         img_expr = src.tile(
             *tile,
-            expression="/measurements/reflectance/r60m:b02+/measurements/reflectance/r60m:b03",
+            expression="/measurements/reflectance:b02+/measurements/reflectance:b03",
         )
         assert img_expr.band_names == [
-            "/measurements/reflectance/r60m:b02+/measurements/reflectance/r60m:b03"
+            "/measurements/reflectance:b02+/measurements/reflectance:b03"
         ]
+
         assert img_expr.data.shape == (1, 256, 256)
         numpy.testing.assert_equal(
-            img_expr.data, numpy.ma.sum(img.data, axis=0, keepdims=True)
+            img_expr.array, numpy.ma.sum(img.array, axis=0, keepdims=True)
         )
 
         with pytest.warns(ExpressionMixingWarning):
             img = src.tile(
                 *tile,
-                variables=["/measurements/reflectance/r60m:b02"],
-                expression="/measurements/reflectance/r60m:b02+/measurements/reflectance/r60m:b03",
+                variables=["/measurements/reflectance:b02"],
+                expression="/measurements/reflectance:b02+/measurements/reflectance:b03",
             )
             assert img.band_names == [
-                "/measurements/reflectance/r60m:b02+/measurements/reflectance/r60m:b03"
+                "/measurements/reflectance:b02+/measurements/reflectance:b03"
             ]
             assert img.data.shape == (1, 256, 256)
 
@@ -124,7 +134,7 @@ def test_point():
     with GeoZarrReader(SENTINEL_2) as src:
         bounds = src.bounds
         lon, lat = (bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2
-        pt = src.point(lon, lat, variables=["/measurements/reflectance/r60m:b02"])
+        pt = src.point(lon, lat, variables=["/measurements/reflectance:b02"])
         assert pt.band_names == ["b02"]
         assert pt.data.shape == (1,)
 
@@ -132,8 +142,8 @@ def test_point():
             lon,
             lat,
             variables=[
-                "/measurements/reflectance/r60m:b02",
-                "/measurements/reflectance/r60m:b03",
+                "/measurements/reflectance:b02",
+                "/measurements/reflectance:b03",
             ],
         )
         assert pt.band_names == ["b02", "b03"]
@@ -142,10 +152,10 @@ def test_point():
         pt_expr = src.point(
             lon,
             lat,
-            expression="/measurements/reflectance/r60m:b02+/measurements/reflectance/r60m:b03",
+            expression="/measurements/reflectance:b02+/measurements/reflectance:b03",
         )
         assert pt_expr.band_names == [
-            "/measurements/reflectance/r60m:b02+/measurements/reflectance/r60m:b03"
+            "/measurements/reflectance:b02+/measurements/reflectance:b03"
         ]
         assert pt_expr.data.shape == (1,)
         assert pt_expr.data == pt.data[0] + pt.data[1]
@@ -154,11 +164,11 @@ def test_point():
             pt = src.point(
                 lon,
                 lat,
-                variables=["/measurements/reflectance/r60m:b02"],
-                expression="/measurements/reflectance/r60m:b02+/measurements/reflectance/r60m:b03",
+                variables=["/measurements/reflectance:b02"],
+                expression="/measurements/reflectance:b02+/measurements/reflectance:b03",
             )
             assert pt.band_names == [
-                "/measurements/reflectance/r60m:b02+/measurements/reflectance/r60m:b03"
+                "/measurements/reflectance:b02+/measurements/reflectance:b03"
             ]
             assert pt.data.shape == (1,)
 
@@ -170,75 +180,62 @@ def test_statistics():
     """test statistics method."""
     with GeoZarrReader(SENTINEL_2) as src:
         with pytest.raises(NotImplementedError):
-            src.statistics(variables=["/measurements/reflectance/r60m:b02"])
+            src.statistics(variables=["/measurements/reflectance:b02"])
 
 
 def test_preview():
     """test preview method."""
     with GeoZarrReader(SENTINEL_2) as src:
-        img = src.preview(
-            variables=["/measurements/reflectance/r60m:b02"], max_size=128
-        )
+        img = src.preview(variables=["/measurements/reflectance:b02"], max_size=128)
         assert img.array.shape == (1, 128, 128)
 
         img = src.preview(
-            variables=["/measurements/reflectance/r60m:b02"],
+            variables=["/measurements/reflectance:b02"],
             max_size=128,
             dst_crs="epsg:4326",
         )
-        assert img.array.shape == (1, 103, 128)
+        assert img.array.shape == (1, 96, 128)
 
 
 def test_part():
     """test part method."""
-    # list(tms.xy_bounds(2219, 1580, 12))
-    bbox = [
-        1673053.675105922,
-        4569099.802774707,
-        1682837.6147264242,
-        4578883.742395209,
-    ]
     with GeoZarrReader(SENTINEL_2) as src:
+        bounds = src.bounds
+        lon, lat = (bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2
+        tile = src.tms.tile(lon, lat, 12)
+        bbox = src.tms.xy_bounds(tile)
+
         img = src.part(
             bbox,
             bounds_crs="epsg:3857",
             dst_crs="epsg:3857",
-            variables=["/measurements/reflectance/r60m:b02"],
+            variables=["/measurements/reflectance:b02"],
             width=256,
             height=256,
         )
 
         img_tile = src.tile(
-            2219,
-            1580,
-            12,
-            variables=["/measurements/reflectance/r60m:b02"],
+            tile.x,
+            tile.y,
+            tile.z,
+            variables=["/measurements/reflectance:b02"],
         )
         numpy.testing.assert_array_equal(img.array, img_tile.array)
 
 
 def test_feature():
     """test feature method."""
-    # list(tms.xy_bounds(2219, 1580, 12))
-    # Polygon.from_bounds(*b).model_dump(exclude_none=True)
-    feat = {
-        "type": "Polygon",
-        "coordinates": [
-            [
-                (15.029296874999856, 37.926867601481426),
-                (15.117187499999853, 37.926867601481426),
-                (15.117187499999853, 37.996162679728194),
-                (15.029296874999856, 37.996162679728194),
-                (15.029296874999856, 37.926867601481426),
-            ]
-        ],
-    }
     with GeoZarrReader(SENTINEL_2) as src:
-        img = src.feature(feat, variables=["/measurements/reflectance/r60m:b02"])
+        bounds = src.bounds
+        lon, lat = (bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2
+        tile = src.tms.tile(lon, lat, 12)
+        bbox = src.tms.bounds(tile)
+        feat = Polygon.from_bounds(*bbox).model_dump(exclude_none=True)
+        img = src.feature(feat, variables=["/measurements/reflectance:b02"])
 
     assert list(img.bounds) == [
-        15.029296874999856,
-        37.926867601481426,
-        15.117187499999853,
-        37.996162679728194,
+        12.041015624999872,
+        41.90227704096376,
+        12.12890624999987,
+        41.96765920367824,
     ]

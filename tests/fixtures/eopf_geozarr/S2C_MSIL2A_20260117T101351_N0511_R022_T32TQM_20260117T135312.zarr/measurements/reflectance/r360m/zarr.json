@@ -1,0 +1,31 @@
+{
+  "attributes": {
+    "spatial:dimensions": [
+      "y",
+      "x"
+    ],
+    "spatial:registration": "pixel",
+    "spatial:bbox": [
+      700140.0,
+      4590420.0,
+      809580.0,
+      4699860.0
+    ],
+    "spatial:transform": [
+      360.0,
+      0.0,
+      699960.0,
+      0.0,
+      -360.0,
+      4700040.0
+    ],
+    "spatial:shape": [
+      305,
+      305
+    ],
+    "proj:code": "EPSG:32632",
+    "grid_mapping": "spatial_ref"
+  },
+  "zarr_format": 3,
+  "node_type": "group"
+}
