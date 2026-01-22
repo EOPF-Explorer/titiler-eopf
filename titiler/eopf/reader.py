@@ -291,7 +291,7 @@ def _get_proj_crs(attributes: dict) -> CRS:
 def _get_size(dims: list[str], shape: list[int]) -> tuple[int, int]:
     """Get Height/Width (x, y) dimension from shape/dimension zarr conventions."""
     x_dim = ["lon", "longitude", "easting", "x"]
-    y_dim = ["lat", "latitude", "northing",  "y"]
+    y_dim = ["lat", "latitude", "northing", "y"]
     lower_dims = [d.lower() for d in dims]
     try:
         name = next(d for d in x_dim if d in lower_dims)
