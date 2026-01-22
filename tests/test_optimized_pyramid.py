@@ -28,13 +28,8 @@ def test_optimized_pyramid_structure():
         group = src.datatree["/measurements/reflectance"]
         assert "multiscales" in group.attrs
 
-        tile_matrices = group.attrs["multiscales"]["tile_matrix_set"]["tileMatrices"]
-        assert len(tile_matrices) == 4  # 4 pyramid levels
-
-        # Check scale IDs and resolutions
-        scales = [(tm["id"], tm["cellSize"]) for tm in tile_matrices]
-        expected_scales = [("0", 10.0), ("1", 20.0), ("2", 60.0), ("3", 120.0)]
-        assert scales == expected_scales
+        layouts = group.attrs["multiscales"]["layout"]
+        assert len(layouts) == 4  # 4 levels
 
 
 def test_variable_collection_across_scales():

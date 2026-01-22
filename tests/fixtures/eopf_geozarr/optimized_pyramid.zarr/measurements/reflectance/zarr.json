@@ -1,44 +1,138 @@
 {
   "attributes": {
-    "multiscales": {
-      "tile_matrix_set": {
-        "crs": "EPSG:32633",
-        "tileMatrices": [
-          {
-            "id": "0",
-            "cellSize": 10.0,
-            "matrixWidth": 16,
-            "matrixHeight": 16,
-            "tileWidth": 64,
-            "tileHeight": 64
-          },
-          {
-            "id": "1",
-            "cellSize": 20.0,
-            "matrixWidth": 8,
-            "matrixHeight": 8,
-            "tileWidth": 64,
-            "tileHeight": 64
-          },
-          {
-            "id": "2",
-            "cellSize": 60.0,
-            "matrixWidth": 3,
-            "matrixHeight": 3,
-            "tileWidth": 64,
-            "tileHeight": 64
-          },
-          {
-            "id": "3",
-            "cellSize": 120.0,
-            "matrixWidth": 2,
-            "matrixHeight": 2,
-            "tileWidth": 64,
-            "tileHeight": 64
-          }
-        ]
+    "zarr_conventions": [
+      {
+        "uuid": "d35379db-88df-4056-af3a-620245f8e347",
+        "schema_url": "https://raw.githubusercontent.com/zarr-conventions/multiscales/refs/tags/v1/schema.json",
+        "spec_url": "https://github.com/zarr-conventions/multiscales/blob/v1/README.md",
+        "name": "multiscales",
+        "description": "Multiscale layout of zarr datasets"
+      },
+      {
+        "uuid": "689b58e2-cf7b-45e0-9fff-9cfc0883d6b4",
+        "schema_url": "https://raw.githubusercontent.com/zarr-conventions/spatial/refs/tags/v1/schema.json",
+        "spec_url": "https://github.com/zarr-conventions/spatial/blob/v1/README.md",
+        "name": "spatial:",
+        "description": "Spatial coordinate and transformation information"
+      },
+      {
+        "uuid": "f17cb550-5864-4468-aeb7-f3180cfb622f",
+        "schema_url": "https://raw.githubusercontent.com/zarr-experimental/geo-proj/refs/tags/v1/schema.json",
+        "spec_url": "https://github.com/zarr-experimental/geo-proj/blob/v1/README.md",
+        "name": "proj:",
+        "description": "Coordinate reference system information for geospatial data"
       }
-    }
+    ],
+    "multiscales": {
+      "layout": [
+        {
+          "asset": "r10m",
+          "spatial:shape": [
+            1000,
+            1000
+          ],
+          "spatial:transform": [
+            10.0,
+            0.0,
+            500000,
+            0.0,
+            -10.0,
+            4200000
+          ]
+        },
+        {
+          "asset": "r20m",
+          "derived_from": "r10m",
+          "transform": {
+            "scale": [
+              2.0,
+              2.0
+            ],
+            "translation": [
+              0.0,
+              0.0
+            ]
+          },
+          "spatial:shape": [
+            500,
+            500
+          ],
+          "spatial:transform": [
+            20.0,
+            0.0,
+            500000,
+            0.0,
+            -20.0,
+            4200000
+          ]
+        },
+        {
+          "asset": "r60m",
+          "derived_from": "r20m",
+          "transform": {
+            "scale": [
+              3.0,
+              3.0
+            ],
+            "translation": [
+              0.0,
+              0.0
+            ]
+          },
+          "spatial:shape": [
+            167,
+            167
+          ],
+          "spatial:transform": [
+            60.0,
+            0.0,
+            500000,
+            0.0,
+            -60.0,
+            4200000
+          ]
+        },
+        {
+          "asset": "r120m",
+          "derived_from": "r60m",
+          "transform": {
+            "scale": [
+              2.0,
+              2.0
+            ],
+            "translation": [
+              0.0,
+              0.0
+            ]
+          },
+          "spatial:shape": [
+            84,
+            84
+          ],
+          "spatial:transform": [
+            100.0,
+            0.0,
+            500000,
+            0.0,
+            -100.0,
+            4200000
+          ]
+        }
+      ],
+      "resampling_method": "average"
+    },
+    "spatial:dimensions": [
+      "y",
+      "x"
+    ],
+    "spatial:bbox": [
+      500000,
+      4190000,
+      510000,
+      4200000
+    ],
+    "spatial:registration": "pixel",
+    "proj:code": "EPSG:32633"
   },
   "zarr_format": 3,
   "consolidated_metadata": null,

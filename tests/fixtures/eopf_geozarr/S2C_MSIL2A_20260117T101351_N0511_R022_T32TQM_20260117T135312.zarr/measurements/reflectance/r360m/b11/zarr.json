@@ -1,0 +1,99 @@
+{
+  "shape": [
+    305,
+    305
+  ],
+  "data_type": "float32",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        256,
+        256
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "sharding_indexed",
+      "configuration": {
+        "chunk_shape": [
+          256,
+          256
+        ],
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 4,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
+            }
+          }
+        ],
+        "index_codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "crc32c"
+          }
+        ],
+        "index_location": "end"
+      }
+    }
+  ],
+  "attributes": {
+    "_eopf_attrs": {
+      "add_offset": -0.1,
+      "coordinates": [
+        "y",
+        "x"
+      ],
+      "dimensions": [
+        "y",
+        "x"
+      ],
+      "dtype": "<u2",
+      "eopf_is_masked": true,
+      "eopf_target_dtype": "<f8",
+      "fill_value": 0,
+      "long_name": "BOA reflectance from MSI acquisition at spectral band 11 1610 nm",
+      "scale_factor": 0.0001,
+      "short_name": "b11_60m",
+      "units": "digital_counts",
+      "valid_max": 65535,
+      "valid_min": 1
+    },
+    "dtype": "<u2",
+    "long_name": "BOA reflectance from MSI acquisition at spectral band 11 1610 nm",
+    "units": "digital_counts",
+    "grid_mapping": "spatial_ref",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "y",
+    "x"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}
