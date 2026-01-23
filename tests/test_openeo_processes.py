@@ -45,18 +45,18 @@ def test_load_zarr():
     assert isinstance(img_stack[0], ImageData)
     # Should contain all bands from the default level: b02, b03, b04, b05, b06, b07, b08, b11, b12, b8a
     expected_bands = [
-        "b02",
-        "b03",
-        "b04",
-        "b05",
-        "b06",
-        "b07",
-        "b08",
-        "b11",
-        "b12",
-        "b8a",
+        "/measurements/reflectance:b02",
+        "/measurements/reflectance:b03",
+        "/measurements/reflectance:b04",
+        "/measurements/reflectance:b05",
+        "/measurements/reflectance:b06",
+        "/measurements/reflectance:b07",
+        "/measurements/reflectance:b08",
+        "/measurements/reflectance:b11",
+        "/measurements/reflectance:b12",
+        "/measurements/reflectance:b8a",
     ]
-    assert sorted(img_stack[0].band_names) == sorted(
+    assert sorted(img_stack[0].band_descriptions) == sorted(
         expected_bands
     ), f"Expected {expected_bands} but got {img_stack[0].band_names}"
 
@@ -72,9 +72,4 @@ def test_load_zarr():
     img_stack = list(zarr.values())
     assert len(img_stack) == 1
     assert isinstance(img_stack[0], ImageData)
-
-    # Verify that variable filtering worked correctly
-    # Should only contain the b02 band that was requested
-    assert img_stack[0].band_names == [
-        "b02"
-    ], f"Expected ['b02'] but got {img_stack[0].band_names}"
+    assert img_stack[0].band_descriptions == ["/measurements/reflectance:b02"]

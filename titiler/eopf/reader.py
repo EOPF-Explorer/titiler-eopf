@@ -724,7 +724,7 @@ class GeoZarrReader(BaseReader):
                 "`variables` must be passed via `expression` or `variables` options."
             )
 
-        for gv in variables:
+        for ix, gv in enumerate(variables):
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
             with XarrayReader(
                 self._get_variable(
@@ -750,24 +750,29 @@ class GeoZarrReader(BaseReader):
                 if expression:
                     if len(img.band_names) > 1:
                         raise ValueError("Can't use `expression` for multidim dataset")
+                    # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
                 else:
-                    # Extract variable name from group:variable format
-                    variable_name = gv.split(":")[-1] if ":" in gv else gv
-                    img.band_names = [variable_name]
+                    img.band_names = [f"b{ix + 1}"]
+
+                img.band_descriptions = [gv]
 
                 img_stack.append(img)
 
         img = ImageData.create_from_list(img_stack)
 
         if expression:
-            # edit expression to avoid forbiden characters
+            # NOTE: translate expression from {group:variable} to Var{ix}
             expression = self._convert_expression_to_index(expression)
+
+            # NOTE: `apply_expression` method uses band_names (e.g b1) not band_descriptions
             img = img.apply_expression(expression)
-            # transform expression back
-            img.band_names = [
+
+            # NOTE: transform expression back
+            img.band_descriptions = [
                 self._convert_expression_from_index(b) for b in img.band_names
             ]
+            img.band_names = [f"b{ix + 1}" for ix, _ in enumerate(img.band_names)]
 
         img.assets = [self.input]
 
@@ -813,7 +818,7 @@ class GeoZarrReader(BaseReader):
                 "`variables` must be passed via `expression` or `variables` options."
             )
 
-        for gv in variables:
+        for ix, gv in enumerate(variables):
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
             with XarrayReader(
                 self._get_variable(
@@ -841,24 +846,29 @@ class GeoZarrReader(BaseReader):
                 if expression:
                     if len(img.band_names) > 1:
                         raise ValueError("Can't use `expression` for multidim dataset")
+                    # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
                 else:
-                    # Extract variable name from group:variable format
-                    variable_name = gv.split(":")[-1] if ":" in gv else gv
-                    img.band_names = [variable_name]
+                    img.band_names = [f"b{ix + 1}"]
+
+                img.band_descriptions = [gv]
 
                 img_stack.append(img)
 
         img = ImageData.create_from_list(img_stack)
 
         if expression:
-            # edit expression to avoid forbiden characters
+            # NOTE: translate expression from {group:variable} to Var{ix}
             expression = self._convert_expression_to_index(expression)
+
+            # NOTE: `apply_expression` method uses band_names (e.g b1) not band_descriptions
             img = img.apply_expression(expression)
-            # transform expression back
-            img.band_names = [
+
+            # NOTE: transform expression back
+            img.band_descriptions = [
                 self._convert_expression_from_index(b) for b in img.band_names
             ]
+            img.band_names = [f"b{ix + 1}" for ix, _ in enumerate(img.band_names)]
 
         img.assets = [self.input]
 
@@ -895,7 +905,7 @@ class GeoZarrReader(BaseReader):
                 "`variables` must be passed via `expression` or `variables` options."
             )
 
-        for gv in variables:
+        for ix, gv in enumerate(variables):
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
             with XarrayReader(
                 self._get_variable(
@@ -921,24 +931,29 @@ class GeoZarrReader(BaseReader):
                 if expression:
                     if len(img.band_names) > 1:
                         raise ValueError("Can't use `expression` for multidim dataset")
+                    # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
                 else:
-                    # Extract variable name from group:variable format
-                    variable_name = gv.split(":")[-1] if ":" in gv else gv
-                    img.band_names = [variable_name]
+                    img.band_names = [f"b{ix + 1}"]
+
+                img.band_descriptions = [gv]
 
                 img_stack.append(img)
 
         img = ImageData.create_from_list(img_stack)
 
         if expression:
-            # edit expression to avoid forbiden characters
+            # NOTE: translate expression from {group:variable} to Var{ix}
             expression = self._convert_expression_to_index(expression)
+
+            # NOTE: `apply_expression` method uses band_names (e.g b1) not band_descriptions
             img = img.apply_expression(expression)
-            # transform expression back
-            img.band_names = [
+
+            # NOTE: transform expression back
+            img.band_descriptions = [
                 self._convert_expression_from_index(b) for b in img.band_names
             ]
+            img.band_names = [f"b{ix + 1}" for ix, _ in enumerate(img.band_names)]
 
         img.assets = [self.input]
 
@@ -971,7 +986,7 @@ class GeoZarrReader(BaseReader):
                 "`variables` must be passed via `expression` or `variables` options."
             )
 
-        for gv in variables:
+        for ix, gv in enumerate(variables):
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
             with XarrayReader(
                 self._get_variable(group, variable, sel=sel, method=method),
@@ -981,11 +996,12 @@ class GeoZarrReader(BaseReader):
                 if expression:
                     if len(pt.band_names) > 1:
                         raise ValueError("Can't use `expression` for multidim dataset")
+                    # NOTE: create band_names in form of Var{ix} used later for expressions
                     pt.band_names = [self._variable_idx[gv]]
                 else:
-                    # Extract variable name from group:variable format
-                    variable_name = gv.split(":")[-1] if ":" in gv else gv
-                    pt.band_names = [variable_name]
+                    pt.band_names = [f"b{ix + 1}"]
+
+                pt.band_descriptions = [gv]
 
                 pts_stack.append(pt)
 
@@ -995,9 +1011,10 @@ class GeoZarrReader(BaseReader):
             expression = self._convert_expression_to_index(expression)
             pt = pt.apply_expression(expression)
             # transform expression back
-            pt.band_names = [
+            pt.band_descriptions = [
                 self._convert_expression_from_index(b) for b in pt.band_names
             ]
+            pt.band_names = [f"b{ix + 1}" for ix, _ in enumerate(pt.band_names)]
 
         pt.assets = [self.input]
 
@@ -1047,7 +1064,7 @@ class GeoZarrReader(BaseReader):
                 "`variables` must be passed via `expression` or `variables` options."
             )
 
-        for gv in variables:
+        for ix, gv in enumerate(variables):
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
             with XarrayReader(
                 self._get_variable(
@@ -1075,24 +1092,29 @@ class GeoZarrReader(BaseReader):
                 if expression:
                     if len(img.band_names) > 1:
                         raise ValueError("Can't use `expression` for multidim dataset")
+                    # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
                 else:
-                    # Extract variable name from group:variable format
-                    variable_name = gv.split(":")[-1] if ":" in gv else gv
-                    img.band_names = [variable_name]
+                    img.band_names = [f"b{ix + 1}"]
+
+                img.band_descriptions = [gv]
 
                 img_stack.append(img)
 
         img = ImageData.create_from_list(img_stack)
 
         if expression:
-            # edit expression to avoid forbiden characters
+            # NOTE: translate expression from {group:variable} to Var{ix}
             expression = self._convert_expression_to_index(expression)
+
+            # NOTE: `apply_expression` method uses band_names (e.g b1) not band_descriptions
             img = img.apply_expression(expression)
-            # transform expression back
-            img.band_names = [
+
+            # NOTE: transform expression back
+            img.band_descriptions = [
                 self._convert_expression_from_index(b) for b in img.band_names
             ]
+            img.band_names = [f"b{ix + 1}" for ix, _ in enumerate(img.band_names)]
 
         img.assets = [self.input]
 
