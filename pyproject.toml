@@ -35,7 +35,8 @@ dependencies = [
 
 [project.optional-dependencies]
 openeo = [
-    "titiler-openeo==0.10.0",
+    # "titiler-openeo==0.7.0",
+    "titiler-openeo@git+https://github.com/sentinel-hub/titiler-openeo.git@v0.9.0",
     "duckdb",
     "sqlalchemy>=2.0.0",
     "psycopg2-binary",
@@ -63,7 +64,8 @@ dev = [
     "pre-commit",
     "bump-my-version",
     "boto3",
-    "titiler-openeo==0.10.0",
+    # "titiler-openeo==0.7.0",
+    "titiler-openeo@git+https://github.com/sentinel-hub/titiler-openeo.git@v0.9.0",
 ]
 notebook = [
     "ipython",
