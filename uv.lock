@@ -840,7 +840,7 @@ name = "importlib-metadata"
 version = "8.7.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "zipp" },
+    { name = "zipp", marker = "python_full_version < '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f3/49/3b30cad09e7771a4982d9975a8cbf64f00d4a1ececb53297f1d9a7be1b10/importlib_metadata-8.7.1.tar.gz", hash = "sha256:49fef1ae6440c182052f407c8d34a68f72efc36db9ca90dc0113398f2fdde8bb", size = 57107 }
 wheels = [
@@ -1315,7 +1315,7 @@ wheels = [
 
 [[package]]
 name = "openeo-pg-parser-networkx"
-version = "2025.10.1"
+version = "2026.1.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dask" },
@@ -1325,14 +1325,13 @@ dependencies = [
     { name = "pendulum" },
     { name = "pydantic" },
     { name = "pyproj" },
-    { name = "shapely" },
     { name = "traitlets" },
     { name = "xarray" },
     { name = "yprov4wfs" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/56/4d/253fb3750870899d9a2d7fea756a86fde831293b73d3837e2cc787e091ff/openeo_pg_parser_networkx-2025.10.1.tar.gz", hash = "sha256:7f0941f9ff8d567b402b6b4cf3a4de0c173d02af6cf59b6651bbd9a373b00596", size = 24190 }
+sdist = { url = "https://files.pythonhosted.org/packages/bc/92/310de80a8a2ad9e326033b320d9736e87cf933fdd74789e2e95af021f8fc/openeo_pg_parser_networkx-2026.1.2.tar.gz", hash = "sha256:c14e664d9c294c53a304338c7da424c82eb159afbb0e58e53f75a8c098d95cfa", size = 24140 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/91/ff/f2d0f6b8b5e1e427e413369dab36459df455d75ca0bd4e04f52351c609bc/openeo_pg_parser_networkx-2025.10.1-py3-none-any.whl", hash = "sha256:fc3f3eeed28134ea48874f643706754b897f8cc74a2ed593ddefc0b4fa466304", size = 25163 },
+    { url = "https://files.pythonhosted.org/packages/4e/5c/e2fc2ef44913028891888d842317fd32637205f424773c37e9406cf75855/openeo_pg_parser_networkx-2026.1.2-py3-none-any.whl", hash = "sha256:2c63bfc17872f07d085590fce5ca303814ecad44bac133dc575154b1ecac57d0", size = 25133 },
 ]
 
 [[package]]
@@ -2052,7 +2051,7 @@ wheels = [
 
 [[package]]
 name = "rio-tiler"
-version = "7.9.2"
+version = "8.0.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
@@ -2067,9 +2066,9 @@ dependencies = [
     { name = "rasterio" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/85/1b/684dd2478fdbf69befa7518936639c37c9fa1694fd75cca5c0430a2ab542/rio_tiler-7.9.2.tar.gz", hash = "sha256:55f96adcffcf67825c83a9906085b4d5b740139ec66432949a0e4c0b4ea6916b", size = 175772 }
+sdist = { url = "https://files.pythonhosted.org/packages/91/00/3d4ee47e63eb1848acd996cbc02e915adc78360206847b11d26531029c53/rio_tiler-8.0.5.tar.gz", hash = "sha256:c1ce2b9ef166620541c21fe3a0d911a2127354fa68c17131d73ae4e889522cd9", size = 180790 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/40/8c/cbb6feed404ab0b2883b81349d8642d96047878394e7195d1bacfe36a277/rio_tiler-7.9.2-py3-none-any.whl", hash = "sha256:aeb078e63b59ef1041c99bdd4f776341ee8e940fa57ca2e37bab498738b49b56", size = 269983 },
+    { url = "https://files.pythonhosted.org/packages/2a/b1/8ea5458d63ef63565e6e7c38ef419c034f1ba8cdfd69fb0ae9c9c90195a1/rio_tiler-8.0.5-py3-none-any.whl", hash = "sha256:137c558c29be1e7312719d2d865ac74f4198afd02e655cdcba306069380d44c9", size = 276693 },
 ]
 
 [[package]]
@@ -2148,33 +2147,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/05/04/74127fc843314818edfa81b5540e26dd537353b123a4edc563109d8f17dd/s3transfer-0.16.0.tar.gz", hash = "sha256:8e990f13268025792229cd52fa10cb7163744bf56e719e0b9cb925ab79abf920", size = 153827 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/fc/51/727abb13f44c1fcf6d145979e1535a35794db0f6e450a0cb46aa24732fe2/s3transfer-0.16.0-py3-none-any.whl", hash = "sha256:18e25d66fed509e3868dc1572b3f427ff947dd2c56f844a5bf09481ad3f3b2fe", size = 86830 },
-]
-
-[[package]]
-name = "shapely"
-version = "2.1.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/4d/bc/0989043118a27cccb4e906a46b7565ce36ca7b57f5a18b78f4f1b0f72d9d/shapely-2.1.2.tar.gz", hash = "sha256:2ed4ecb28320a433db18a5bf029986aa8afcfd740745e78847e330d5d94922a9", size = 315489 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/8f/8d/1ff672dea9ec6a7b5d422eb6d095ed886e2e523733329f75fdcb14ee1149/shapely-2.1.2-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:91121757b0a36c9aac3427a651a7e6567110a4a67c97edf04f8d55d4765f6618", size = 1820038 },
-    { url = "https://files.pythonhosted.org/packages/4f/ce/28fab8c772ce5db23a0d86bf0adaee0c4c79d5ad1db766055fa3dab442e2/shapely-2.1.2-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:16a9c722ba774cf50b5d4541242b4cce05aafd44a015290c82ba8a16931ff63d", size = 1626039 },
-    { url = "https://files.pythonhosted.org/packages/70/8b/868b7e3f4982f5006e9395c1e12343c66a8155c0374fdc07c0e6a1ab547d/shapely-2.1.2-cp311-cp311-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:cc4f7397459b12c0b196c9efe1f9d7e92463cbba142632b4cc6d8bbbbd3e2b09", size = 3001519 },
-    { url = "https://files.pythonhosted.org/packages/13/02/58b0b8d9c17c93ab6340edd8b7308c0c5a5b81f94ce65705819b7416dba5/shapely-2.1.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:136ab87b17e733e22f0961504d05e77e7be8c9b5a8184f685b4a91a84efe3c26", size = 3110842 },
-    { url = "https://files.pythonhosted.org/packages/af/61/8e389c97994d5f331dcffb25e2fa761aeedfb52b3ad9bcdd7b8671f4810a/shapely-2.1.2-cp311-cp311-musllinux_1_2_aarch64.whl", hash = "sha256:16c5d0fc45d3aa0a69074979f4f1928ca2734fb2e0dde8af9611e134e46774e7", size = 4021316 },
-    { url = "https://files.pythonhosted.org/packages/d3/d4/9b2a9fe6039f9e42ccf2cb3e84f219fd8364b0c3b8e7bbc857b5fbe9c14c/shapely-2.1.2-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:6ddc759f72b5b2b0f54a7e7cde44acef680a55019eb52ac63a7af2cf17cb9cd2", size = 4178586 },
-    { url = "https://files.pythonhosted.org/packages/16/f6/9840f6963ed4decf76b08fd6d7fed14f8779fb7a62cb45c5617fa8ac6eab/shapely-2.1.2-cp311-cp311-win32.whl", hash = "sha256:2fa78b49485391224755a856ed3b3bd91c8455f6121fee0db0e71cefb07d0ef6", size = 1543961 },
-    { url = "https://files.pythonhosted.org/packages/38/1e/3f8ea46353c2a33c1669eb7327f9665103aa3a8dfe7f2e4ef714c210b2c2/shapely-2.1.2-cp311-cp311-win_amd64.whl", hash = "sha256:c64d5c97b2f47e3cd9b712eaced3b061f2b71234b3fc263e0fcf7d889c6559dc", size = 1722856 },
-    { url = "https://files.pythonhosted.org/packages/24/c0/f3b6453cf2dfa99adc0ba6675f9aaff9e526d2224cbd7ff9c1a879238693/shapely-2.1.2-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:fe2533caae6a91a543dec62e8360fe86ffcdc42a7c55f9dfd0128a977a896b94", size = 1833550 },
-    { url = "https://files.pythonhosted.org/packages/86/07/59dee0bc4b913b7ab59ab1086225baca5b8f19865e6101db9ebb7243e132/shapely-2.1.2-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:ba4d1333cc0bc94381d6d4308d2e4e008e0bd128bdcff5573199742ee3634359", size = 1643556 },
-    { url = "https://files.pythonhosted.org/packages/26/29/a5397e75b435b9895cd53e165083faed5d12fd9626eadec15a83a2411f0f/shapely-2.1.2-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:0bd308103340030feef6c111d3eb98d50dc13feea33affc8a6f9fa549e9458a3", size = 2988308 },
-    { url = "https://files.pythonhosted.org/packages/b9/37/e781683abac55dde9771e086b790e554811a71ed0b2b8a1e789b7430dd44/shapely-2.1.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:1e7d4d7ad262a48bb44277ca12c7c78cb1b0f56b32c10734ec9a1d30c0b0c54b", size = 3099844 },
-    { url = "https://files.pythonhosted.org/packages/d8/f3/9876b64d4a5a321b9dc482c92bb6f061f2fa42131cba643c699f39317cb9/shapely-2.1.2-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:e9eddfe513096a71896441a7c37db72da0687b34752c4e193577a145c71736fc", size = 3988842 },
-    { url = "https://files.pythonhosted.org/packages/d1/a0/704c7292f7014c7e74ec84eddb7b109e1fbae74a16deae9c1504b1d15565/shapely-2.1.2-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:980c777c612514c0cf99bc8a9de6d286f5e186dcaf9091252fcd444e5638193d", size = 4152714 },
-    { url = "https://files.pythonhosted.org/packages/53/46/319c9dc788884ad0785242543cdffac0e6530e4d0deb6c4862bc4143dcf3/shapely-2.1.2-cp312-cp312-win32.whl", hash = "sha256:9111274b88e4d7b54a95218e243282709b330ef52b7b86bc6aaf4f805306f454", size = 1542745 },
-    { url = "https://files.pythonhosted.org/packages/ec/bf/cb6c1c505cb31e818e900b9312d514f381fbfa5c4363edfce0fcc4f8c1a4/shapely-2.1.2-cp312-cp312-win_amd64.whl", hash = "sha256:743044b4cfb34f9a67205cee9279feaf60ba7d02e69febc2afc609047cb49179", size = 1722861 },
 ]
 
 [[package]]
@@ -2298,7 +2270,7 @@ wheels = [
 
 [[package]]
 name = "titiler-core"
-version = "0.24.2"
+version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
@@ -2312,14 +2284,14 @@ dependencies = [
     { name = "simplejson" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6a/9e/b3e33453395f7771c43f7dd844c47b8074f4a9f636d6cd312d534d5b4cda/titiler_core-0.24.2.tar.gz", hash = "sha256:fea3253bf31bf4cfb4b53f2afe360da9c62d4e64173e72f01e70b932c2677a80", size = 71561 }
+sdist = { url = "https://files.pythonhosted.org/packages/9b/68/c6ea6a4de4673934b74e7c9cd626917ecccca491e717730e286340b2482c/titiler_core-1.1.1.tar.gz", hash = "sha256:69568d86d1e1bffd211d3089fb6f006ae24653d84749f8f85b2319d4307d8358", size = 68572 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/83/e2/c7421adf35f6725af75b062de1a3ebdeadbc111aaca857515f5f6b1823f8/titiler_core-0.24.2-py3-none-any.whl", hash = "sha256:dc974e447b805505b45862a418128392d85a4390fc6f0b4234b0bd4a01d9c296", size = 88432 },
+    { url = "https://files.pythonhosted.org/packages/0d/8e/e284715e92608cfe4f858880418759550fae4fc37559bc865de1f4f41d31/titiler_core-1.1.1-py3-none-any.whl", hash = "sha256:638897f0f54bf3f1e4151f551aeccd2eea8baf8b7728ccbef57ee24d677167fa", size = 86775 },
 ]
 
 [[package]]
 name = "titiler-eopf"
-version = "0.3.0"
+version = "0.6.0"
 source = { editable = "." }
 dependencies = [
     { name = "obstore" },
@@ -2334,6 +2306,7 @@ dependencies = [
 
 [package.optional-dependencies]
 cache = [
+    { name = "boto3" },
     { name = "redis" },
 ]
 openeo = [
@@ -2343,6 +2316,9 @@ openeo = [
     { name = "psycopg2-binary" },
     { name = "sqlalchemy" },
     { name = "titiler-openeo" },
+]
+server = [
+    { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.dev-dependencies]
@@ -2367,12 +2343,10 @@ notebook = [
     { name = "jupyter-client" },
     { name = "matplotlib" },
 ]
-server = [
-    { name = "uvicorn", extra = ["standard"] },
-]
 
 [package.metadata]
 requires-dist = [
+    { name = "boto3", marker = "extra == 'cache'" },
     { name = "cryptography", marker = "extra == 'openeo'" },
     { name = "duckdb", marker = "extra == 'openeo'" },
     { name = "httpx", marker = "extra == 'openeo'" },
@@ -2381,12 +2355,13 @@ requires-dist = [
     { name = "psycopg2-binary", marker = "extra == 'openeo'" },
     { name = "pydantic-settings", specifier = "~=2.0" },
     { name = "redis", marker = "extra == 'cache'" },
-    { name = "rio-tiler", specifier = ">=7.9,<8.0" },
+    { name = "rio-tiler", specifier = ">=7.9" },
     { name = "sqlalchemy", marker = "extra == 'openeo'", specifier = ">=2.0.0" },
     { name = "starlette-cramjam", specifier = ">=0.4,<1.0" },
-    { name = "titiler-core", specifier = ">=0.24,<0.25" },
-    { name = "titiler-openeo", marker = "extra == 'openeo'", git = "https://github.com/sentinel-hub/titiler-openeo.git?rev=all-parameters" },
-    { name = "titiler-xarray", specifier = ">=0.24,<0.25" },
+    { name = "titiler-core", specifier = ">=1.1.1,<2.0" },
+    { name = "titiler-openeo", marker = "extra == 'openeo'", specifier = "==0.10.0" },
+    { name = "titiler-xarray", specifier = ">=1.1.1,<2.0" },
+    { name = "uvicorn", extras = ["standard"], marker = "extra == 'server'" },
     { name = "zarr", specifier = ">=3.1.3" },
 ]
 
@@ -2403,7 +2378,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
-    { name = "titiler-openeo", git = "https://github.com/sentinel-hub/titiler-openeo.git?rev=all-parameters" },
+    { name = "titiler-openeo", specifier = "==0.10.0" },
 ]
 notebook = [
     { name = "folium" },
@@ -2412,12 +2387,11 @@ notebook = [
     { name = "jupyter-client" },
     { name = "matplotlib" },
 ]
-server = [{ name = "uvicorn", extras = ["standard"] }]
 
 [[package]]
 name = "titiler-openeo"
-version = "0.7.0"
-source = { git = "https://github.com/sentinel-hub/titiler-openeo.git?rev=all-parameters#6fa5fd67652f7beefb2930efd42b3f826c9d9c43" }
+version = "0.10.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpath-ng" },
     { name = "openeo-pg-parser-networkx" },
@@ -2426,20 +2400,25 @@ dependencies = [
     { name = "starlette-cramjam" },
     { name = "titiler-core" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/05/25/cfbed57aff239229ea17f184e496ce569035a34eaca85eb429183e75341a/titiler_openeo-0.10.0.tar.gz", hash = "sha256:5fd88d83884208fc764758ae029ee6ca9a23a7bae5e317a63fd374fa0a308609", size = 190127 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b5/72/84ab0a02a28733dd56326f92d297272cc423c6ffcbd1fd38e1663d64e4f5/titiler_openeo-0.10.0-py3-none-any.whl", hash = "sha256:8a83ff36ed38edb701c1164d65ecfdda8c5c5a050e43d4915fd185a633900c70", size = 256014 },
+]
 
 [[package]]
 name = "titiler-xarray"
-version = "0.24.2"
+version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "rio-tiler" },
+    { name = "obstore" },
     { name = "rioxarray" },
     { name = "titiler-core" },
     { name = "xarray" },
+    { name = "zarr" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a0/e5/dfcaf8ef93e39f2a366d205f1c1711ad3c6c718c99f98dbd016960a67b86/titiler_xarray-0.24.2.tar.gz", hash = "sha256:c18503aa82534eb61938ef16385416c22876ca36bf7be46c3553c35b88d5fe39", size = 10860 }
+sdist = { url = "https://files.pythonhosted.org/packages/28/41/c0474be267a6242330e8c7f0cae60ca680b190b73a45da543dccda20fa50/titiler_xarray-1.1.1.tar.gz", hash = "sha256:a8955b0502be5e4b73141800c4717f7a13dbb86537e34d4e23bb69b9ed7ee53d", size = 32430 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2b/5d/20a905ec420fc415f306c6ee42f313a4d126b1d8cba822534c88d3967798/titiler_xarray-0.24.2-py3-none-any.whl", hash = "sha256:e95634da2585834ba0cf8db1fb1ce6526591959686ed94748763e1d9bfd57e7d", size = 11803 },
+    { url = "https://files.pythonhosted.org/packages/ca/14/a6caf00df9293e0ccf0bd5535ca4a1eda24a9fd7e80a205f77596ac5ce4b/titiler_xarray-1.1.1-py3-none-any.whl", hash = "sha256:d3a482f14b3d9310c151a83137222393190b299e0fcc1c6e9904566a889f5721", size = 34146 },
 ]
 
 [[package]]

@@ -60,7 +60,6 @@ class TilerFactory(BaseTilerFactory):
 
     def register_routes(self):
         """This Method register routes to the router."""
-        self.bounds()
         self.info()
         # self.statistics()
 
