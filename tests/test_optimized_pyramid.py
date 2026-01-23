@@ -290,7 +290,12 @@ def test_tile_method_with_mixed_variables():
         img = src.tile(*tile, variables=mixed_variables)
 
         # Should successfully create tile despite variables coming from different scales
-        assert img.band_names == ["b02", "b05", "b08"]
+        assert img.band_names == ["b1", "b2", "b3"]
+        assert img.band_descriptions == [
+            "/measurements/reflectance:b02",
+            "/measurements/reflectance:b05",
+            "/measurements/reflectance:b08",
+        ]
         assert img.data.shape == (3, 256, 256)
 
         # All bands should have valid data - check if it's a masked array or regular array
@@ -315,7 +320,12 @@ def test_point_method_with_mixed_variables():
         pt = src.point(lon, lat, variables=mixed_variables)
 
         # Should successfully extract point values
-        assert pt.band_names == ["b02", "b05"]
+        assert pt.band_names == ["b1", "b2"]
+        assert pt.band_descriptions == [
+            "/measurements/reflectance:b02",  # Level 0 preferred
+            "/measurements/reflectance:b05",  # Only levels 1,2,3
+        ]
+
         assert pt.data.shape == (2,)
 
         # Values should be valid (not all NaN/masked)
@@ -337,7 +347,8 @@ def test_expression_with_mixed_variables():
 
         # Should work despite variables coming from different optimal scales
         assert img.data.shape == (1, 256, 256)
-        assert img.band_names == [expression]
+        assert img.band_names == ["b1"]
+        assert img.band_descriptions == [expression]
 
         # Should have valid data - check if it's a masked array or regular array
         if hasattr(img.data, "mask"):

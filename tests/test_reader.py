@@ -79,7 +79,8 @@ def test_tile():
         tile = src.tms.tile(lon, lat, 9)
 
         img = src.tile(*tile, variables=["/measurements/reflectance/r60m:b02"])
-        assert img.band_names == ["b02"]
+        assert img.band_names == ["b1"]
+        assert img.band_descriptions == ["/measurements/reflectance/r60m:b02"]
         assert img.data.shape == (1, 256, 256)
 
         img = src.tile(
@@ -89,19 +90,38 @@ def test_tile():
                 "/measurements/reflectance/r60m:b03",
             ],
         )
-        assert img.band_names == ["b02", "b03"]
+        assert img.band_names == ["b1", "b2"]
+        assert img.band_descriptions == [
+            "/measurements/reflectance/r60m:b02",
+            "/measurements/reflectance/r60m:b03",
+        ]
         assert img.data.shape == (2, 256, 256)
 
         img_expr = src.tile(
             *tile,
             expression="/measurements/reflectance/r60m:b02+/measurements/reflectance/r60m:b03",
         )
-        assert img_expr.band_names == [
+        assert img_expr.band_names == ["b1"]
+        assert img_expr.band_descriptions == [
             "/measurements/reflectance/r60m:b02+/measurements/reflectance/r60m:b03"
         ]
         assert img_expr.data.shape == (1, 256, 256)
         numpy.testing.assert_equal(
             img_expr.data, numpy.ma.sum(img.data, axis=0, keepdims=True)
+        )
+
+        img_expr = src.tile(
+            *tile,
+            expression="/measurements/reflectance/r60m:b02+/measurements/reflectance/r60m:b03;/measurements/reflectance/r60m:b03",
+        )
+        assert img_expr.band_names == ["b1", "b2"]
+        assert img_expr.band_descriptions == [
+            "/measurements/reflectance/r60m:b02+/measurements/reflectance/r60m:b03",
+            "/measurements/reflectance/r60m:b03",
+        ]
+        assert img_expr.data.shape == (2, 256, 256)
+        numpy.testing.assert_equal(
+            img_expr.data[0], numpy.ma.sum(img.data, axis=0, keepdims=True)[0]
         )
 
         with pytest.warns(ExpressionMixingWarning):
@@ -110,7 +130,7 @@ def test_tile():
                 variables=["/measurements/reflectance/r60m:b02"],
                 expression="/measurements/reflectance/r60m:b02+/measurements/reflectance/r60m:b03",
             )
-            assert img.band_names == [
+            assert img.band_descriptions == [
                 "/measurements/reflectance/r60m:b02+/measurements/reflectance/r60m:b03"
             ]
             assert img.data.shape == (1, 256, 256)
@@ -125,7 +145,8 @@ def test_point():
         bounds = src.bounds
         lon, lat = (bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2
         pt = src.point(lon, lat, variables=["/measurements/reflectance/r60m:b02"])
-        assert pt.band_names == ["b02"]
+        assert pt.band_names == ["b1"]
+        assert pt.band_descriptions == ["/measurements/reflectance/r60m:b02"]
         assert pt.data.shape == (1,)
 
         pt = src.point(
@@ -136,7 +157,11 @@ def test_point():
                 "/measurements/reflectance/r60m:b03",
             ],
         )
-        assert pt.band_names == ["b02", "b03"]
+        assert pt.band_names == ["b1", "b2"]
+        assert pt.band_descriptions == [
+            "/measurements/reflectance/r60m:b02",
+            "/measurements/reflectance/r60m:b03",
+        ]
         assert pt.data.shape == (2,)
 
         pt_expr = src.point(
@@ -144,7 +169,8 @@ def test_point():
             lat,
             expression="/measurements/reflectance/r60m:b02+/measurements/reflectance/r60m:b03",
         )
-        assert pt_expr.band_names == [
+        assert pt_expr.band_names == ["b1"]
+        assert pt_expr.band_descriptions == [
             "/measurements/reflectance/r60m:b02+/measurements/reflectance/r60m:b03"
         ]
         assert pt_expr.data.shape == (1,)
@@ -157,7 +183,7 @@ def test_point():
                 variables=["/measurements/reflectance/r60m:b02"],
                 expression="/measurements/reflectance/r60m:b02+/measurements/reflectance/r60m:b03",
             )
-            assert pt.band_names == [
+            assert pt.band_descriptions == [
                 "/measurements/reflectance/r60m:b02+/measurements/reflectance/r60m:b03"
             ]
             assert pt.data.shape == (1,)
