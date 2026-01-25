@@ -8,6 +8,16 @@
 
 **Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.4.0...v0.5.0
 
+## 0.7.0 (2026-01-25)
+
+## What's Changed
+* feat: update titiler.core and titiler.xarray dependencies to version 1.1.1 and titiler-openeo to version 0.10.0 by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/67
+* chore(deps): update titiler-openeo dependency to version 0.10.1 by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/69
+* chore(deps): update titiler-openeo dependency to version 0.11.0 by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/70
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.6.0...v0.7.0
+
 ## 0.6.0 (2026-01-21)
 
 ## What's Changed
