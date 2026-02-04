@@ -73,7 +73,7 @@
       "justMyCode": false,
       "env": {
         "PYTHONPATH": "${workspaceFolder}/.venv/bin",
-        "LOG_LEVEL": "INFO",
+        "LOG_LEVEL": "DEBUG",
         "AWS_PROFILE": "eopf-explorer",
         "AWS_DEFAULT_REGION": "de",
         "AWS_ENDPOINT_URL": "https://s3.de.io.cloud.ovh.net/",

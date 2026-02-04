@@ -22,7 +22,7 @@ from rio_tiler.tasks import multi_arrays
 from rio_tiler.types import AssetInfo, BBox, Indexes
 from rio_tiler.utils import cast_to_sequence
 
-from titiler.openeo.reader import SimpleSTACReader, _apply_cutline_mask
+from titiler.openeo.reader import SimpleSTACReader
 
 from ..reader import GeoZarrReader
 
@@ -287,16 +287,26 @@ def _reader(item: Dict[str, Any], bbox: BBox, **kwargs: Any) -> ImageData:
             with STACReader(item) as src_dst:  # type: ignore
                 img = src_dst.part(bbox, **kwargs)
 
-                # Create cutline_mask from item geometry if available
-                # Handle both pystac.Item objects and dictionaries
-                geometry = None
-                if hasattr(item, "geometry"):
-                    geometry = item.geometry
-                elif isinstance(item, dict):
-                    geometry = item.get("geometry")
-
-                if geometry is not None:
-                    img = _apply_cutline_mask(img, geometry, kwargs.get("dst_crs"))
+                # IMPORTANT: We intentionally do NOT set cutline_mask on individual tiles.
+                #
+                # Background: rio-tiler's mosaic_reader uses cutline_mask from the FIRST
+                # image to determine when mosaicking is complete (via FirstMethod.is_done).
+                # The is_done check only verifies that pixels INSIDE the first tile's
+                # footprint geometry are filled, ignoring pixels outside that footprint.
+                #
+                # Problem: For multi-tile mosaics where each tile covers only a portion
+                # of the target bbox, this causes early termination after the first tile.
+                # Example: If tile 1 covers 7% of the bbox and has valid data for that 7%,
+                # is_done returns True even though 93% of the mosaic is still empty.
+                #
+                # Solution: By not setting cutline_mask, is_done falls back to checking
+                # if ALL pixels in the mosaic are filled (not numpy.ma.is_masked(mosaic)).
+                # This allows mosaicking to continue until all tiles are processed or
+                # all pixels have valid data.
+                #
+                # The nodata mask (created from the nodata value in STAC metadata)
+                # correctly tracks which pixels have valid data vs nodata, and this
+                # mask is properly combined during mosaicking via FirstMethod.feed().
 
                 return img
         except RasterioIOError as e:
