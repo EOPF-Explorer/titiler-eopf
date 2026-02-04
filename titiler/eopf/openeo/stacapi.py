@@ -571,6 +571,7 @@ class LoadCollection(BaseLoadCollection):
             temporal_extent=temporal_extent,
             properties=properties,
             named_parameters=named_parameters,
+            limit=100,
         )
         if not items:
             raise NoDataAvailable("There is no data available for the given extents.")
