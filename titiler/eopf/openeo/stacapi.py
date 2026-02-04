@@ -1,17 +1,33 @@
 """Custom stacApiBackend for EOPF."""
 
-from typing import Dict, List
+from typing import Dict, List, Optional, Union
 
-from attrs import define
+from attrs import define, field
 from cachetools import TTLCache, cached  # type: ignore
 from cachetools.keys import hashkey  # type: ignore
-from pystac import Collection
+from openeo_pg_parser_networkx.pg_schema import BoundingBox, TemporalInterval
+from pystac import Collection, Item
 from pystac.extensions import datacube as dc
+from rasterio.warp import transform_bounds
+from rio_tiler.mosaic.methods import PixelSelectionMethod
+from rio_tiler.mosaic.reader import mosaic_reader
 
+from titiler.openeo.errors import (
+    ItemsLimitExceeded,
+    NoDataAvailable,
+    OutputLimitExceeded,
+)
+from titiler.openeo.processes.implementations.data_model import RasterStack
+from titiler.openeo.reader import _estimate_output_dimensions
+from titiler.openeo.settings import ProcessingSettings
 from titiler.openeo.stacapi import CacheSettings
+from titiler.openeo.stacapi import LoadCollection as BaseLoadCollection
 from titiler.openeo.stacapi import stacApiBackend as BaseBackend
 
+from .reader import _reader
+
 cache_config = CacheSettings()
+processing_settings = ProcessingSettings()
 
 
 def extract_bands_from_asset(asset) -> list[dict]:
@@ -398,3 +414,200 @@ class stacApiBackend(BaseBackend):
         collection_dict["summaries"]["bands"] = updated_bands
 
         return collection_dict
+
+
+def _make_mosaic_task(
+    date_items: list[Item],
+    bbox: list[float],
+    bounds_crs,
+    output_crs,
+    bands: Optional[list[str]],
+    width: Optional[int],
+    height: Optional[int],
+    tile_buffer: Optional[float],
+):
+    """Create a closure that loads data for a date group."""
+
+    def task():
+        mosaic_kwargs = {
+            "threads": 0,
+            "bounds_crs": bounds_crs,
+            "assets": bands,
+            "dst_crs": output_crs,
+            "width": int(width) if width else width,
+            "height": int(height) if height else height,
+            "buffer": float(tile_buffer) if tile_buffer is not None else tile_buffer,
+            "pixel_selection": PixelSelectionMethod["first"].value(),
+        }
+
+        img, _ = mosaic_reader(
+            date_items,
+            _reader,
+            bbox,
+            **mosaic_kwargs,
+        )
+        return img
+
+    return task
+
+
+def _group_items_by_date(items: list[Item]) -> dict[str, list[Item]]:
+    """Group items by their datetime."""
+    items_by_date: dict[str, list[Item]] = {}
+    for item in items:
+        date = item.datetime.isoformat()
+        if date not in items_by_date:
+            items_by_date[date] = []
+        items_by_date[date].append(item)
+    return items_by_date
+
+
+def _build_tasks(
+    items_by_date: dict[str, list[Item]],
+    bbox: list[float],
+    bounds_crs,
+    output_crs,
+    bands: Optional[list[str]],
+    width: Optional[int],
+    height: Optional[int],
+    tile_buffer: Optional[float],
+) -> list:
+    """Build task list for RasterStack from grouped items."""
+    tasks = []
+    for date, date_items in items_by_date.items():
+        task_fn = _make_mosaic_task(
+            date_items,
+            bbox,
+            bounds_crs,
+            output_crs,
+            bands,
+            width,
+            height,
+            tile_buffer,
+        )
+        geometries = [item.geometry for item in date_items if item.geometry is not None]
+        tasks.append(
+            (
+                task_fn,
+                {
+                    "id": date,
+                    "datetime": date_items[0].datetime if date_items else None,
+                    "geometry": geometries if geometries else None,
+                },
+            )
+        )
+    return tasks
+
+
+@define
+class LoadCollection(BaseLoadCollection):
+    """Load Collection process implementation with Zarr support.
+
+    This class inherits from the base LoadCollection and uses our custom
+    _reader that supports both COG and Zarr assets.
+    """
+
+    stac_api: stacApiBackend = field()
+
+    def _validate_limits(
+        self, items: list[Item], width: Optional[int], height: Optional[int]
+    ) -> None:
+        """Validate item count and pixel limits."""
+        if len(items) > processing_settings.max_items:
+            raise ItemsLimitExceeded(len(items), processing_settings.max_items)
+
+        if width and height:
+            width_int = int(width)
+            height_int = int(height)
+            pixel_count = width_int * height_int * len(items)
+            if pixel_count > processing_settings.max_pixels:
+                raise OutputLimitExceeded(
+                    width_int,
+                    height_int,
+                    processing_settings.max_pixels,
+                    items_count=len(items),
+                )
+
+    def load_collection(
+        self,
+        id: str,
+        spatial_extent: Optional[BoundingBox] = None,
+        temporal_extent: Optional[TemporalInterval] = None,
+        bands: Optional[list[str]] = None,
+        properties: Optional[dict] = None,
+        # private arguments
+        width: Optional[int] = 1024,
+        height: Optional[int] = 1024,
+        tile_buffer: Optional[float] = None,
+        named_parameters: Optional[dict] = None,
+        target_crs: Optional[Union[int, str]] = None,
+    ) -> RasterStack:
+        """Load Collection with Zarr support.
+
+        Args:
+            id: Collection ID
+            spatial_extent: Bounding box for the output (coordinates in its own CRS)
+            temporal_extent: Temporal filter
+            bands: Band names to load
+            properties: Metadata filters
+            width: Output width in pixels
+            height: Output height in pixels
+            tile_buffer: Tile overlap buffer
+            named_parameters: Named parameters for process graph evaluation
+            target_crs: Target CRS for output. If None, uses native CRS from source images.
+        """
+        items = self._get_items(
+            id,
+            spatial_extent=spatial_extent,
+            temporal_extent=temporal_extent,
+            properties=properties,
+            named_parameters=named_parameters,
+        )
+        if not items:
+            raise NoDataAvailable("There is no data available for the given extents.")
+
+        self._validate_limits(items, width, height)
+
+        # If bands parameter is missing, use the first asset from the first item
+        if bands is None and items and items[0].assets:
+            bands = list(items[0].assets.keys())[:1]
+
+        # Estimate dimensions based on items and spatial extent
+        dimensions = _estimate_output_dimensions(
+            items, spatial_extent, bands, width, height, target_crs=target_crs
+        )
+
+        width = dimensions["width"]
+        height = dimensions["height"]
+        bbox = dimensions["bbox"]
+        bounds_crs = dimensions["bounds_crs"]
+        output_crs = dimensions["crs"]
+
+        # Reproject bbox from bounds_crs to output_crs for the RasterStack bounds
+        output_bbox = (
+            list(transform_bounds(bounds_crs, output_crs, *bbox, densify_pts=21))
+            if bounds_crs != output_crs
+            else bbox
+        )
+
+        items_by_date = _group_items_by_date(items)
+        tasks = _build_tasks(
+            items_by_date,
+            bbox,
+            bounds_crs,
+            output_crs,
+            bands,
+            width,
+            height,
+            tile_buffer,
+        )
+
+        return RasterStack(
+            tasks=tasks,
+            timestamp_fn=lambda asset: asset["datetime"],
+            width=int(width) if width else None,
+            height=int(height) if height else None,
+            bounds=output_bbox,
+            dst_crs=output_crs,
+            band_names=bands if bands else [],
+        )

@@ -17,8 +17,7 @@ from titiler.openeo.settings import ApiSettings, AuthSettings, BackendSettings
 
 from .. import __version__ as titiler_version
 from .processes import PROCESS_SPECIFICATIONS, process_registry
-from .processes.implementations.io import LoadCollection
-from .stacapi import stacApiBackend
+from .stacapi import LoadCollection, stacApiBackend
 
 STAC_VERSION = "1.1.0"
 
