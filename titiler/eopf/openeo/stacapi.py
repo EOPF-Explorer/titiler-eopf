@@ -9,6 +9,7 @@ from openeo_pg_parser_networkx.pg_schema import BoundingBox, TemporalInterval
 from pystac import Collection, Item
 from pystac.extensions import datacube as dc
 from rasterio.warp import transform_bounds
+from rio_tiler.errors import EmptyMosaicError, TileOutsideBounds
 from rio_tiler.mosaic.methods import PixelSelectionMethod
 from rio_tiler.mosaic.reader import mosaic_reader
 
@@ -438,15 +439,23 @@ def _make_mosaic_task(
             "height": int(height) if height else height,
             "buffer": float(tile_buffer) if tile_buffer is not None else tile_buffer,
             "pixel_selection": PixelSelectionMethod["first"].value(),
+            "allowed_exceptions": (TileOutsideBounds,),
         }
 
-        img, _ = mosaic_reader(
-            date_items,
-            _reader,
-            bbox,
-            **mosaic_kwargs,
-        )
-        return img
+        try:
+            img, _ = mosaic_reader(
+                date_items,
+                _reader,
+                bbox,
+                **mosaic_kwargs,
+            )
+            return img
+        except EmptyMosaicError as e:
+            # All items failed to return data for this bbox/date.
+            # Re-raise as TileOutsideBounds so RasterStack can handle it gracefully.
+            raise TileOutsideBounds(
+                f"No valid data found in bbox {bbox} for date group"
+            ) from e
 
     return task
 
