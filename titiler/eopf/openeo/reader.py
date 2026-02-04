@@ -247,17 +247,30 @@ class STACReader(SimpleSTACReader):
 
                     return data
 
-        img = multi_arrays(
-            assets,
-            _asset_reader,
-            bbox,
-            allowed_exceptions=(
-                TileOutsideBounds,
-                ValueError,
-                IndexError,
-            ),
-            **kwargs,
-        )
+        try:
+            img = multi_arrays(
+                assets,
+                _asset_reader,
+                bbox,
+                allowed_exceptions=(
+                    TileOutsideBounds,
+                    ValueError,
+                    IndexError,
+                ),
+                **kwargs,
+            )
+        except ValueError as e:
+            # multi_arrays raises ValueError when all assets fail and it tries
+            # to create an ImageData from an empty list. Convert to TileOutsideBounds
+            # so the caller (mosaic_reader) can handle it gracefully.
+            logger.warning(
+                f"All assets failed to load for bbox {bbox}: {e!s}. "
+                "Raising TileOutsideBounds to allow mosaicking to continue."
+            )
+            raise TileOutsideBounds(
+                f"No valid data found in bounds {bbox} for any asset"
+            ) from e
+
         if expression:
             return img.apply_expression(expression)
 
