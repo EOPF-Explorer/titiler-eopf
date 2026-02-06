@@ -28,17 +28,26 @@ from titiler.core.middleware import CacheControlMiddleware, TotalTimeMiddleware
 from titiler.core.models.OGC import Conformance, Landing
 from titiler.core.resources.enums import MediaType
 from titiler.core.utils import accept_media_type, create_html_response, update_openapi
+from titiler.mosaic.errors import MOSAIC_STATUS_CODES
+from titiler.mosaic.factory import MosaicTilerFactory
+from titiler.stacapi.dependencies import (
+    BackendParams,
+    CollectionSearch,
+    STACAPIExtensionParams,
+)
+from titiler.stacapi.errors import STACAPI_STATUS_CODES
 
 from . import __version__ as titiler_version
 from .cache_deps import setup_cache
-from .dependencies import DatasetPathParams
+from .dependencies import DatasetPathParams, EOPFAssetsParams
 from .extensions import (
     DatasetMetadataExtension,
     EOPFChunkVizExtension,
     EOPFViewerExtension,
 )
 from .factory import TilerFactory
-from .settings import ApiSettings, EOPFCacheSettings
+from .settings import ApiSettings, EOPFCacheSettings, STACAPISettings
+from .stac import EOPFSimpleSTACReader, EOPFSTACAPIBackend
 
 # Configure logging
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -54,6 +63,7 @@ logger.info(f"Starting TiTiler EOPF application with log level: {log_level}")
 
 settings = ApiSettings()
 cache_settings = EOPFCacheSettings()
+stacapi_settings = STACAPISettings()
 
 
 def setup_cache_system():
@@ -186,10 +196,44 @@ md = TilerFactory(
     path_dependency=DatasetPathParams,
     router_prefix="/collections/{collection_id}/items/{item_id}",
 )
-app.include_router(md.router, prefix="/collections/{collection_id}/items/{item_id}")
+app.include_router(
+    md.router,
+    prefix="/collections/{collection_id}/items/{item_id}",
+    tags=["EOPF Items"],
+)
 
 TITILER_CONFORMS_TO.update(md.conforms_to)
 
+###############################################################################
+# STACPI Endpoints
+if stacapi_settings.url:
+    app.state.stac_url = stacapi_settings.url
+
+    # STAC COLLECTION Endpoints
+    # Notes:
+    # - The `path_dependency` is set to `STACCollectionSearchParams` which define `{collection_id}`
+    # `Path` dependency and other Query parameters used to construct STAC API Search request.
+    collection = MosaicTilerFactory(
+        path_dependency=CollectionSearch,
+        backend=EOPFSTACAPIBackend,
+        backend_dependency=BackendParams,
+        dataset_reader=EOPFSimpleSTACReader,
+        assets_accessor_dependency=STACAPIExtensionParams,
+        layer_dependency=EOPFAssetsParams,
+        router_prefix="/collections/{collection_id}",
+        add_viewer=True,
+        templates=templates,
+    )
+    app.include_router(
+        collection.router,
+        tags=["EOPF Collections"],
+        prefix="/collections/{collection_id}",
+    )
+    TITILER_CONFORMS_TO.update(collection.conforms_to)
+    add_exception_handlers(app, STACAPI_STATUS_CODES)
+    add_exception_handlers(app, MOSAIC_STATUS_CODES)
+
+###############################################################################
 # TileMatrixSets endpoints
 tms = TMSFactory(templates=templates)
 app.include_router(tms.router, tags=["Tiling Schemes"])
