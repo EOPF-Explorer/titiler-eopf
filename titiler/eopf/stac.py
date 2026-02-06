@@ -11,7 +11,12 @@ from titiler.stacapi.reader import SimpleSTACReader, STACAPIReader
 class EOPFSTACAPIReader(STACAPIReader):
     """Custom EOPF STAC Reader."""
 
-    include_asset_types: set[str] = attr.ib(factory=lambda: ["application/vnd+zarr"])
+    include_asset_types: set[str] = attr.ib(
+        factory=lambda: {
+            "application/vnd+zarr",
+            "application/vnd+zarr; version=2; profile=multiscales",
+        }
+    )
     reader: type[GeoZarrReader] = attr.ib(default=GeoZarrReader)
 
 
