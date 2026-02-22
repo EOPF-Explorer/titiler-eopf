@@ -5,15 +5,9 @@ from dataclasses import dataclass
 from typing import Annotated, List, Literal
 
 from fastapi import Path, Query
-from rio_tiler.errors import MissingAssets
 from starlette.requests import Request
 
-from titiler.core.dependencies import (
-    AssetsParams,
-    BidxParams,
-    DefaultDependency,
-    ExpressionParams,
-)
+from titiler.core.dependencies import BidxParams, DefaultDependency, ExpressionParams
 from titiler.xarray.dependencies import SelDimStr
 
 from .settings import DataStoreSettings
@@ -70,18 +64,6 @@ class LayerParams(BidxParams, ExpressionParams, XarrayParams):
         if not self.variables and not self.expression:
             raise ValueError(
                 "variables must be defined either via expression or variables options."
-            )
-
-
-@dataclass
-class EOPFAssetsParams(AssetsParams):
-    """Custom AssetsParams for EOPF."""
-
-    def __post_init__(self):
-        """Post Init."""
-        if not self.assets and not self.expression:
-            raise MissingAssets(
-                "assets must be defined either via expression or assets options."
             )
 
 

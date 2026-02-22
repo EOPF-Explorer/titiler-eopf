@@ -28,18 +28,10 @@ from titiler.core.middleware import CacheControlMiddleware, TotalTimeMiddleware
 from titiler.core.models.OGC import Conformance, Landing
 from titiler.core.resources.enums import MediaType
 from titiler.core.utils import accept_media_type, create_html_response, update_openapi
-from titiler.mosaic.errors import MOSAIC_STATUS_CODES
-from titiler.mosaic.factory import MosaicTilerFactory
-from titiler.stacapi.dependencies import (
-    BackendParams,
-    CollectionSearch,
-    STACAPIExtensionParams,
-)
-from titiler.stacapi.errors import STACAPI_STATUS_CODES
 
 from . import __version__ as titiler_version
 from .cache_deps import setup_cache
-from .dependencies import DatasetPathParams, EOPFAssetsParams
+from .dependencies import DatasetPathParams
 from .extensions import (
     DatasetMetadataExtension,
     EOPFChunkVizExtension,
@@ -47,7 +39,6 @@ from .extensions import (
 )
 from .factory import TilerFactory
 from .settings import ApiSettings, EOPFCacheSettings, STACAPISettings
-from .stac import EOPFSimpleSTACReader, EOPFSTACAPIBackend
 
 # Configure logging
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -207,6 +198,17 @@ TITILER_CONFORMS_TO.update(md.conforms_to)
 ###############################################################################
 # STACPI Endpoints
 if stacapi_settings.url:
+    from titiler.mosaic.errors import MOSAIC_STATUS_CODES
+    from titiler.mosaic.factory import MosaicTilerFactory
+    from titiler.stacapi.dependencies import (
+        BackendParams,
+        CollectionSearch,
+        STACAPIExtensionParams,
+    )
+    from titiler.stacapi.errors import STACAPI_STATUS_CODES
+
+    from .stac import AssetsExprParams, EOPFSimpleSTACReader, EOPFSTACAPIBackend
+
     app.state.stac_url = stacapi_settings.url
 
     # STAC COLLECTION Endpoints
@@ -219,7 +221,7 @@ if stacapi_settings.url:
         backend_dependency=BackendParams,
         dataset_reader=EOPFSimpleSTACReader,
         assets_accessor_dependency=STACAPIExtensionParams,
-        layer_dependency=EOPFAssetsParams,
+        layer_dependency=AssetsExprParams,
         router_prefix="/collections/{collection_id}",
         add_viewer=True,
         templates=templates,
@@ -344,7 +346,6 @@ app.add_middleware(
 )
 
 if settings.debug:
-    print(settings.debug)
     app.add_middleware(TotalTimeMiddleware)
 
 
