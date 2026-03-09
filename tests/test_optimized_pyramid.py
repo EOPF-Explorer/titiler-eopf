@@ -1,24 +1,15 @@
 """test titiler-eopf optimized pyramid functionality"""
 
-import os
-
 import pytest
 import xarray
 
 from titiler.eopf.reader import GeoZarrReader, MissingVariables
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
-OPTIMIZED_PYRAMID = os.path.join(
-    DATA_DIR,
-    "eopf_geozarr",
-    "optimized_pyramid.zarr",
-)
 
-
-def test_optimized_pyramid_structure():
+def test_optimized_pyramid_structure(geozarr_dataset):
     """test that optimized pyramid fixture has expected structure."""
-    with GeoZarrReader(OPTIMIZED_PYRAMID) as src:
-        assert src.input == OPTIMIZED_PYRAMID
+    with GeoZarrReader(geozarr_dataset) as src:
+        assert src.input == geozarr_dataset
         assert isinstance(src.datatree, xarray.DataTree)
 
         # Should detect single multiscale group
@@ -37,9 +28,9 @@ def test_optimized_pyramid_structure():
         assert scales == expected_scales
 
 
-def test_variable_collection_across_scales():
+def test_variable_collection_across_scales(geozarr_dataset):
     """test that variables from all scales are collected properly."""
-    with GeoZarrReader(OPTIMIZED_PYRAMID) as src:
+    with GeoZarrReader(geozarr_dataset) as src:
         # Should collect all unique variables across all scales
         variables = sorted(src.variables)
 
@@ -70,9 +61,9 @@ def test_variable_collection_across_scales():
         assert "/measurements/reflectance:y" not in variables
 
 
-def test_variable_fallback_behavior():
+def test_variable_fallback_behavior(geozarr_dataset):
     """test that variables fall back to available scales when not present at requested scale."""
-    with GeoZarrReader(OPTIMIZED_PYRAMID) as src:
+    with GeoZarrReader(geozarr_dataset) as src:
         # Test accessing b05 (only available at levels 1,2,3 - NOT at level 0/10m)
         # This should automatically fall back to the finest available scale
         group = "/measurements/reflectance"
@@ -91,9 +82,9 @@ def test_variable_fallback_behavior():
         assert da_b02.shape == (1000, 1000)  # Level 0 dimensions
 
 
-def test_scale_specific_variable_access():
+def test_scale_specific_variable_access(geozarr_dataset):
     """test accessing variables with explicit scale constraints."""
-    with GeoZarrReader(OPTIMIZED_PYRAMID) as src:
+    with GeoZarrReader(geozarr_dataset) as src:
         group = "/measurements/reflectance"
 
         # Test accessing b02 (available at all levels) without spatial constraints
@@ -133,9 +124,9 @@ def test_scale_specific_variable_access():
         assert da_b05.shape == (500, 500)  # Level 1 size
 
 
-def test_scale_specific_variable_access_reproj():
+def test_scale_specific_variable_access_reproj(geozarr_dataset):
     """test accessing variables with explicit scale constraints and reprojection."""
-    with GeoZarrReader(OPTIMIZED_PYRAMID) as src:
+    with GeoZarrReader(geozarr_dataset) as src:
         group = "/measurements/reflectance"
 
         # Test accessing b02 (available at all levels) without spatial constraints
@@ -230,9 +221,9 @@ def test_scale_specific_variable_access_reproj():
         assert da_b02.shape == (84, 84)
 
 
-def test_missing_variable_error():
+def test_missing_variable_error(geozarr_dataset):
     """test proper error handling for truly missing variables."""
-    with GeoZarrReader(OPTIMIZED_PYRAMID) as src:
+    with GeoZarrReader(geozarr_dataset) as src:
         # Test requesting a completely non-existent variable
         with pytest.raises(MissingVariables) as exc_info:
             src._get_variable("/measurements/reflectance", "b99_nonexistent")
@@ -242,9 +233,9 @@ def test_missing_variable_error():
         assert "/measurements/reflectance" in str(exc_info.value)
 
 
-def test_info_method_robustness():
+def test_info_method_robustness(geozarr_dataset):
     """test that info method handles optimized pyramid variables robustly."""
-    with GeoZarrReader(OPTIMIZED_PYRAMID) as src:
+    with GeoZarrReader(geozarr_dataset) as src:
         # Test info for all variables
         info = src.info()
 
@@ -273,9 +264,9 @@ def test_info_method_robustness():
             assert info_subset[var].width > 0
 
 
-def test_tile_method_with_mixed_variables():
+def test_tile_method_with_mixed_variables(geozarr_dataset):
     """test tile method with variables from different pyramid levels."""
-    with GeoZarrReader(OPTIMIZED_PYRAMID) as src:
+    with GeoZarrReader(geozarr_dataset) as src:
         bounds = src.bounds
         lon, lat = (bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2
         tile = src.tms.tile(lon, lat, 10)
@@ -305,9 +296,9 @@ def test_tile_method_with_mixed_variables():
             assert img.data.size > 0  # Has data
 
 
-def test_point_method_with_mixed_variables():
+def test_point_method_with_mixed_variables(geozarr_dataset):
     """test point method with variables from different pyramid levels."""
-    with GeoZarrReader(OPTIMIZED_PYRAMID) as src:
+    with GeoZarrReader(geozarr_dataset) as src:
         bounds = src.bounds
         lon, lat = (bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2
 
@@ -332,9 +323,9 @@ def test_point_method_with_mixed_variables():
         assert not all(pt.data.mask) if hasattr(pt.data, "mask") else True
 
 
-def test_expression_with_mixed_variables():
+def test_expression_with_mixed_variables(geozarr_dataset):
     """test expressions using variables from different pyramid levels."""
-    with GeoZarrReader(OPTIMIZED_PYRAMID) as src:
+    with GeoZarrReader(geozarr_dataset) as src:
         bounds = src.bounds
         lon, lat = (bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2
         tile = src.tms.tile(lon, lat, 10)
@@ -357,9 +348,9 @@ def test_expression_with_mixed_variables():
             assert img.data.size > 0  # Has data
 
 
-def test_pyramid_level_selection_logic():
+def test_pyramid_level_selection_logic(geozarr_dataset):
     """test that appropriate pyramid levels are selected based on variable availability."""
-    with GeoZarrReader(OPTIMIZED_PYRAMID) as src:
+    with GeoZarrReader(geozarr_dataset) as src:
         group = "/measurements/reflectance"
 
         # For variables available at multiple scales, verify correct scale selection

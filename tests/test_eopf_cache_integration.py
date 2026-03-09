@@ -41,10 +41,11 @@ class MockCacheBackend:
 class TestEOPFCacheIntegration:
     """Test EOPF-specific cache integration scenarios."""
 
-    def test_cache_integration_with_eopf_endpoints(self, app):
+    def test_cache_integration_with_eopf_endpoints(self, app, geozarr):
         """Test cache behavior with EOPF endpoints."""
         # This test verifies that the cache middleware properly integrates
         # with EOPF endpoints and handles tile requests correctly
+        collection, item = geozarr
 
         # Make a request to a simpler endpoint that should work
         response = app.get("/health", follow_redirects=False)
@@ -59,7 +60,7 @@ class TestEOPFCacheIntegration:
         # The key is that the middleware doesn't crash
         try:
             tile_response = app.get(
-                "/collections/eopf_geozarr/items/optimized_pyramid/tiles/WebMercatorQuad/0/0/0.png"
+                f"/collections/{collection}/items/{item}/tiles/WebMercatorQuad/0/0/0.png"
             )
             # Any response code is fine - we just want to ensure no middleware crashes
             assert isinstance(tile_response.status_code, int)
@@ -67,7 +68,7 @@ class TestEOPFCacheIntegration:
             # If there's a fundamental middleware issue, it would raise an exception
             pytest.fail(f"Cache middleware caused unexpected error: {e}")
 
-    def test_cache_key_generation_for_eopf_paths(self):
+    def test_cache_key_generation_for_eopf_paths(self, geozarr):
         """Test cache key generation for EOPF-specific paths."""
         key_generator = CacheKeyGenerator("eopf-test")
 
@@ -82,12 +83,14 @@ class TestEOPFCacheIntegration:
                 )()
                 self.query_params = {}
 
+        collection, item = geozarr
+
         # Test various EOPF-specific paths
         eopf_paths = [
-            "/collections/eopf_geozarr/items/test/tiles/WebMercatorQuad/10/512/384.png",
-            "/collections/eopf_geozarr/items/test/preview",
-            "/collections/eopf_geozarr/items/test/tilejson.json",
-            "/collections/eopf_geozarr/items/test/info.json",
+            f"/collections/{collection}/items/{item}/tiles/WebMercatorQuad/10/512/384.png",
+            f"/collections/{collection}/items/{item}/preview",
+            f"/collections/{collection}/items/{item}/tilejson.json",
+            f"/collections/{collection}/items/{item}/info.json",
         ]
 
         for path in eopf_paths:
@@ -97,7 +100,7 @@ class TestEOPFCacheIntegration:
             # Verify cache key is generated and contains expected components
             assert cache_key.startswith("eopf-test:tile:")
             assert "collections" in cache_key
-            assert "eopf_geozarr" in cache_key
+            assert collection in cache_key
 
     def test_cache_middleware_with_eopf_factory(self):
         """Test cache middleware integration with EOPF factory pattern."""

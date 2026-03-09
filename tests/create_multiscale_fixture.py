@@ -4,7 +4,6 @@ Script to create a optimized pyramid test fixture that mimics the new S2 optimiz
 """
 
 import math
-import os
 
 import numpy as np
 import rioxarray  # noqa: F401
@@ -14,17 +13,8 @@ from pyproj import CRS
 from zarr.codecs import BloscCodec
 
 
-def create_optimized_pyramid_fixture():  # noqa: C901
+def create_optimized_pyramid_fixture(fixture_path: str):  # noqa: C901
     """Create a optimized pyramid fixture with different variables at different scales."""
-
-    fixture_path = "tests/fixtures/eopf_geozarr/optimized_pyramid.zarr"
-
-    # Remove existing fixture if it exists
-    if os.path.exists(fixture_path):
-        import shutil
-
-        shutil.rmtree(fixture_path)
-
     # Create zarr store
     store = zarr.open(fixture_path, mode="w")
 
@@ -359,4 +349,6 @@ def create_optimized_pyramid_fixture():  # noqa: C901
 
 
 if __name__ == "__main__":
-    create_optimized_pyramid_fixture()
+    create_optimized_pyramid_fixture(
+        "tests/fixtures/eopf_geozarr/optimized_pyramid.zarr"
+    )
