@@ -8,11 +8,6 @@ from titiler.eopf.openeo.processes import PROCESS_IMPLEMENTATIONS, process_regis
 from titiler.eopf.openeo.processes.implementations import load_zarr
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
-OPTIMIZED_PYRAMID = os.path.join(
-    DATA_DIR,
-    "eopf_geozarr",
-    "optimized_pyramid.zarr",
-)
 
 
 def test_custom_processes():
@@ -28,8 +23,16 @@ def test_registery():
     assert process_registry.get("load_zarr")
 
 
-def test_load_zarr():
+def test_load_zarr(geozarr):
     """Test Load Zarr function."""
+    collection, item = geozarr
+
+    OPTIMIZED_PYRAMID = os.path.join(
+        DATA_DIR,
+        collection,
+        f"{item}.zarr",
+    )
+
     zarr = load_zarr(OPTIMIZED_PYRAMID)
 
     # Check that we have at least one key (time slice)
