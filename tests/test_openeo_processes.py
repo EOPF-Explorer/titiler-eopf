@@ -23,17 +23,9 @@ def test_registery():
     assert process_registry.get("load_zarr")
 
 
-def test_load_zarr(geozarr):
+def test_load_zarr(geozarr_dataset):
     """Test Load Zarr function."""
-    collection, item = geozarr
-
-    OPTIMIZED_PYRAMID = os.path.join(
-        DATA_DIR,
-        collection,
-        f"{item}.zarr",
-    )
-
-    zarr = load_zarr(OPTIMIZED_PYRAMID)
+    zarr = load_zarr(geozarr_dataset)
 
     # Check that we have at least one key (time slice)
     assert len(zarr) > 0
@@ -65,7 +57,7 @@ def test_load_zarr(geozarr):
 
     # Test with specific variables
     zarr = load_zarr(
-        OPTIMIZED_PYRAMID,
+        geozarr_dataset,
         options={
             "variables": ["/measurements/reflectance:b02"],
         },
