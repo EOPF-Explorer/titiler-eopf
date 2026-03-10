@@ -4,6 +4,8 @@ Script to create a optimized pyramid test fixture that mimics the new S2 optimiz
 """
 
 import math
+import os
+import shutil
 from typing import Literal
 
 import numpy as np
@@ -19,6 +21,9 @@ def create_geozarr_fixture(  # noqa: C901
     version: Literal["v0", "v1"] = "v0",
 ):
     """Create a optimized pyramid fixture with different variables at different scales."""
+    if os.path.exists(fixture_path):
+        shutil.rmtree(fixture_path)
+
     # Create zarr store
     store = zarr.open(fixture_path, mode="w")
 
@@ -494,8 +499,7 @@ def create_geozarr_fixture(  # noqa: C901
         zarr_format=3,
         encoding=encoding_3,
     )
-
-    print(f"✅ Created optimized pyramid fixture at {fixture_path}")
+    print(f"✅ Created GeoZarr ({version}) fixture at {fixture_path}")
     print("Structure:")
     print("  - Level 0 (10m): b02, b03, b04, b08 only")
     print("  - Level 1 (20m): all bands")

@@ -988,7 +988,6 @@ class GeoZarrReader(BaseReader):
                     output_height=height,
                     output_width=width,
                 )
-
                 scale = get_multiscale_level(tree, variable, target_res)  # type: ignore
 
             # Select the multiscale group and variable

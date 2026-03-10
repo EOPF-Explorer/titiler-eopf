@@ -34,15 +34,14 @@ def redis_host() -> Generator[str, Any, Any]:
         "v1",
     ],
     scope="session",
-    autouse=True,
 )
 def geozarr(request):
     """Create GeoZarr v1 fixture."""
     version = request.param
     geozarr_dir = os.path.join(FIXTURES_DIRECTORY, "eopf")
-    geozarr = os.path.join(geozarr_dir, "geozarr.zarr")
+    geozarr = os.path.join(geozarr_dir, f"geozarr_{version}.zarr")
     create_geozarr_fixture(geozarr, version=version)
-    yield ("eopf", "geozarr")
+    yield ("eopf", f"geozarr_{version}")
     if os.path.exists(geozarr_dir):
         shutil.rmtree(geozarr_dir)
 
