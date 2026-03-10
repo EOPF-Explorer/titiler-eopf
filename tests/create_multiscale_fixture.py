@@ -161,7 +161,7 @@ def create_geozarr_fixture(  # noqa: C901
                         "derived_from": "r60m",
                         "transform": {"scale": [2.0, 2.0], "translation": [0.0, 0.0]},
                         "spatial:shape": [84, 84],
-                        "spatial:transform": [100.0, 0.0, 500000, 0.0, -100.0, 4200000],
+                        "spatial:transform": [120.0, 0.0, 500000, 0.0, -120.0, 4200000],
                     },
                 ],
                 "resampling_method": "average",

@@ -369,25 +369,24 @@ def get_target_resolution(
         return dst_transform.a
 
     # 2. No Reprojection
-    else:
-        # If no bounds we assume the full dataset bounds
-        bounds = output_bounds or input_bounds
-        window = windows.from_bounds(*bounds, transform=input_transform)
-        if output_max_size:
-            height, width = _get_width_height(
-                output_max_size, round(window.height), round(window.width)
-            )
+    # If no bounds we assume the full dataset bounds
+    bounds = output_bounds or input_bounds
+    window = windows.from_bounds(*bounds, transform=input_transform)
+    if output_max_size:
+        output_height, output_width = _get_width_height(
+            output_max_size, round(window.height), round(window.width)
+        )
 
-        elif _missing_size(output_width, output_height):
-            ratio = window.height / window.width
-            if output_width:
-                output_height = math.ceil(output_width * ratio)
-            else:
-                output_width = math.ceil(output_height / ratio)
+    elif _missing_size(output_width, output_height):
+        ratio = window.height / window.width
+        if output_width:
+            output_height = math.ceil(output_width * ratio)
+        else:
+            output_width = math.ceil(output_height / ratio)
 
-        height = output_height or max(1, round(window.height))
-        width = output_width or max(1, round(window.width))
-        return from_bounds(*bounds, height=height, width=width).a
+    height = output_height or max(1, round(window.height))
+    width = output_width or max(1, round(window.width))
+    return from_bounds(*bounds, height=height, width=width).a
 
 
 @attr.s
