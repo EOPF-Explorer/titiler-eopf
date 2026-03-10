@@ -10,7 +10,7 @@ from fakeredis import TcpFakeServer
 from rasterio.io import MemoryFile
 from starlette.testclient import TestClient
 
-from .create_multiscale_fixture import create_optimized_pyramid_fixture
+from .create_multiscale_fixture import create_geozarr_fixture
 
 FIXTURES_DIRECTORY = os.path.join(os.path.dirname(__file__), "fixtures")
 
@@ -28,12 +28,20 @@ def redis_host() -> Generator[str, Any, Any]:
     t.join()
 
 
-@pytest.fixture(scope="session", autouse=True)
-def geozarr():
+@pytest.fixture(
+    params=[
+        "v0",
+        "v1",
+    ],
+    scope="session",
+    autouse=True,
+)
+def geozarr(request):
     """Create GeoZarr v1 fixture."""
+    version = request.param
     geozarr_dir = os.path.join(FIXTURES_DIRECTORY, "eopf")
     geozarr = os.path.join(geozarr_dir, "geozarr.zarr")
-    create_optimized_pyramid_fixture(geozarr)
+    create_geozarr_fixture(geozarr, version=version)
     yield ("eopf", "geozarr")
     if os.path.exists(geozarr_dir):
         shutil.rmtree(geozarr_dir)
