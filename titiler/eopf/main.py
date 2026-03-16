@@ -300,7 +300,6 @@ app.add_middleware(
 )
 
 if settings.debug:
-    print(settings.debug)
     app.add_middleware(TotalTimeMiddleware)
 
 

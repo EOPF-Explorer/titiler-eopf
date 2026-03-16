@@ -19,13 +19,32 @@ def test_optimized_pyramid_structure(geozarr_dataset):
         group = src.datatree["/measurements/reflectance"]
         assert "multiscales" in group.attrs
 
-        tile_matrices = group.attrs["multiscales"]["tile_matrix_set"]["tileMatrices"]
-        assert len(tile_matrices) == 4  # 4 pyramid levels
+        # GeoZarr V0
+        if tms := group.attrs["multiscales"].get("tile_matrix_set"):
+            tile_matrices = tms["tileMatrices"]
+            assert len(tile_matrices) == 4  # 4 pyramid levels
 
-        # Check scale IDs and resolutions
-        scales = [(tm["id"], tm["cellSize"]) for tm in tile_matrices]
-        expected_scales = [("0", 10.0), ("1", 20.0), ("2", 60.0), ("3", 120.0)]
-        assert scales == expected_scales
+            # Check scale IDs and resolutions
+            scales = [(tm["id"], tm["cellSize"]) for tm in tile_matrices]
+            expected_scales = [("0", 10.0), ("1", 20.0), ("2", 60.0), ("3", 120.0)]
+            assert scales == expected_scales
+
+        # GeoZarr V1
+        else:
+            layout = group.attrs["multiscales"]["layout"]
+            assert len(layout) == 4  # 4 pyramid levels
+
+            # Check scale IDs and resolutions
+            scales = [
+                (asset["asset"], asset["spatial:transform"][0]) for asset in layout
+            ]
+            expected_scales = [
+                ("r10m", 10.0),
+                ("r20m", 20.0),
+                ("r60m", 60.0),
+                ("r120m", 120.0),
+            ]
+            assert scales == expected_scales
 
 
 def test_variable_collection_across_scales(geozarr_dataset):

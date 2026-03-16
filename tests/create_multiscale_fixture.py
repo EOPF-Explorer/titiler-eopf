@@ -4,6 +4,9 @@ Script to create a optimized pyramid test fixture that mimics the new S2 optimiz
 """
 
 import math
+import os
+import shutil
+from typing import Literal
 
 import numpy as np
 import rioxarray  # noqa: F401
@@ -13,8 +16,14 @@ from pyproj import CRS
 from zarr.codecs import BloscCodec
 
 
-def create_optimized_pyramid_fixture(fixture_path: str):  # noqa: C901
+def create_geozarr_fixture(  # noqa: C901
+    fixture_path: str,
+    version: Literal["v0", "v1"] = "v0",
+):
     """Create a optimized pyramid fixture with different variables at different scales."""
+    if os.path.exists(fixture_path):
+        shutil.rmtree(fixture_path)
+
     # Create zarr store
     store = zarr.open(fixture_path, mode="w")
 
@@ -58,53 +67,120 @@ def create_optimized_pyramid_fixture(fixture_path: str):  # noqa: C901
     base_y_120m = np.arange(4200000, 4190000, -120).tolist()
 
     # Create root group with multiscales metadata
-    root_attrs = {
-        "multiscales": {
-            "tile_matrix_set": {
-                "crs": f"EPSG:{crs.to_epsg()}",
-                "tileMatrices": [
-                    {
-                        "id": "0",
-                        "cellSize": 10.0,
-                        "matrixWidth": math.ceil(len(base_x_10m) / 64),
-                        "matrixHeight": math.ceil(len(base_y_10m) / 64),
-                        "tileWidth": 64,
-                        "tileHeight": 64,
-                    },  # 10m
-                    {
-                        "id": "1",
-                        "cellSize": 20.0,
-                        "matrixWidth": math.ceil(len(base_x_20m) / 64),
-                        "matrixHeight": math.ceil(len(base_y_20m) / 64),
-                        "tileWidth": 64,
-                        "tileHeight": 64,
-                    },  # 20m
-                    {
-                        "id": "2",
-                        "cellSize": 60.0,
-                        "matrixWidth": math.ceil(len(base_x_60m) / 64),
-                        "matrixHeight": math.ceil(len(base_y_60m) / 64),
-                        "tileWidth": 64,
-                        "tileHeight": 64,
-                    },  # 60m
-                    {
-                        "id": "3",
-                        "cellSize": 120.0,
-                        "matrixWidth": math.ceil(len(base_x_120m) / 64),
-                        "matrixHeight": math.ceil(len(base_y_120m) / 64),
-                        "tileWidth": 64,
-                        "tileHeight": 64,
-                    },  # 120m
-                ],
+    if version == "v0":
+        root_attrs = {
+            "multiscales": {
+                "tile_matrix_set": {
+                    "crs": f"EPSG:{crs.to_epsg()}",
+                    "tileMatrices": [
+                        {
+                            "id": "0",
+                            "cellSize": 10.0,
+                            "matrixWidth": math.ceil(len(base_x_10m) / 64),
+                            "matrixHeight": math.ceil(len(base_y_10m) / 64),
+                            "tileWidth": 64,
+                            "tileHeight": 64,
+                        },  # 10m
+                        {
+                            "id": "1",
+                            "cellSize": 20.0,
+                            "matrixWidth": math.ceil(len(base_x_20m) / 64),
+                            "matrixHeight": math.ceil(len(base_y_20m) / 64),
+                            "tileWidth": 64,
+                            "tileHeight": 64,
+                        },  # 20m
+                        {
+                            "id": "2",
+                            "cellSize": 60.0,
+                            "matrixWidth": math.ceil(len(base_x_60m) / 64),
+                            "matrixHeight": math.ceil(len(base_y_60m) / 64),
+                            "tileWidth": 64,
+                            "tileHeight": 64,
+                        },  # 60m
+                        {
+                            "id": "3",
+                            "cellSize": 120.0,
+                            "matrixWidth": math.ceil(len(base_x_120m) / 64),
+                            "matrixHeight": math.ceil(len(base_y_120m) / 64),
+                            "tileWidth": 64,
+                            "tileHeight": 64,
+                        },  # 120m
+                    ],
+                }
             }
         }
-    }
+    elif version == "v1":
+        # Create root group with multiscales metadata
+        root_attrs = {
+            "zarr_conventions": [
+                {
+                    "uuid": "d35379db-88df-4056-af3a-620245f8e347",
+                    "schema_url": "https://raw.githubusercontent.com/zarr-conventions/multiscales/refs/tags/v1/schema.json",
+                    "spec_url": "https://github.com/zarr-conventions/multiscales/blob/v1/README.md",
+                    "name": "multiscales",
+                    "description": "Multiscale layout of zarr datasets",
+                },
+                {
+                    "uuid": "689b58e2-cf7b-45e0-9fff-9cfc0883d6b4",
+                    "schema_url": "https://raw.githubusercontent.com/zarr-conventions/spatial/refs/tags/v1/schema.json",
+                    "spec_url": "https://github.com/zarr-conventions/spatial/blob/v1/README.md",
+                    "name": "spatial:",
+                    "description": "Spatial coordinate and transformation information",
+                },
+                {
+                    "uuid": "f17cb550-5864-4468-aeb7-f3180cfb622f",
+                    "schema_url": "https://raw.githubusercontent.com/zarr-experimental/geo-proj/refs/tags/v1/schema.json",
+                    "spec_url": "https://github.com/zarr-experimental/geo-proj/blob/v1/README.md",
+                    "name": "proj:",
+                    "description": "Coordinate reference system information for geospatial data",
+                },
+            ],
+            "multiscales": {
+                "layout": [
+                    {
+                        "asset": "r10m",
+                        "spatial:shape": [1000, 1000],
+                        "spatial:transform": [10.0, 0.0, 500000, 0.0, -10.0, 4200000],
+                    },
+                    {
+                        "asset": "r20m",
+                        "derived_from": "r10m",
+                        "transform": {"scale": [2.0, 2.0], "translation": [0.0, 0.0]},
+                        "spatial:shape": [500, 500],
+                        "spatial:transform": [20.0, 0.0, 500000, 0.0, -20.0, 4200000],
+                    },
+                    {
+                        "asset": "r60m",
+                        "derived_from": "r20m",
+                        "transform": {"scale": [3.0, 3.0], "translation": [0.0, 0.0]},
+                        "spatial:shape": [167, 167],
+                        "spatial:transform": [60.0, 0.0, 500000, 0.0, -60.0, 4200000],
+                    },
+                    {
+                        "asset": "r120m",
+                        "derived_from": "r60m",
+                        "transform": {"scale": [2.0, 2.0], "translation": [0.0, 0.0]},
+                        "spatial:shape": [84, 84],
+                        "spatial:transform": [120.0, 0.0, 500000, 0.0, -120.0, 4200000],
+                    },
+                ],
+                "resampling_method": "average",
+            },
+            "spatial:dimensions": ["y", "x"],
+            "spatial:bbox": [500000, 4190000, 510000, 4200000],
+            "spatial:registration": "pixel",
+            "proj:code": "EPSG:32633",
+        }
+    else:
+        raise ValueError(f"Unsupported version: {version}")
 
     # Create measurements/reflectance group
     reflectance_group = store.create_group("measurements/reflectance")
     reflectance_group.attrs.update(root_attrs)
 
-    def create_data_array(name, x_coords, y_coords, scale_factor=0.0001, offset=-0.1):
+    def create_data_array_v0(
+        name, x_coords, y_coords, scale_factor=0.0001, offset=-0.1
+    ):
         """Create a synthetic data array."""
         height, width = len(y_coords), len(x_coords)
         # Create synthetic but realistic reflectance data
@@ -134,6 +210,72 @@ def create_optimized_pyramid_fixture(fixture_path: str):  # noqa: C901
                 ],
                 "proj:shape": [height, width],
                 "proj:bbox": [x_coords[0], y_coords[-1], x_coords[-1], y_coords[0]],
+            },
+        )
+
+        # Set CRS and spatial dimensions
+        da = da.rio.write_crs(crs)
+        da = da.rio.set_spatial_dims(x_dim="x", y_dim="y")
+
+        return da
+
+    def create_data_array_v1(
+        name, x_coords, y_coords, scale_factor=0.0001, offset=-0.1
+    ):
+        """Create a synthetic data array."""
+        height, width = len(y_coords), len(x_coords)
+        # Create synthetic but realistic reflectance data
+        data = np.random.uniform(1000, 8000, (height, width)).astype(np.uint16)
+
+        da = xr.DataArray(
+            data,
+            coords={"y": y_coords, "x": x_coords},
+            dims=["y", "x"],
+            name=name,
+            attrs={
+                "zarr_conventions": [
+                    {
+                        "uuid": "d35379db-88df-4056-af3a-620245f8e347",
+                        "schema_url": "https://raw.githubusercontent.com/zarr-conventions/multiscales/refs/tags/v1/schema.json",
+                        "spec_url": "https://github.com/zarr-conventions/multiscales/blob/v1/README.md",
+                        "name": "multiscales",
+                        "description": "Multiscale layout of zarr datasets",
+                    },
+                    {
+                        "uuid": "689b58e2-cf7b-45e0-9fff-9cfc0883d6b4",
+                        "schema_url": "https://raw.githubusercontent.com/zarr-conventions/spatial/refs/tags/v1/schema.json",
+                        "spec_url": "https://github.com/zarr-conventions/spatial/blob/v1/README.md",
+                        "name": "spatial:",
+                        "description": "Spatial coordinate and transformation information",
+                    },
+                    {
+                        "uuid": "f17cb550-5864-4468-aeb7-f3180cfb622f",
+                        "schema_url": "https://raw.githubusercontent.com/zarr-experimental/geo-proj/refs/tags/v1/schema.json",
+                        "spec_url": "https://github.com/zarr-experimental/geo-proj/blob/v1/README.md",
+                        "name": "proj:",
+                        "description": "Coordinate reference system information for geospatial data",
+                    },
+                ],
+                "long_name": f"BOA reflectance from MSI acquisition at spectral band {name}",
+                "units": "digital_counts",
+                "scale_factor": scale_factor,
+                "add_offset": offset,
+                "valid_min": 1,
+                "valid_max": 65535,
+                "fill_value": 0,
+                "proj:code": f"EPSG:{crs.to_epsg()}",
+                "spatial:dimensions": ["y", "x"],
+                "spatial:transform": [
+                    x_coords[1] - x_coords[0],
+                    0.0,
+                    x_coords[0],
+                    0.0,
+                    y_coords[0] - y_coords[1],
+                    y_coords[0],
+                ],
+                "spatial:shape": [height, width],
+                "spatial:bbox": [x_coords[0], y_coords[-1], x_coords[-1], y_coords[0]],
+                "spatial:registration": "pixel",
             },
         )
 
@@ -174,6 +316,10 @@ def create_optimized_pyramid_fixture(fixture_path: str):  # noqa: C901
 
     x_da, y_da = create_coord_arrays(base_x_10m, base_y_10m)
 
+    create_data_array = (
+        create_data_array_v0 if version == "v0" else create_data_array_v1
+    )
+
     # Native 10m bands
     b02_10m = create_data_array("b02", base_x_10m, base_y_10m)
     b03_10m = create_data_array("b03", base_x_10m, base_y_10m)
@@ -201,14 +347,18 @@ def create_optimized_pyramid_fixture(fixture_path: str):  # noqa: C901
     for var in ["b02", "b03", "b04", "b08"]:
         level_0_ds[var].attrs["grid_mapping"] = "spatial_ref"
 
-    level_0_ds.attrs["pyramid_level"] = 0
-    level_0_ds.attrs["resolution_meters"] = 10
+    if version == "v0":
+        level_0_ds.attrs["pyramid_level"] = 0
+        level_0_ds.attrs["resolution_meters"] = 10
+        group_name = "0"
+    else:
+        group_name = "r10m"
 
     # Create encoding and write level 0
     encoding_0 = create_encoding(level_0_ds)
     level_0_ds.to_zarr(
         fixture_path,
-        group="measurements/reflectance/0",
+        group=f"measurements/reflectance/{group_name}",
         mode="w",
         consolidated=True,
         zarr_format=3,
@@ -242,14 +392,18 @@ def create_optimized_pyramid_fixture(fixture_path: str):  # noqa: C901
     for var in ["b02", "b03", "b04", "b05", "b06", "b07", "b08", "b11", "b12", "b8a"]:
         level_1_ds[var].attrs["grid_mapping"] = "spatial_ref"
 
-    level_1_ds.attrs["pyramid_level"] = 1
-    level_1_ds.attrs["resolution_meters"] = 20
+    if version == "v0":
+        level_1_ds.attrs["pyramid_level"] = 1
+        level_1_ds.attrs["resolution_meters"] = 20
+        group_name = "1"
+    else:
+        group_name = "r20m"
 
     # Create encoding and write level 1
     encoding_1 = create_encoding(level_1_ds)
     level_1_ds.to_zarr(
         fixture_path,
-        group="measurements/reflectance/1",
+        group=f"measurements/reflectance/{group_name}",
         mode="a",
         consolidated=True,
         zarr_format=3,
@@ -283,14 +437,18 @@ def create_optimized_pyramid_fixture(fixture_path: str):  # noqa: C901
     for var in ["b02", "b03", "b04", "b05", "b06", "b07", "b08", "b11", "b12", "b8a"]:
         level_2_ds[var].attrs["grid_mapping"] = "spatial_ref"
 
-    level_2_ds.attrs["pyramid_level"] = 2
-    level_2_ds.attrs["resolution_meters"] = 60
+    if version == "v0":
+        level_2_ds.attrs["pyramid_level"] = 2
+        level_2_ds.attrs["resolution_meters"] = 60
+        group_name = "2"
+    else:
+        group_name = "r60m"
 
     # Create encoding and write level 2
     encoding_2 = create_encoding(level_2_ds)
     level_2_ds.to_zarr(
         fixture_path,
-        group="measurements/reflectance/2",
+        group=f"measurements/reflectance/{group_name}",
         mode="a",
         consolidated=True,
         zarr_format=3,
@@ -324,21 +482,24 @@ def create_optimized_pyramid_fixture(fixture_path: str):  # noqa: C901
     for var in ["b02", "b03", "b04", "b05", "b06", "b07", "b08", "b11", "b12", "b8a"]:
         level_3_ds[var].attrs["grid_mapping"] = "spatial_ref"
 
-    level_3_ds.attrs["pyramid_level"] = 3
-    level_3_ds.attrs["resolution_meters"] = 120
+    if version == "v0":
+        level_3_ds.attrs["pyramid_level"] = 3
+        level_3_ds.attrs["resolution_meters"] = 120
+        group_name = "3"
+    else:
+        group_name = "r120m"
 
     # Create encoding and write level 3
     encoding_3 = create_encoding(level_3_ds)
     level_3_ds.to_zarr(
         fixture_path,
-        group="measurements/reflectance/3",
+        group=f"measurements/reflectance/{group_name}",
         mode="a",
         consolidated=True,
         zarr_format=3,
         encoding=encoding_3,
     )
-
-    print(f"✅ Created optimized pyramid fixture at {fixture_path}")
+    print(f"✅ Created GeoZarr ({version}) fixture at {fixture_path}")
     print("Structure:")
     print("  - Level 0 (10m): b02, b03, b04, b08 only")
     print("  - Level 1 (20m): all bands")
@@ -349,6 +510,4 @@ def create_optimized_pyramid_fixture(fixture_path: str):  # noqa: C901
 
 
 if __name__ == "__main__":
-    create_optimized_pyramid_fixture(
-        "tests/fixtures/eopf_geozarr/optimized_pyramid.zarr"
-    )
+    create_geozarr_fixture("tests/fixtures/eopf_geozarr/optimized_pyramid.zarr")

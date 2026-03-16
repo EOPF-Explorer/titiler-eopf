@@ -38,15 +38,26 @@ def test_dataset(app, geozarr):
     response = app.get(f"/collections/{collection}/items/{item}/dataset/dict")
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
-    assert list(response.json()) == [
-        ".",
-        "measurements",
-        "measurements/reflectance",
-        "measurements/reflectance/0",
-        "measurements/reflectance/1",
-        "measurements/reflectance/2",
-        "measurements/reflectance/3",
-    ]
+    if item == "geozarr_v0":
+        assert set(response.json()) == {
+            ".",
+            "measurements",
+            "measurements/reflectance",
+            "measurements/reflectance/0",
+            "measurements/reflectance/1",
+            "measurements/reflectance/2",
+            "measurements/reflectance/3",
+        }
+    else:
+        assert set(response.json()) == {
+            ".",
+            "measurements",
+            "measurements/reflectance",
+            "measurements/reflectance/r10m",
+            "measurements/reflectance/r20m",
+            "measurements/reflectance/r60m",
+            "measurements/reflectance/r120m",
+        }
 
 
 def test_preview(app, geozarr):
