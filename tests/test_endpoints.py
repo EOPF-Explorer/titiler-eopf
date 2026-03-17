@@ -3,44 +3,23 @@
 from .conftest import parse_img
 
 
-def test_dataset(app):
+def test_dataset(app, geozarr):
     """Test /datasets routes."""
-    response = app.get(
-        "/collections/eopf_geozarr/items/S2A_MSIL2A_20250704T094051_N0511_R036_T33SWB_20250704T115824/dataset"
-    )
+    collection, item = geozarr
+    response = app.get(f"/collections/{collection}/items/{item}/dataset")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
 
-    response = app.get("/collections/eopf_geozarr/items/optimized_pyramid/dataset")
+    response = app.get(f"/collections/{collection}/items/{item}/dataset")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
 
-    response = app.get(
-        "/collections/eopf_geozarr/items/S2A_MSIL2A_20250704T094051_N0511_R036_T33SWB_20250704T115824/dataset/groups"
-    )
-    assert response.status_code == 200
-    assert response.headers["content-type"] == "application/json"
-    assert response.json() == ["/measurements/reflectance/r60m"]
-
-    response = app.get(
-        "/collections/eopf_geozarr/items/optimized_pyramid/dataset/groups"
-    )
+    response = app.get(f"/collections/{collection}/items/{item}/dataset/groups")
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
     assert response.json() == ["/measurements/reflectance"]
 
-    response = app.get(
-        "/collections/eopf_geozarr/items/S2A_MSIL2A_20250704T094051_N0511_R036_T33SWB_20250704T115824/dataset/keys"
-    )
-    assert response.status_code == 200
-    assert response.headers["content-type"] == "application/json"
-    assert response.json() == [
-        "/measurements/reflectance/r60m:b02",
-        "/measurements/reflectance/r60m:b03",
-        "/measurements/reflectance/r60m:b04",
-    ]
-
-    response = app.get("/collections/eopf_geozarr/items/optimized_pyramid/dataset/keys")
+    response = app.get(f"/collections/{collection}/items/{item}/dataset/keys")
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
     assert response.json() == [
@@ -56,49 +35,36 @@ def test_dataset(app):
         "/measurements/reflectance:b8a",
     ]
 
-    response = app.get(
-        "/collections/eopf_geozarr/items/S2A_MSIL2A_20250704T094051_N0511_R036_T33SWB_20250704T115824/dataset/dict"
-    )
+    response = app.get(f"/collections/{collection}/items/{item}/dataset/dict")
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
-    assert list(response.json()) == [
-        ".",
-        "measurements",
-        "measurements/reflectance",
-        "measurements/reflectance/r60m",
-        "measurements/reflectance/r60m/0",
-        "measurements/reflectance/r60m/1",
-        "measurements/reflectance/r60m/2",
-    ]
-
-    response = app.get("/collections/eopf_geozarr/items/optimized_pyramid/dataset/dict")
-    assert response.status_code == 200
-    assert response.headers["content-type"] == "application/json"
-    assert list(response.json()) == [
-        ".",
-        "measurements",
-        "measurements/reflectance",
-        "measurements/reflectance/0",
-        "measurements/reflectance/1",
-        "measurements/reflectance/2",
-        "measurements/reflectance/3",
-    ]
+    if item == "geozarr_v0":
+        assert set(response.json()) == {
+            ".",
+            "measurements",
+            "measurements/reflectance",
+            "measurements/reflectance/0",
+            "measurements/reflectance/1",
+            "measurements/reflectance/2",
+            "measurements/reflectance/3",
+        }
+    else:
+        assert set(response.json()) == {
+            ".",
+            "measurements",
+            "measurements/reflectance",
+            "measurements/reflectance/r10m",
+            "measurements/reflectance/r20m",
+            "measurements/reflectance/r60m",
+            "measurements/reflectance/r120m",
+        }
 
 
-def test_preview(app):
+def test_preview(app, geozarr):
     """Test preview routes."""
+    collection, item = geozarr
     response = app.get(
-        "/collections/eopf_geozarr/items/S2A_MSIL2A_20250704T094051_N0511_R036_T33SWB_20250704T115824/preview.png",
-        params={"variables": "/measurements/reflectance/r60m:b02"},
-    )
-    assert response.status_code == 200
-    assert response.headers["content-type"] == "image/png"
-    profile = parse_img(response.content)
-    assert profile["count"] == 2
-    assert profile["dtype"] == "uint8"
-
-    response = app.get(
-        "/collections/eopf_geozarr/items/optimized_pyramid/preview.png",
+        f"/collections/{collection}/items/{item}/preview.png",
         params={"variables": "/measurements/reflectance:b02"},
     )
     assert response.status_code == 200
@@ -108,7 +74,17 @@ def test_preview(app):
     assert profile["dtype"] == "uint8"
 
     response = app.get(
-        "/collections/eopf_geozarr/items/optimized_pyramid/preview.png",
+        f"/collections/{collection}/items/{item}/preview.png",
+        params={"variables": "/measurements/reflectance:b02"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    profile = parse_img(response.content)
+    assert profile["count"] == 2
+    assert profile["dtype"] == "uint8"
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/preview.png",
         params=(
             ("variables", "/measurements/reflectance:b04"),
             ("variables", "/measurements/reflectance:b03"),

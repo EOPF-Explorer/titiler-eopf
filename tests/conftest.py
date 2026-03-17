@@ -1,6 +1,7 @@
 """titiler.eopf tests configuration."""
 
 import os
+import shutil
 from threading import Thread
 from typing import Any, Generator
 
@@ -8,6 +9,10 @@ import pytest
 from fakeredis import TcpFakeServer
 from rasterio.io import MemoryFile
 from starlette.testclient import TestClient
+
+from .create_multiscale_fixture import create_geozarr_fixture
+
+FIXTURES_DIRECTORY = os.path.join(os.path.dirname(__file__), "fixtures")
 
 
 @pytest.fixture(scope="session")
@@ -21,6 +26,31 @@ def redis_host() -> Generator[str, Any, Any]:
     server.shutdown()
     server.server_close()
     t.join()
+
+
+@pytest.fixture(
+    params=[
+        "v0",
+        "v1",
+    ],
+    scope="session",
+)
+def geozarr(request):
+    """Create GeoZarr v1 fixture."""
+    version = request.param
+    geozarr_dir = os.path.join(FIXTURES_DIRECTORY, "eopf")
+    geozarr = os.path.join(geozarr_dir, f"geozarr_{version}.zarr")
+    create_geozarr_fixture(geozarr, version=version)
+    yield ("eopf", f"geozarr_{version}")
+    if os.path.exists(geozarr_dir):
+        shutil.rmtree(geozarr_dir)
+
+
+@pytest.fixture
+def geozarr_dataset(geozarr):
+    """GeoZarr dataset path."""
+    collection, item = geozarr
+    return os.path.join(FIXTURES_DIRECTORY, collection, f"{item}.zarr")
 
 
 @pytest.fixture(autouse=True)

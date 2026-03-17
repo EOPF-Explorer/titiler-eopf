@@ -9,13 +9,10 @@ from rasterio.errors import RasterioIOError
 from rio_tiler.models import ImageData
 from rioxarray.exceptions import NoDataInBounds
 
-from titiler.eopf.openeo.processes.implementations.io import (
-    LoadCollection,
-    STACReader,
-    _reader,
-    load_zarr,
-)
-from titiler.openeo.processes.implementations.data_model import LazyRasterStack
+from titiler.eopf.openeo.processes.implementations.io import load_zarr
+from titiler.eopf.openeo.reader import STACReader, _reader
+from titiler.eopf.openeo.stacapi import LoadCollection
+from titiler.openeo.processes.implementations.data_model import RasterStack
 
 
 class TestLoadZarr:
@@ -46,7 +43,7 @@ class TestLoadZarr:
 
             result = load_zarr("test.zarr")
 
-            assert isinstance(result, LazyRasterStack)
+            assert isinstance(result, RasterStack)
             mock_reader_class.assert_called_once_with("test.zarr")
 
     def test_load_zarr_no_time_dimension(self):
@@ -67,7 +64,7 @@ class TestLoadZarr:
 
             result = load_zarr("test.zarr")
 
-            assert isinstance(result, LazyRasterStack)
+            assert isinstance(result, RasterStack)
 
     def test_load_zarr_with_spatial_extent(self):
         """Test load_zarr with spatial extent."""
@@ -85,7 +82,7 @@ class TestLoadZarr:
 
             result = load_zarr("test.zarr", spatial_extent=bbox, width=512, height=512)
 
-            assert isinstance(result, LazyRasterStack)
+            assert isinstance(result, RasterStack)
 
     def test_load_zarr_with_options(self):
         """Test load_zarr with custom options."""
@@ -103,7 +100,7 @@ class TestLoadZarr:
 
             result = load_zarr("test.zarr", options=options)
 
-            assert isinstance(result, LazyRasterStack)
+            assert isinstance(result, RasterStack)
 
 
 class TestSTACReaderMethods:
@@ -114,7 +111,7 @@ class TestSTACReaderMethods:
         from titiler.eopf.reader import GeoZarrReader
 
         # Create a minimal STACReader instance by mocking the initialization
-        with patch("titiler.openeo.reader.SimpleSTACReader.__attrs_post_init__"):
+        with patch("titiler.eopf.openeo.reader.SimpleSTACReader.__attrs_post_init__"):
             mock_item = Mock()
             mock_item.bbox = [0, 0, 1, 1]
             reader = STACReader(mock_item)
@@ -142,9 +139,7 @@ class TestReader:
             array=np.ones((3, 256, 256), dtype=np.uint8), crs="EPSG:4326", bounds=bbox
         )
 
-        with patch(
-            "titiler.eopf.openeo.processes.implementations.io.STACReader"
-        ) as mock_stac_reader:
+        with patch("titiler.eopf.openeo.reader.STACReader") as mock_stac_reader:
             mock_reader_instance = Mock()
             mock_reader_instance.part.return_value = mock_img
             mock_stac_reader.return_value.__enter__ = Mock(
@@ -163,9 +158,7 @@ class TestReader:
         bbox = [0, 0, 1, 1]
 
         with (
-            patch(
-                "titiler.eopf.openeo.processes.implementations.io.STACReader"
-            ) as mock_stac_reader,
+            patch("titiler.eopf.openeo.reader.STACReader") as mock_stac_reader,
             patch("time.sleep"),
             patch("builtins.print"),
         ):  # Suppress print statements
@@ -193,9 +186,7 @@ class TestReader:
         bbox = [0, 0, 1, 1]
 
         with (
-            patch(
-                "titiler.eopf.openeo.processes.implementations.io.STACReader"
-            ) as mock_stac_reader,
+            patch("titiler.eopf.openeo.reader.STACReader") as mock_stac_reader,
             patch("time.sleep"),
             patch("builtins.print"),
         ):  # Suppress print statements
@@ -230,7 +221,7 @@ class TestLoggerUsage:
 
     def test_logger_import_and_usage(self):
         """Test that logger is properly imported and can be used."""
-        from titiler.eopf.openeo.processes.implementations.io import logger
+        from titiler.eopf.openeo.reader import logger
 
         # Test that logger exists and can be called
         assert logger is not None
@@ -251,9 +242,9 @@ class TestExceptionHandling:
 
     def test_rasterio_import(self):
         """Test that rasterio.RasterioIOError can be imported and used."""
-        with patch("titiler.eopf.openeo.processes.implementations.io.STACReader"):
+        with patch("titiler.eopf.openeo.reader.STACReader"):
             # This should not raise any import errors
-            from titiler.eopf.openeo.processes.implementations.io import STACReader
+            from titiler.eopf.openeo.reader import STACReader
 
             assert STACReader is not None
 
@@ -274,5 +265,5 @@ class TestExceptionHandling:
 
             result = load_zarr("test.zarr")
 
-            # Check that the LazyRasterStack was created with the correct exceptions
-            assert isinstance(result, LazyRasterStack)
+            # Check that the RasterStack was created with the correct exceptions
+            assert isinstance(result, RasterStack)

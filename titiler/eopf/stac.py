@@ -114,17 +114,16 @@ class EOPFSimpleSTACReader(SimpleSTACReader):
             AssetInfo: STAC asset informations.
 
         """
-        asset_name: str
-        if isinstance(asset, dict):
-            if not asset.get("name"):
-                raise ValueError("asset dictionary does not have `name` key")
-            asset_name = asset["name"]
-        else:
-            asset_name = asset
+        if isinstance(asset, str):
+            asset = {"name": asset}
 
+        if not asset.get("name"):
+            raise ValueError("asset dictionary does not have `name` key")
+
+        asset_name = asset["name"]
         if asset_name not in self.assets:
             raise InvalidAssetName(
-                f"{asset_name} is not valid. Should be one of {self.assets}"
+                f"'{asset_name}' is not valid, should be one of {self.assets}"
             )
 
         asset_info = self.input["assets"][asset_name]
@@ -132,15 +131,16 @@ class EOPFSimpleSTACReader(SimpleSTACReader):
         method_options: dict[str, Any] = {}
         reader_options: dict[str, Any] = {}
         if isinstance(asset, dict):
+            # Indexes
             if indexes := asset.get("indexes"):
                 method_options["indexes"] = indexes
-
+            # Expression
             if expr := asset.get("expression"):
                 method_options["expression"] = expr
-
+            # Variables
             if vars := asset.get("variables"):
                 method_options["variables"] = vars
-
+            # Bands
             if bands := asset.get("bands"):
                 stac_bands = asset_info.get("bands") or asset_info.get("eo:bands")
                 if not stac_bands:
@@ -148,6 +148,7 @@ class EOPFSimpleSTACReader(SimpleSTACReader):
                         "Asset does not have 'bands' metadata, unable to use 'bands' option"
                     )
 
+                # For Zarr bands = variable
                 if "application/vnd+zarr" in asset_info["type"]:
                     common_to_variable = {
                         b.get("eo:common_name") or b.get("common_name") or b["name"]: b[
@@ -158,6 +159,8 @@ class EOPFSimpleSTACReader(SimpleSTACReader):
                     method_options["variables"] = [
                         common_to_variable.get(v, v) for v in bands
                     ]
+
+                # For COG bands = indexes
                 else:
                     common_to_variable = {
                         b.get("eo:common_name")
