@@ -1032,7 +1032,7 @@ class GeoZarrReader(BaseReader):
 
     @cached_property
     def _variable_idx(self) -> Dict[str, str]:
-        return {v: f"Var{ix}" for ix, v in enumerate(self.variables)}
+        return {v: f"var{ix}" for ix, v in enumerate(self.variables)}
 
     def parse_expression(self, expression: str) -> List[str]:
         """Parse rio-tiler band math expression."""
@@ -1195,10 +1195,10 @@ class GeoZarrReader(BaseReader):
 
             # NOTE: transform expression back
             img.band_descriptions = [
-                self._convert_expression_from_index(b) for b in img.band_names
+                self._convert_expression_from_index(b) for b in img.band_descriptions
             ]
-            img.band_names = [f"b{ix + 1}" for ix, _ in enumerate(img.band_names)]
 
+        img.band_names = [f"b{ix + 1}" for ix in range(img.count)]
         img.assets = [self.input]
 
         return img
@@ -1291,10 +1291,10 @@ class GeoZarrReader(BaseReader):
 
             # NOTE: transform expression back
             img.band_descriptions = [
-                self._convert_expression_from_index(b) for b in img.band_names
+                self._convert_expression_from_index(b) for b in img.band_descriptions
             ]
-            img.band_names = [f"b{ix + 1}" for ix, _ in enumerate(img.band_names)]
 
+        img.band_names = [f"b{ix + 1}" for ix in range(img.count)]
         img.assets = [self.input]
 
         return img
@@ -1376,10 +1376,10 @@ class GeoZarrReader(BaseReader):
 
             # NOTE: transform expression back
             img.band_descriptions = [
-                self._convert_expression_from_index(b) for b in img.band_names
+                self._convert_expression_from_index(b) for b in img.band_descriptions
             ]
-            img.band_names = [f"b{ix + 1}" for ix, _ in enumerate(img.band_names)]
 
+        img.band_names = [f"b{ix + 1}" for ix in range(img.count)]
         img.assets = [self.input]
 
         return img
@@ -1437,10 +1437,10 @@ class GeoZarrReader(BaseReader):
             pt = pt.apply_expression(expression)
             # transform expression back
             pt.band_descriptions = [
-                self._convert_expression_from_index(b) for b in pt.band_names
+                self._convert_expression_from_index(b) for b in pt.band_descriptions
             ]
-            pt.band_names = [f"b{ix + 1}" for ix, _ in enumerate(pt.band_names)]
 
+        pt.band_names = [f"b{ix + 1}" for ix in range(pt.count)]
         pt.assets = [self.input]
 
         return pt
