@@ -118,12 +118,12 @@ class TestSTACReaderMethods:
 
             # Test Zarr asset detection
             asset_info = {"media_type": "application/x-zarr", "url": "test.zarr"}
-            reader_class, options = reader._get_reader(asset_info)
+            reader_class = reader._get_reader(asset_info)
             assert reader_class == GeoZarrReader
 
             # Test non-Zarr asset
             asset_info = {"media_type": "image/tiff", "url": "test.tif"}
-            reader_class, options = reader._get_reader(asset_info)
+            reader_class = reader._get_reader(asset_info)
             assert reader_class != GeoZarrReader
 
 
