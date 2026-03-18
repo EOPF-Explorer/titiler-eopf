@@ -1,5 +1,6 @@
 """Custom stacApiBackend for EOPF."""
 
+from threading import Lock
 from typing import Dict, List, Optional, Union
 
 from attrs import define, field
@@ -29,6 +30,9 @@ from .reader import _reader
 
 cache_config = CacheSettings()
 processing_settings = ProcessingSettings()
+
+collections_cache = TTLCache(maxsize=cache_config.maxsize, ttl=cache_config.ttl)
+collection_cache = TTLCache(maxsize=cache_config.maxsize, ttl=cache_config.ttl)
 
 
 def extract_bands_from_asset(asset) -> list[dict]:
@@ -67,7 +71,7 @@ def get_band_names(asset_name: str, asset) -> list[str]:
         asset: The STAC asset object
 
     Returns:
-        List of band references in format 'asset|band_name' if bands exist,
+        List of band references in format 'asset_name|bands=band_name' if bands exist,
         or just ['asset_name'] if no bands are defined
     """
     bands = extract_bands_from_asset(asset)
@@ -76,16 +80,14 @@ def get_band_names(asset_name: str, asset) -> list[str]:
         # When no bands are defined, return just the asset name
         return [asset_name]
 
-    return [
-        f"{asset_name}|{band.get('name', '')}" for band in bands if band.get("name")
-    ]
+    return [f"{asset_name}|bands={band['name']}" for band in bands if band.get("name")]
 
 
 def get_all_band_names(collection: Collection) -> list[str]:
     """Get all unique band references from collection item assets.
 
     Returns:
-        List of band references in format 'asset|band_name' if bands exist,
+        List of band references in format 'asset_name|bands=band_name' if bands exist,
         or just asset names if no bands are defined for those assets
     """
     all_band_names = set()
@@ -106,13 +108,13 @@ def get_all_band_names(collection: Collection) -> list[str]:
             if band_name:
                 # For spectral bands (b01, b02, etc.), assume they go in reflectance asset
                 if band_name.startswith(("b0", "b1")) and band_name[1:].isdigit():
-                    all_band_names.add(f"reflectance|{band_name}")
+                    all_band_names.add(f"reflectance|bands={band_name}")
                 # For other bands like AOT, WVP, SCL, use them as direct assets
                 elif band_name.upper() in ["AOT", "WVP", "SCL"]:
                     all_band_names.add(band_name)
                 else:
                     # Default to reflectance asset for unknown spectral bands
-                    all_band_names.add(f"reflectance|{band_name}")
+                    all_band_names.add(f"reflectance|bands={band_name}")
 
     return sorted(all_band_names)
 
@@ -122,8 +124,9 @@ class stacApiBackend(BaseBackend):
     """Custom stacApiBackend for EOPF Zarr collections."""
 
     @cached(  # type: ignore
-        TTLCache(maxsize=cache_config.maxsize, ttl=cache_config.ttl),
+        collections_cache,
         key=lambda self, **kwargs: hashkey(self.url, **kwargs),
+        lock=Lock(),
     )
     def get_collections(self, **kwargs) -> List[Dict]:
         """Return List of STAC Collections."""
@@ -139,10 +142,11 @@ class stacApiBackend(BaseBackend):
         return collections
 
     @cached(  # type: ignore
-        TTLCache(maxsize=cache_config.maxsize, ttl=cache_config.ttl),
+        collection_cache,
         key=lambda self, collection_id, **kwargs: hashkey(
             self.url, collection_id, **kwargs
         ),
+        lock=Lock(),
     )
     def get_collection(self, collection_id: str, **kwargs) -> Dict:
         """Return STAC Collection"""

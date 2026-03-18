@@ -3,24 +3,18 @@
 import logging
 import time
 import warnings
-from typing import Any, Dict, Sequence, Tuple, Type, Union
+from typing import Any, Dict, Sequence, Type, Union
 
 import attr
+import pystac
 from rasterio.errors import RasterioIOError
 from rasterio.warp import transform_bounds
-from rio_tiler.errors import (
-    AssetAsBandError,
-    ExpressionMixingWarning,
-    InvalidAssetName,
-    MissingAssets,
-    TileOutsideBounds,
-)
+from rio_tiler.errors import AssetAsBandError, MissingAssets, TileOutsideBounds
 from rio_tiler.io import BaseReader
-from rio_tiler.io.stac import STAC_ALTERNATE_KEY
 from rio_tiler.models import ImageData
 from rio_tiler.tasks import multi_arrays
-from rio_tiler.types import AssetInfo, BBox, Indexes
-from rio_tiler.utils import cast_to_sequence
+from rio_tiler.types import AssetInfo, AssetType, AssetWithOptions, BBox
+from rio_tiler.utils import cast_to_sequence, inherit_rasterio_env
 
 from titiler.openeo.reader import SimpleSTACReader
 
@@ -35,86 +29,94 @@ logger = logging.getLogger(__name__)
 class STACReader(SimpleSTACReader):
     """STACReader with support of Zarr or COG."""
 
-    def _get_reader(self, asset_info: AssetInfo) -> Tuple[Type[BaseReader], Dict]:
+    def _get_reader(self, asset_info: AssetInfo) -> Type[BaseReader]:
         """Get Asset Reader."""
         if asset_type := asset_info.get("media_type", None):
             if asset_type.split(";")[0] in [
                 "application/x-zarr",
                 "application/vnd+zarr",
                 "application/vnd.zarr",
-            ] and not asset_info["url"].startswith("vrt://"):
-                return GeoZarrReader, asset_info.get("reader_options", {})
+            ]:
+                return GeoZarrReader
 
-        return self.reader, asset_info.get("reader_options", {})
+        return self.reader
 
-    def _get_asset_info(self, asset: str) -> AssetInfo:
-        """Validate asset names and return asset's info.
+    def _get_options(
+        self,
+        asset: AssetWithOptions,
+        metadata: pystac.Asset,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Copy from rio_tiler.io.stac._get_options."""
+        method_options: dict[str, Any] = {}
+        reader_options: dict[str, Any] = {}
 
-        Args:
-            asset (str): STAC asset name.
-
-        Returns:
-            AssetInfo: STAC asset info.
-
-        """
-        asset, vrt_options = self._parse_vrt_asset(asset)
-        if asset not in self.assets:
-            raise InvalidAssetName(
-                f"'{asset}' is not valid, should be one of {self.assets}"
+        # Indexes
+        if indexes := asset.get("indexes"):
+            method_options["indexes"] = indexes
+        # Expression
+        if expr := asset.get("expression"):
+            method_options["expression"] = expr
+        # Variables
+        if vars := asset.get("variables"):
+            method_options["variables"] = vars
+        # Bands
+        if bands := asset.get("bands"):
+            stac_bands = (
+                metadata.extra_fields.get("bands")
+                or metadata.extra_fields.get("eo:bands")  # V1.0
             )
-
-        asset_info = self.item.assets[asset]
-        extras = asset_info.extra_fields
-
-        info = AssetInfo(
-            url=asset_info.get_absolute_href() or asset_info.href,
-            metadata=extras if not vrt_options else None,
-        )
-
-        if STAC_ALTERNATE_KEY and extras.get("alternate"):
-            if alternate := extras["alternate"].get(STAC_ALTERNATE_KEY):
-                info["url"] = alternate["href"]
-
-        if asset_info.media_type:
-            info["media_type"] = asset_info.media_type
-
-        # https://github.com/stac-extensions/file
-        if head := extras.get("file:header_size"):
-            info["env"] = {"GDAL_INGESTED_BYTES_AT_OPEN": head}
-
-        # https://github.com/stac-extensions/raster
-        if extras.get("raster:bands") and not vrt_options:
-            bands = extras.get("raster:bands")
-            stats = [
-                (b["statistics"]["minimum"], b["statistics"]["maximum"])
-                for b in bands
-                if {"minimum", "maximum"}.issubset(b.get("statistics", {}))
-            ]
-            # check that stats data are all double and make warning if not
-            if (
-                stats
-                and all(isinstance(v, (int, float)) for stat in stats for v in stat)
-                and len(stats) == len(bands)
-            ):
-                info["dataset_statistics"] = stats
-            else:
-                warnings.warn(
-                    "Some statistics data in STAC are invalid, they will be ignored.",
-                    UserWarning,
-                    stacklevel=2,
+            if not stac_bands:
+                raise ValueError(
+                    "Asset does not have 'bands' metadata, unable to use 'bands' option"
                 )
 
-        if vrt_options:
-            info["url"] = f"vrt://{info['url']}?{vrt_options}"
+            # For Zarr bands = variable
+            media_type = (
+                metadata.media_type.split(";")[0].strip() if metadata.media_type else ""
+            )
+            zarr_media_types = [
+                "application/x-zarr",
+                "application/vnd.zarr",
+                "application/vnd+zarr",
+            ]
+            if media_type in zarr_media_types:
+                common_to_variable = {
+                    b.get("eo:common_name") or b.get("common_name") or b["name"]: b[
+                        "name"
+                    ]
+                    for b in stac_bands
+                }
+                method_options["variables"] = [
+                    common_to_variable.get(v, v) for v in bands
+                ]
 
-        return info
+            # For COG bands = indexes
+            else:
+                common_to_variable = {
+                    b.get("eo:common_name")
+                    or b.get("common_name")
+                    or b.get("name")
+                    or str(ix): ix
+                    for ix, b in enumerate(stac_bands, 1)
+                }
+                band_indexes: list[int] = []
+                for b in bands:
+                    if idx := common_to_variable.get(b):
+                        band_indexes.append(idx)
+                    else:
+                        raise ValueError(
+                            f"Band '{b}' not found in asset metadata, unable to use 'bands' option"
+                        )
+
+                    method_options["indexes"] = band_indexes
+
+        return reader_options, method_options
 
     def part(  # noqa: C901
         self,
         bbox: BBox,
-        assets: Union[Sequence[str], str] | None = None,
+        assets: Union[Sequence[AssetType], AssetType] | None = None,
         expression: str | None = None,
-        asset_indexes: Dict[str, Indexes] | None = None,
         asset_as_band: bool = False,
         **kwargs: Any,
     ) -> ImageData:
@@ -136,17 +138,14 @@ class STACReader(SimpleSTACReader):
             rio_tiler.models.ImageData: ImageData instance with data, mask and tile spatial info.
 
         """
-        assets = cast_to_sequence(assets)
-        if assets and expression:
+        if kwargs.pop("asset_indexes", None):
             warnings.warn(
-                "Both expression and assets passed; expression will overwrite assets parameter.",
-                ExpressionMixingWarning,
+                "`asset_indexes` parameter is deprecated in `tile` method and will be ignored.",
+                DeprecationWarning,
                 stacklevel=2,
             )
 
-        if expression:
-            assets = self.parse_expression(expression, asset_as_band=asset_as_band)
-
+        assets = cast_to_sequence(assets)
         if not assets and self.default_assets:
             warnings.warn(
                 f"No assets/expression passed, defaults to {self.default_assets}",
@@ -157,25 +156,17 @@ class STACReader(SimpleSTACReader):
 
         if not assets:
             raise MissingAssets(
-                "assets must be passed via `expression` or `assets` options, or via class-level `default_assets`."
+                "No Asset defined by `assets` option or class-level `default_assets`."
             )
 
-        asset_indexes = asset_indexes or {}
-
-        # We fall back to `indexes` if provided
-        indexes = kwargs.pop("indexes", None)
-
-        def _asset_reader(asset_name: str, *args: Any, **kwargs: Any) -> ImageData:
-            idx = asset_indexes.get(asset_name) or indexes
-
-            # Parse Asset `{asset}|{variable}`
-            variable = asset_name.split("|")[1] if "|" in asset_name else None
-            asset = asset_name.split("|")[0]
-
-            read_options = {**kwargs, "variables": [variable]} if variable else kwargs
-
+        @inherit_rasterio_env
+        def _reader(asset: AssetType, *args: Any, **kwargs: Any) -> ImageData:
             asset_info = self._get_asset_info(asset)
-            reader, options = self._get_reader(asset_info)
+            asset_name = asset_info["name"]
+            reader = self._get_reader(asset_info)
+            reader_options = {**self.reader_options, **asset_info["reader_options"]}
+            method_options = {**asset_info["method_options"], **kwargs}
+
             uri = asset_info["url"]
 
             # TODO: add s3 alternate in STAC Items
@@ -185,27 +176,8 @@ class STACReader(SimpleSTACReader):
             )
 
             with self.ctx(**asset_info.get("env", {})):
-                with reader(
-                    uri,
-                    tms=self.tms,
-                    **{**self.reader_options, **options},
-                ) as src:
-                    # Check if the `variable` name is a common name
-                    metadata = asset_info.get("metadata", {})
-                    if (bands := metadata.get("bands", {})) and (
-                        variables := read_options.pop("variables", None)
-                    ):
-                        common_to_variable = {
-                            b["eo:common_name"]
-                            if "eo:common_name" in b
-                            else b["name"]: b["name"]
-                            for b in bands
-                        }
-                        read_options["variables"] = [
-                            common_to_variable.get(v, v) for v in variables
-                        ]
-
-                    bounds_crs = read_options.get("bounds_crs", "epsg:4326")
+                with reader(uri, tms=self.tms, **reader_options) as src:
+                    bounds_crs = method_options.get("bounds_crs", "epsg:4326")
 
                     transformed_bbox = bbox
                     # Transform bbox to source CRS if needed
@@ -223,11 +195,11 @@ class STACReader(SimpleSTACReader):
                             f"No data found in bounds {bbox} for asset {asset_name}"
                         )
 
-                    data = src.part(*args, indexes=idx, **read_options)
+                    data = src.part(*args, **method_options)
 
                     self._update_statistics(
                         data,
-                        indexes=idx,
+                        indexes=method_options.get("indexes"),
                         statistics=asset_info.get("dataset_statistics"),
                     )
 
@@ -250,7 +222,7 @@ class STACReader(SimpleSTACReader):
         try:
             img = multi_arrays(
                 assets,
-                _asset_reader,
+                _reader,
                 bbox,
                 allowed_exceptions=(
                     TileOutsideBounds,
@@ -271,6 +243,7 @@ class STACReader(SimpleSTACReader):
                 f"No valid data found in bounds {bbox} for any asset"
             ) from e
 
+        img.band_names = [f"b{ix + 1}" for ix in range(img.count)]
         if expression:
             return img.apply_expression(expression)
 

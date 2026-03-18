@@ -13,7 +13,7 @@ from rio_tiler.types import AssetInfo, AssetType, AssetWithOptions
 from titiler.core.dependencies import DefaultDependency, ExpressionParams
 from titiler.eopf.reader import GeoZarrReader
 from titiler.stacapi.backend import STACAPIBackend
-from titiler.stacapi.reader import SimpleSTACReader, STACAPIReader
+from titiler.stacapi.reader import SimpleSTACReader
 
 
 def _parse_asset(values: list[str]) -> list[AssetType]:
@@ -86,21 +86,11 @@ class AssetsExprParams(ExpressionParams, AssetsParams):
 
 
 @attr.s
-class EOPFSTACAPIReader(STACAPIReader):
-    """Custom EOPF STAC Reader."""
-
-    include_asset_types: set[str] = attr.ib(
-        factory=lambda: {
-            "application/vnd+zarr",
-            "application/vnd+zarr; version=2; profile=multiscales",
-        }
-    )
-    reader: type[GeoZarrReader] = attr.ib(default=GeoZarrReader)
-
-
-@attr.s
 class EOPFSimpleSTACReader(SimpleSTACReader):
-    """Custom EOPF Simple STAC Reader."""
+    """Custom EOPF Simple STAC Reader, used in STACAPI Mosaic Backend.
+
+    NOTE: This reader takes a simple dictionary as item.
+    """
 
     reader: type[GeoZarrReader] = attr.ib(default=GeoZarrReader)
 
@@ -149,7 +139,17 @@ class EOPFSimpleSTACReader(SimpleSTACReader):
                     )
 
                 # For Zarr bands = variable
-                if "application/vnd+zarr" in asset_info["type"]:
+                media_type = (
+                    asset_info["type"].split(";")[0].strip()
+                    if asset_info["type"]
+                    else ""
+                )
+                zarr_media_types = [
+                    "application/x-zarr",
+                    "application/vnd.zarr",
+                    "application/vnd+zarr",
+                ]
+                if media_type in zarr_media_types:
                     common_to_variable = {
                         b.get("eo:common_name") or b.get("common_name") or b["name"]: b[
                             "name"

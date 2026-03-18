@@ -1,0 +1,384 @@
+{
+    "id": "S2C_MSIL2A_20260316T142941_N0512_R139_T26WME_20260316T174811",
+    "bbox": [
+        14.99,
+        37.85,
+        15.12,
+        37.95
+    ],
+    "type": "Feature",
+    "links": [
+        {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://fake.api.io/stac/collections/sentinel-2-l2a"
+        },
+        {
+            "rel": "parent",
+            "type": "application/json",
+            "href": "https://fake.api.io/stac/collections/sentinel-2-l2a"
+        },
+        {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://fake.api.io/stac/"
+        },
+        {
+            "rel": "self",
+            "type": "application/geo+json",
+            "href": "https://fake.api.io/stac/collections/sentinel-2-l2a/items/S2C_MSIL2A_20260316T142941_N0512_R139_T26WME_20260316T174811"
+        },
+        {
+            "rel": "store",
+            "href": "{{ store_url }}",
+            "type": "application/octet-stream",
+            "title": "Zarr Store"
+        }
+    ],
+    "assets": {
+        "reflectance": {
+            "gsd": 10,
+            "href": "{{ store_url }}/measurements/reflectance",
+            "type": "application/vnd.zarr; version=3; profile=multiscales",
+            "bands": [
+                {
+                    "gsd": 20,
+                    "name": "b01",
+                    "description": "Coastal aerosol (band 1)",
+                    "eo:common_name": "coastal",
+                    "eo:center_wavelength": 0.443,
+                    "eo:full_width_half_max": 0.027
+                },
+                {
+                    "gsd": 10,
+                    "name": "b02",
+                    "description": "Blue (band 2)",
+                    "eo:common_name": "blue",
+                    "eo:center_wavelength": 0.49,
+                    "eo:full_width_half_max": 0.098
+                },
+                {
+                    "gsd": 10,
+                    "name": "b03",
+                    "description": "Green (band 3)",
+                    "eo:common_name": "green",
+                    "eo:center_wavelength": 0.56,
+                    "eo:full_width_half_max": 0.045
+                },
+                {
+                    "gsd": 10,
+                    "name": "b04",
+                    "description": "Red (band 4)",
+                    "eo:common_name": "red",
+                    "eo:center_wavelength": 0.665,
+                    "eo:full_width_half_max": 0.038
+                },
+                {
+                    "gsd": 20,
+                    "name": "b05",
+                    "description": "Red edge 1 (band 5)",
+                    "eo:common_name": "rededge071",
+                    "eo:center_wavelength": 0.704,
+                    "eo:full_width_half_max": 0.019
+                },
+                {
+                    "gsd": 20,
+                    "name": "b06",
+                    "description": "Red edge 2 (band 6)",
+                    "eo:common_name": "rededge075",
+                    "eo:center_wavelength": 0.74,
+                    "eo:full_width_half_max": 0.018
+                },
+                {
+                    "gsd": 20,
+                    "name": "b07",
+                    "description": "Red edge 3 (band 7)",
+                    "eo:common_name": "rededge078",
+                    "eo:center_wavelength": 0.783,
+                    "eo:full_width_half_max": 0.028
+                },
+                {
+                    "gsd": 10,
+                    "name": "b08",
+                    "description": "NIR 1 (band 8)",
+                    "eo:common_name": "nir",
+                    "eo:center_wavelength": 0.842,
+                    "eo:full_width_half_max": 0.145
+                },
+                {
+                    "gsd": 60,
+                    "name": "b09",
+                    "description": "NIR 3 (band 9)",
+                    "eo:common_name": "nir09",
+                    "eo:center_wavelength": 0.945,
+                    "eo:full_width_half_max": 0.026
+                },
+                {
+                    "gsd": 20,
+                    "name": "b11",
+                    "description": "SWIR 1 (band 11)",
+                    "eo:common_name": "swir16",
+                    "eo:center_wavelength": 1.61,
+                    "eo:full_width_half_max": 0.143
+                },
+                {
+                    "gsd": 20,
+                    "name": "b12",
+                    "description": "SWIR 2 (band 12)",
+                    "eo:common_name": "swir22",
+                    "eo:center_wavelength": 2.19,
+                    "eo:full_width_half_max": 0.242
+                },
+                {
+                    "gsd": 20,
+                    "name": "b8a",
+                    "description": "NIR 2 (band 8A)",
+                    "eo:common_name": "nir08",
+                    "eo:center_wavelength": 0.865,
+                    "eo:full_width_half_max": 0.033
+                }
+            ],
+            "roles": [
+                "data",
+                "reflectance"
+            ],
+            "title": "Surface Reflectance",
+            "proj:code": "EPSG:32626",
+            "proj:shape": [
+                1000,
+                1000
+            ],
+            "cube:variables": {
+                "b01": {
+                    "type": "data",
+                    "dimensions": [
+                        "y",
+                        "x"
+                    ],
+                    "description": "Coastal aerosol (band 1)"
+                },
+                "b02": {
+                    "type": "data",
+                    "dimensions": [
+                        "y",
+                        "x"
+                    ],
+                    "description": "Blue (band 2)"
+                },
+                "b03": {
+                    "type": "data",
+                    "dimensions": [
+                        "y",
+                        "x"
+                    ],
+                    "description": "Green (band 3)"
+                },
+                "b04": {
+                    "type": "data",
+                    "dimensions": [
+                        "y",
+                        "x"
+                    ],
+                    "description": "Red (band 4)"
+                },
+                "b05": {
+                    "type": "data",
+                    "dimensions": [
+                        "y",
+                        "x"
+                    ],
+                    "description": "Red edge 1 (band 5)"
+                },
+                "b06": {
+                    "type": "data",
+                    "dimensions": [
+                        "y",
+                        "x"
+                    ],
+                    "description": "Red edge 2 (band 6)"
+                },
+                "b07": {
+                    "type": "data",
+                    "dimensions": [
+                        "y",
+                        "x"
+                    ],
+                    "description": "Red edge 3 (band 7)"
+                },
+                "b08": {
+                    "type": "data",
+                    "dimensions": [
+                        "y",
+                        "x"
+                    ],
+                    "description": "NIR 1 (band 8)"
+                },
+                "b09": {
+                    "type": "data",
+                    "dimensions": [
+                        "y",
+                        "x"
+                    ],
+                    "description": "NIR 3 (band 9)"
+                },
+                "b11": {
+                    "type": "data",
+                    "dimensions": [
+                        "y",
+                        "x"
+                    ],
+                    "description": "SWIR 1 (band 11)"
+                },
+                "b12": {
+                    "type": "data",
+                    "dimensions": [
+                        "y",
+                        "x"
+                    ],
+                    "description": "SWIR 2 (band 12)"
+                },
+                "b8a": {
+                    "type": "data",
+                    "dimensions": [
+                        "y",
+                        "x"
+                    ],
+                    "description": "NIR 2 (band 8A)"
+                }
+            },
+            "cube:dimensions": {
+                "x": {
+                    "axis": "x",
+                    "type": "spatial",
+                    "reference_system": "EPSG:32626"
+                },
+                "y": {
+                    "axis": "y",
+                    "type": "spatial",
+                    "reference_system": "EPSG:32626"
+                }
+            }
+        }
+    },
+    "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+            [
+                [
+                    14.99,
+                    37.85
+                ],
+                [
+                    15.12,
+                    37.85
+                ],
+                [
+                    15.12,
+                    37.95
+                ],
+                [
+                    14.99,
+                    37.95
+                ],
+                [
+                    14.99,
+                    37.85
+                ]
+            ]
+        ]
+    },
+    "collection": "sentinel-2-l2a",
+    "properties": {
+        "gsd": 10,
+        "created": "2026-03-16T23:50:11.429838Z",
+        "mission": "Sentinel-2",
+        "updated": "2026-03-16T23:50:11.429838Z",
+        "datetime": "2026-03-16T14:29:41.025000Z",
+        "platform": "sentinel-2c",
+        "proj:bbox": [
+            500000,
+            4190000,
+            510000,
+            4200000
+        ],
+        "proj:code": "EPSG:32633",
+        "providers": [
+            {
+                "url": "https://commission.europa.eu/",
+                "name": "European Commission",
+                "roles": [
+                    "licensor"
+                ]
+            },
+            {
+                "url": "https://sentinel.esa.int/web/sentinel/missions/sentinel-2",
+                "name": "ESA",
+                "roles": [
+                    "producer",
+                    "processor"
+                ]
+            },
+            {
+                "url": "https://zarr.eopf.copernicus.eu/",
+                "name": "EOPF Sentinel Zarr Samples Service",
+                "roles": [
+                    "host",
+                    "processor"
+                ]
+            }
+        ],
+        "published": "2026-03-16T23:50:11.429838Z",
+        "deprecated": false,
+        "instruments": [
+            "msi"
+        ],
+        "end_datetime": "2026-03-16T14:29:41.025000Z",
+        "product:type": "S02MSIL2A",
+        "constellation": "sentinel-2",
+        "eo:snow_cover": 71.855962,
+        "proj:centroid": {
+            "lat": 4195000,
+            "lon": 505000
+        },
+        "eo:cloud_cover": 3.610791,
+        "start_datetime": "2026-03-16T14:29:41.025000Z",
+        "sat:orbit_state": "descending",
+        "eopf:datatake_id": "GS2C_20260316T142941_007974_N05.12",
+        "mgrs:grid_square": "ME",
+        "processing:level": "L2A",
+        "view:sun_azimuth": 187.947868000076,
+        "eopf:datastrip_id": "S2C_OPER_MSI_L2A_DS_2CPS_20260316T174811_S20260316T142939_N05.12",
+        "mgrs:latitude_band": "W",
+        "processing:lineage": "systematic",
+        "processing:version": "05.12",
+        "product:timeliness": "PT3H",
+        "sat:absolute_orbit": 7974,
+        "sat:relative_orbit": 139,
+        "view:sun_elevation": 73.3549862974172,
+        "processing:facility": "ESA",
+        "processing:software": {
+            "EOPF-CPM": "2.6.2"
+        },
+        "eopf:instrument_mode": "INS-NOBS",
+        "product:timeliness_category": "NRT",
+        "sat:platform_international_designator": "2015-028A"
+    },
+    "stac_version": "1.1.0",
+    "stac_extensions": [
+        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json",
+        "https://stac-extensions.github.io/eo/v2.0.0/schema.json",
+        "https://stac-extensions.github.io/sat/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/projection/v2.0.0/schema.json",
+        "https://stac-extensions.github.io/mgrs/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/grid/v1.1.0/schema.json",
+        "https://stac-extensions.github.io/view/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/processing/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/product/v0.1.0/schema.json",
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://cs-si.github.io/eopf-stac-extension/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/version/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/raster/v2.0.0/schema.json",
+        "https://stac-extensions.github.io/alternate-assets/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/storage/v2.0.0/schema.json"
+    ]
+}

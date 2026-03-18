@@ -119,7 +119,8 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
             zarr_store,
             decode_times=True,
             decode_coords="all",
-            consolidated=True,
+            # By default xarray will try to load the consolidated metadata
+            # consolidated=True,
             engine="zarr",
         )
 

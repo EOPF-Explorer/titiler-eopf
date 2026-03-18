@@ -66,8 +66,6 @@ dev = [
     "boto3",
     #"titiler-openeo==0.13.0",
     "titiler-openeo@git+https://github.com/sentinel-hub/titiler-openeo.git@feat/update-titiler2.0",
-]
-notebook = [
     "ipython",
     "ipykernel",
     "jupyter-client",

@@ -1,13 +1,9 @@
 """titiler-eopf openeo test processes"""
 
-import os
-
 from rio_tiler.models import ImageData
 
 from titiler.eopf.openeo.processes import PROCESS_IMPLEMENTATIONS, process_registry
 from titiler.eopf.openeo.processes.implementations import load_zarr
-
-DATA_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 
 
 def test_custom_processes():
