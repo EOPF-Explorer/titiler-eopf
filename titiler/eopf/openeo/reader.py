@@ -3,7 +3,7 @@
 import logging
 import time
 import warnings
-from typing import Any, Dict, Sequence, Type, Union
+from typing import Any, Dict, Sequence, Type
 
 import attr
 import pystac
@@ -115,12 +115,16 @@ class STACReader(SimpleSTACReader):
     def part(  # noqa: C901
         self,
         bbox: BBox,
-        assets: Union[Sequence[AssetType], AssetType] | None = None,
+        assets: Sequence[AssetType] | AssetType | None = None,
         expression: str | None = None,
         asset_as_band: bool = False,
         **kwargs: Any,
     ) -> ImageData:
-        """Read and merge parts from multiple assets.
+        """Custom `part` method.
+
+        NOTE:
+            - HTTPS -> S3 URI replacement
+            - BBOX check before reading
 
         Custom PART method for multi-asset reading.
         We customize the `part()._reader` method to parse the asset
@@ -206,16 +210,17 @@ class STACReader(SimpleSTACReader):
                     metadata = data.metadata or {}
                     if m := asset_info.get("metadata"):
                         metadata.update(m)
-                    data.metadata = {asset: metadata}
+                    data.metadata = {asset_name: metadata}
 
+                    data.band_descriptions = [
+                        f"{asset_name}_{n}" for n in data.band_descriptions
+                    ]
                     if asset_as_band:
                         if len(data.band_names) > 1:
                             raise AssetAsBandError(
                                 "Can't use `asset_as_band` for multibands asset"
                             )
-                        data.band_names = [asset_name]
-                    else:
-                        data.band_names = [f"{asset_name}_{n}" for n in data.band_names]
+                        data.band_descriptions = [asset_name]
 
                     return data
 

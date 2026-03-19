@@ -26,6 +26,7 @@ from titiler.openeo.stacapi import CacheSettings
 from titiler.openeo.stacapi import LoadCollection as BaseLoadCollection
 from titiler.openeo.stacapi import stacApiBackend as BaseBackend
 
+from ..stac import _parse_asset
 from .reader import _reader
 
 cache_config = CacheSettings()
@@ -433,11 +434,14 @@ def _make_mosaic_task(
 ):
     """Create a closure that loads data for a date group."""
 
+    # parse bands to assets with options format expected by _reader
+    assets = _parse_asset(bands) if bands else None
+
     def task():
         mosaic_kwargs = {
             "threads": 0,
             "bounds_crs": bounds_crs,
-            "assets": bands,
+            "assets": assets,
             "dst_crs": output_crs,
             "width": int(width) if width else width,
             "height": int(height) if height else height,

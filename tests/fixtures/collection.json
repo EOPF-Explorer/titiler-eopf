@@ -13,11 +13,6 @@
             "href": "https://fake.api.io/stac/"
         },
         {
-            "rel": "root",
-            "type": "application/json",
-            "href": "https://fake.api.io/stac/"
-        },
-        {
             "rel": "self",
             "type": "application/json",
             "href": "https://fake.api.io/stac/collections/sentinel-2-l2a"
