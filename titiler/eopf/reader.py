@@ -152,16 +152,8 @@ def get_multiscale_level(
 ) -> str:
     """Return the multiscale level corresponding to the desired resolution."""
     ms_resolutions: list[tuple[str, float]]
-    # GeoZarr V0
-    if "tile_matrix_set" in dt.attrs.get("multiscales", {}):
-        ms_resolutions = [
-            (mt["id"], mt["cellSize"])
-            for mt in dt.attrs["multiscales"]["tile_matrix_set"]["tileMatrices"]
-            if variable in dt[mt["id"]].data_vars
-        ]
-
     # GeoZarr V1
-    elif "layout" in dt.attrs.get("multiscales", {}):
+    if "layout" in dt.attrs.get("multiscales", {}):
         ms_resolutions = [
             (
                 ms["asset"],
@@ -169,6 +161,15 @@ def get_multiscale_level(
             )
             for ms in dt.attrs["multiscales"]["layout"]
         ]
+
+    # GeoZarr V0
+    elif "tile_matrix_set" in dt.attrs.get("multiscales", {}):
+        ms_resolutions = [
+            (mt["id"], mt["cellSize"])
+            for mt in dt.attrs["multiscales"]["tile_matrix_set"]["tileMatrices"]
+            if variable in dt[mt["id"]].data_vars
+        ]
+
     else:
         raise ValueError(
             "Multiscale group must have either 'tile_matrix_set' or 'layout' in its attributes."
@@ -865,6 +866,8 @@ class GeoZarrReader(BaseReader):
 
         # GeoZarr V1
         if dims := tree.attrs.get("spatial:dimensions"):
+            logger.info("Multiscale - Selection using GeoZarr V1 (Conventions)")
+
             bbox = tree.attrs.get("spatial:bbox")
             crs = _get_proj_crs(tree.attrs)
 
@@ -952,6 +955,7 @@ class GeoZarrReader(BaseReader):
 
         # GeoZarr V0
         elif ms := tree.attrs.get("multiscales"):
+            logger.info("Multiscale - Selection using GeoZarr V0 (TMS)")
             crs = CRS.from_user_input(ms["tile_matrix_set"]["crs"])
 
             # NOTE: Default Scale (where variable is present)
