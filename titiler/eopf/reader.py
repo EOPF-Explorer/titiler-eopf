@@ -1037,6 +1037,9 @@ class GeoZarrReader(BaseReader):
 
     def parse_expression(self, expression: str) -> List[str]:
         """Parse rio-tiler band math expression."""
+        if "eval" in expression:
+            raise InvalidExpression("Invalid expression")
+
         input_assets = "|".join(re.escape(key) for key in self.variables)
         _re = re.compile(rf"(?<!\w)({input_assets})(?!\w)")
         variables = list(set(re.findall(_re, expression)))
