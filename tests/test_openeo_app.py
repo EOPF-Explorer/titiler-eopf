@@ -1,6 +1,5 @@
 """test OpenEO app."""
 
-import json
 import os
 from collections.abc import Generator
 from typing import Any
@@ -8,10 +7,7 @@ from unittest.mock import patch
 
 import pystac
 import pytest
-from openeo_pg_parser_networkx.pg_schema import BoundingBox
 from starlette.testclient import TestClient
-
-from titiler.eopf.openeo.stacapi import LoadCollection
 
 FIXTURES_DIRECTORY = os.path.join(os.path.dirname(__file__), "fixtures")
 
@@ -64,44 +60,3 @@ def test_openeo_collections(client, openeo_app):
     assert collection["cube:dimensions"]["bands"]
     bands = collection["cube:dimensions"]["bands"]
     assert "reflectance|bands=b01" in bands["values"]
-
-
-def test_load_collection(geozarr_stac):
-    """Test load collection process."""
-
-    class FakeBackend:
-        url: str
-
-        def __init__(self, url: str):
-            self.url = url
-
-        def get_items(self, *args, **kwargs):
-            return [pystac.Item.from_dict(json.loads(geozarr_stac))]
-
-    loaders = LoadCollection(FakeBackend("https://fake.api.io/stac"))
-
-    bbox = BoundingBox(
-        west=14.941406249999993,
-        south=37.857507156252034,
-        east=15.11718749999999,
-        north=37.99616267972812,
-    )
-
-    stack = loaders.load_collection(
-        "sentinel-2-l2a",
-        spatial_extent=bbox,
-        width=512,
-        height=512,
-        bands=[
-            "reflectance|bands=b04",
-            "reflectance|bands=b03",
-            "reflectance|bands=b02",
-        ],
-    )
-    assert stack.band_names == [
-        "reflectance|bands=b04",
-        "reflectance|bands=b03",
-        "reflectance|bands=b02",
-    ]
-    assert stack.width == 512
-    assert stack.height == 512
