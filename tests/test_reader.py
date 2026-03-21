@@ -5,9 +5,13 @@ import pytest
 import xarray
 from rio_tiler.errors import ExpressionMixingWarning
 
-from titiler.eopf.reader import GeoZarrReader, MissingVariables
-from titiler.eopf.reader import _node_has_variable, _select_variable_from_node
-from titiler.eopf.reader import get_multiscale_level
+from titiler.eopf.reader import (
+    GeoZarrReader,
+    MissingVariables,
+    _node_has_variable,
+    _select_variable_from_node,
+    get_multiscale_level,
+)
 
 
 def test_open(geozarr_dataset):
