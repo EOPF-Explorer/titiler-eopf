@@ -6,7 +6,5 @@ from pydantic import StringConstraints
 
 SelDimStr = Annotated[
     str,
-    StringConstraints(
-        pattern=r"^[^=]+=((nearest|pad|ffill|backfill|bfill)::)?[^=]+$"
-    ),
+    StringConstraints(pattern=r"^[^=]+=((nearest|pad|ffill|backfill|bfill)::)?[^=]+$"),
 ]

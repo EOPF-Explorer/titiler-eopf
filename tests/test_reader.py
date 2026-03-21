@@ -6,8 +6,7 @@ import xarray
 from pydantic import TypeAdapter
 from rio_tiler.errors import ExpressionMixingWarning
 
-from titiler.eopf.reader import GeoZarrReader, MissingVariables
-from titiler.eopf.reader import _parse_sel_indices
+from titiler.eopf.reader import GeoZarrReader, MissingVariables, _parse_sel_indices
 from titiler.eopf.types import SelDimStr
 
 

@@ -73,6 +73,46 @@ class MissingVariables(RioTilerError):
     """Missing Variables."""
 
 
+def _resolve_sel_method(
+    value: str,
+    method: sel_methods | None,
+) -> tuple[str, sel_methods | None]:
+    """Resolve inline `{method}::{value}` selectors."""
+    allowed_methods = {"nearest", "pad", "ffill", "backfill", "bfill"}
+    if "::" not in value:
+        return value, method
+
+    maybe_method, raw_value = value.split("::", 1)
+    if maybe_method not in allowed_methods:
+        return value, method
+
+    if method is None:
+        return raw_value, maybe_method  # type: ignore[return-value]
+
+    if method != maybe_method:
+        raise ValueError(
+            "Conflicting selection methods provided: " f"{method} and {maybe_method}"
+        )
+
+    return raw_value, method
+
+
+def _cast_sel_value(da: xarray.DataArray, dim: str, value: Any) -> Any:
+    """Cast selector value to coordinate dtype."""
+    if da[dim].dtype == "O":
+        return value
+
+    if np.issubdtype(da[dim].dtype, np.datetime64):
+        if isinstance(value, str):
+            if value.isdigit():
+                return np.datetime64(int(value), "ns")
+            iso_value = value[:-1] if value.endswith("Z") else value
+            return np.datetime64(iso_value, "ns")
+        return np.datetime64(value, "ns")
+
+    return da[dim].dtype.type(value)
+
+
 def _parse_sel_indices(
     da: xarray.DataArray,
     sel: List[str],
@@ -81,35 +121,11 @@ def _parse_sel_indices(
     """Parse query selectors and cast values to coordinate dtype."""
     idx: Dict[str, List[Any]] = {}
     effective_method = method
-    allowed_methods = {"nearest", "pad", "ffill", "backfill", "bfill"}
 
     for selection in sel:
         dim, val = selection.split("=", 1)
-
-        if "::" in val:
-            maybe_method, raw_val = val.split("::", 1)
-            if maybe_method in allowed_methods:
-                if effective_method is None:
-                    effective_method = maybe_method  # type: ignore[assignment]
-                elif effective_method != maybe_method:
-                    raise ValueError(
-                        "Conflicting selection methods provided: "
-                        f"{effective_method} and {maybe_method}"
-                    )
-                val = raw_val
-
-        if da[dim].dtype != "O":
-            if np.issubdtype(da[dim].dtype, np.datetime64):
-                if isinstance(val, str):
-                    if val.isdigit():
-                        val = np.datetime64(int(val), "ns")
-                    else:
-                        iso_val = val[:-1] if val.endswith("Z") else val
-                        val = np.datetime64(iso_val, "ns")
-                else:
-                    val = np.datetime64(val, "ns")
-            else:
-                val = da[dim].dtype.type(val)
+        val, effective_method = _resolve_sel_method(val, effective_method)
+        val = _cast_sel_value(da, dim, val)
 
         if dim in idx:
             idx[dim].append(val)
