@@ -72,6 +72,34 @@ class MissingVariables(RioTilerError):
     """Missing Variables."""
 
 
+def _node_has_variable(node: Any, variable: str) -> bool:
+    """Return True when a multiscale node contains the requested variable."""
+    return (
+        hasattr(node, "data_vars")
+        and variable in node.data_vars
+        or hasattr(node, "name")
+        and node.name == variable
+    )
+
+
+def _select_variable_from_node(
+    node: Any,
+    variable: str,
+    *,
+    asset: str,
+) -> xarray.DataArray:
+    """Select a variable from an xarray Dataset/DataTree node or DataArray node."""
+    if hasattr(node, "data_vars"):
+        return node[variable]
+
+    if hasattr(node, "name") and node.name == variable:
+        return node
+
+    raise MissingVariables(
+        f"Variable '{variable}' not found in selected multiscale asset '{asset}'"
+    )
+
+
 @cache
 def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
     """Open Xarray dataset
@@ -167,6 +195,7 @@ def get_multiscale_level(
                 min(abs(ms["spatial:transform"][0]), abs(ms["spatial:transform"][4])),
             )
             for ms in dt.attrs["multiscales"]["layout"]
+            if _node_has_variable(dt[ms["asset"]], variable)
         ]
     else:
         raise ValueError(
@@ -875,7 +904,7 @@ class GeoZarrReader(BaseReader):
                         (
                             mt
                             for mt in tree.attrs["multiscales"]["layout"]
-                            if variable in tree[mt["asset"]].data_vars
+                            if _node_has_variable(tree[mt["asset"]], variable)
                         )
                     )
                 except StopIteration as e:
@@ -935,7 +964,7 @@ class GeoZarrReader(BaseReader):
                     scale = get_multiscale_level(tree, variable, target_res)  # type: ignore
 
                 # Select the multiscale group and variable
-                da = tree[scale][variable]
+                da = _select_variable_from_node(tree[scale], variable, asset=scale)
 
                 logger.info(
                     f"Multiscale - selecting group {group} with scale {scale} and variable {variable}"
@@ -990,7 +1019,7 @@ class GeoZarrReader(BaseReader):
                 scale = get_multiscale_level(tree, variable, target_res)  # type: ignore
 
             # Select the multiscale group and variable
-            da = tree[scale][variable]
+            da = _select_variable_from_node(tree[scale], variable, asset=scale)
 
             logger.info(
                 f"Multiscale - selecting group {group} with scale {scale} and variable {variable}"

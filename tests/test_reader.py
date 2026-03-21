@@ -6,6 +6,8 @@ import xarray
 from rio_tiler.errors import ExpressionMixingWarning
 
 from titiler.eopf.reader import GeoZarrReader, MissingVariables
+from titiler.eopf.reader import _node_has_variable, _select_variable_from_node
+from titiler.eopf.reader import get_multiscale_level
 
 
 def test_open(geozarr_dataset):
@@ -253,3 +255,54 @@ def test_feature(geozarr_dataset):
 
         img = src.feature(feat, variables=["/measurements/reflectance:b02"])
         assert img.assets == [geozarr_dataset]
+
+
+def test_node_has_variable_for_dataset_and_dataarray():
+    """Variable lookup should support both dataset-like and DataArray-like nodes."""
+    ds_node = xarray.Dataset({"b02": xarray.DataArray([1, 2], dims=["x"])})
+    da_node = xarray.DataArray([1, 2], dims=["x"], name="b03")
+
+    assert _node_has_variable(ds_node, "b02")
+    assert _node_has_variable(da_node, "b03")
+    assert not _node_has_variable(da_node, "b02")
+
+
+def test_select_variable_from_node_supports_dataarray_and_errors():
+    """Variable selection should return DataArray nodes directly when appropriate."""
+    da_node = xarray.DataArray([1, 2], dims=["x"], name="b03")
+    selected = _select_variable_from_node(da_node, "b03", asset="r20m")
+    assert selected.name == "b03"
+
+    with pytest.raises(MissingVariables):
+        _select_variable_from_node(da_node, "b02", asset="r20m")
+
+
+def test_get_multiscale_level_v1_filters_assets_without_variable():
+    """V1 multiscale resolution selection should ignore assets missing the variable."""
+
+    class MockTree:
+        def __init__(self):
+            self.attrs = {
+                "multiscales": {
+                    "layout": [
+                        {
+                            "asset": "r10m",
+                            "spatial:transform": [10.0, 0.0, 0.0, 0.0, -10.0, 0.0],
+                        },
+                        {
+                            "asset": "r20m",
+                            "spatial:transform": [20.0, 0.0, 0.0, 0.0, -20.0, 0.0],
+                        },
+                    ]
+                }
+            }
+            self._nodes = {
+                "r10m": xarray.DataArray([1, 2], dims=["x"], name="other"),
+                "r20m": xarray.DataArray([1, 2], dims=["x"], name="b02"),
+            }
+
+        def __getitem__(self, key):
+            return self._nodes[key]
+
+    level = get_multiscale_level(MockTree(), "b02", target_res=15.0)
+    assert level == "r20m"
