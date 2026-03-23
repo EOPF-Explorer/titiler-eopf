@@ -1,5 +1,9 @@
 """Test titiler.eopf.main.app."""
 
+from urllib.parse import parse_qs
+
+from owslib.wmts import WebMapTileService
+
 from .conftest import parse_img
 
 
@@ -97,3 +101,27 @@ def test_preview(app, geozarr):
     profile = parse_img(response.content)
     assert profile["count"] == 4
     assert profile["dtype"] == "uint8"
+
+
+def test_wmts(app, geozarr, geozarr_dataset):
+    """Test wmts routes."""
+    collection, item = geozarr
+    response = app.get(
+        f"/collections/{collection}/items/{item}/WMTSCapabilities.xml",
+        params={"variables": "/measurements/reflectance:b02"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/xml"
+
+    wmts = WebMapTileService(url="/wmts", xml=response.text.encode())
+    layers = list(wmts.contents)
+    assert len(layers) > 1
+
+    assert f"file://{geozarr_dataset}_WorldMercatorWGS84Quad_default" in layers
+    layer = wmts[f"file://{geozarr_dataset}_WorldMercatorWGS84Quad_default"]
+    assert "WorldMercatorWGS84Quad" in layer.tilematrixsetlinks
+    assert ["image/png"] == layer.formats
+
+    params = layer.resourceURLs[0]["template"].split("?")[1]
+    query = parse_qs(params)
+    assert query["variables"] == ["/measurements/reflectance:b02"]

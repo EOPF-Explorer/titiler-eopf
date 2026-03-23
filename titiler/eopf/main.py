@@ -36,6 +36,7 @@ from .extensions import (
     DatasetMetadataExtension,
     EOPFChunkVizExtension,
     EOPFViewerExtension,
+    EOPFwmtsExtension,
 )
 from .factory import TilerFactory
 from .settings import ApiSettings, EOPFCacheSettings, STACAPISettings
@@ -183,6 +184,7 @@ md = TilerFactory(
         DatasetMetadataExtension(),
         EOPFViewerExtension(),
         EOPFChunkVizExtension(),
+        EOPFwmtsExtension(),
     ],
     path_dependency=DatasetPathParams,
     router_prefix="/collections/{collection_id}/items/{item_id}",
@@ -199,6 +201,7 @@ TITILER_CONFORMS_TO.update(md.conforms_to)
 # STACPI Endpoints
 if stacapi_settings.url:
     from titiler.mosaic.errors import MOSAIC_STATUS_CODES
+    from titiler.mosaic.extensions.wmts import wmtsExtension
     from titiler.mosaic.factory import MosaicTilerFactory
     from titiler.stacapi.dependencies import (
         BackendParams,
@@ -225,6 +228,9 @@ if stacapi_settings.url:
         router_prefix="/collections/{collection_id}",
         add_viewer=True,
         templates=templates,
+        extensions=[
+            wmtsExtension(),
+        ],
     )
     app.include_router(
         collection.router,

@@ -3,9 +3,11 @@
 import json
 import os
 from unittest.mock import patch
+from urllib.parse import parse_qs
 
 import pystac
 from geojson_pydantic import Polygon
+from owslib.wmts import WebMapTileService
 
 from titiler.eopf.stac import EOPFSimpleSTACReader, EOPFSTACAPIBackend
 from titiler.stacapi.dependencies import APIParams, Search
@@ -231,3 +233,25 @@ def test_stac_collection_mosaic(get_assets, _get_collection, app, geozarr_stac):
         "reflectance_b03",
         "reflectance_b02",
     ]
+
+    response = app.get(
+        "/collections/sentinel-2-l2a/WMTSCapabilities.xml",
+        params={
+            "assets": "reflectance|bands=red,green,blue",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/xml"
+    wmts = WebMapTileService(url="/wmts", xml=response.text.encode())
+    layers = list(wmts.contents)
+    assert len(layers) > 1
+
+    assert "TiTiler Mosaic_WorldMercatorWGS84Quad_default" in layers
+    layer = wmts["TiTiler Mosaic_WebMercatorQuad_default"]
+    assert "WebMercatorQuad" in layer.tilematrixsetlinks
+    assert ["TiTiler Mosaic_WebMercatorQuad_default"] == list(layer.styles.keys())
+    assert ["image/png"] == layer.formats
+
+    params = layer.resourceURLs[0]["template"].split("?")[1]
+    query = parse_qs(params)
+    assert query["assets"] == ["reflectance|bands=red,green,blue"]
