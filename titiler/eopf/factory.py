@@ -1,6 +1,7 @@
 """TiTiler.eopf factory."""
 
 import logging
+import os
 from typing import Annotated, Any, Callable, Literal, Optional, Type
 from urllib.parse import urlencode
 
@@ -425,18 +426,16 @@ class TilerFactory(BaseTilerFactory):
                     description="Identifier selecting one of the TileMatrixSetId supported."
                 ),
             ],
+            tilesize: Annotated[
+                int | None,
+                Query(gt=0, description="Tilesize in pixels. Default to 512."),
+            ] = 512,
             tile_format: Annotated[
                 Optional[ImageType],
                 Query(
                     description="Default will be automatically defined if the output image needs a mask (png) or not (jpeg).",
                 ),
             ] = None,
-            tile_scale: Annotated[
-                int,
-                Query(
-                    gt=0, lt=4, description="Tile size scale. 1=256x256, 2=512x512..."
-                ),
-            ] = 1,
             minzoom: Annotated[
                 Optional[int],
                 Query(description="Overwrite default minzoom."),
@@ -460,7 +459,6 @@ class TilerFactory(BaseTilerFactory):
                 "z": "{z}",
                 "x": "{x}",
                 "y": "{y}",
-                "scale": tile_scale,
                 "tileMatrixSetId": tileMatrixSetId,
             }
             if tile_format:
@@ -470,7 +468,6 @@ class TilerFactory(BaseTilerFactory):
             qs_key_to_remove = [
                 "tilematrixsetid",
                 "tile_format",
-                "tile_scale",
                 "minzoom",
                 "maxzoom",
             ]
@@ -479,8 +476,9 @@ class TilerFactory(BaseTilerFactory):
                 for (key, value) in request.query_params._list
                 if key.lower() not in qs_key_to_remove
             ]
-            if qs:
-                tiles_url += f"?{urlencode(qs)}"
+            if "tilesize" not in request.query_params:
+                qs.append(("tilesize", str(tilesize)))
+            tiles_url += f"?{urlencode(qs)}"
 
             tms = self.supported_tms.get(tileMatrixSetId)
             with rasterio.Env(**env):
@@ -513,6 +511,7 @@ class TilerFactory(BaseTilerFactory):
                         "minzoom": minzoom,
                         "maxzoom": maxzoom,
                         "tiles": [tiles_url],
+                        "attribution": os.environ.get("TITILER_DEFAULT_ATTRIBUTION"),
                     }
 
     def wmts(self):  # noqa: C901

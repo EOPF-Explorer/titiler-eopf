@@ -427,7 +427,7 @@ const setMapLayers = (url) => {
 }
 
 const set1bViz = () => {
-    params = {}
+    params = {tilesize: 256}
     const variable = document.getElementById('variables-selector').value
     params.variables = variable
 
@@ -455,7 +455,7 @@ const set3bViz = () => {
   const g = document.getElementById('g-selector').selectedOptions[0].getAttribute("bidx")
   const b = document.getElementById('b-selector').selectedOptions[0].getAttribute("bidx")
 
-  params = {}
+  params = {tilesize: 256}
 
   let variables_params
   let indexes_params
@@ -490,7 +490,7 @@ const setBandMathViz = () => {
         const a = document.getElementById('NdI-a-selector').selectedOptions[0].getAttribute("bidx")
         const b = document.getElementById('NdI-b-selector').selectedOptions[0].getAttribute("bidx")
 
-        params = {}
+        params = {tilesize: 256}
         params.bidx = 1
         params.rescale = `${document.getElementById('data-min').value},${document.getElementById('data-max').value}`
         params.expression = encodeURIComponent(`(${a}-${b})/(${a}+${b})`)
