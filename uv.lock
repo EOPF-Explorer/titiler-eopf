@@ -2485,7 +2485,7 @@ requires-dist = [
     { name = "starlette-cramjam", specifier = ">=0.4,<1.0" },
     { name = "titiler-core", specifier = ">=2.0,<3.0" },
     { name = "titiler-extensions", specifier = ">=2.0,<3.0" },
-    { name = "titiler-openeo", marker = "extra == 'openeo'", git = "https://github.com/sentinel-hub/titiler-openeo.git?rev=feat%2Fupdate-titiler2.0" },
+    { name = "titiler-openeo", marker = "extra == 'openeo'", specifier = "==0.13.0" },
     { name = "titiler-stacapi", specifier = ">=2.0,<3.0" },
     { name = "titiler-xarray", specifier = ">=2.0,<3.0" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'server'" },
@@ -2512,7 +2512,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
-    { name = "titiler-openeo", git = "https://github.com/sentinel-hub/titiler-openeo.git?rev=feat%2Fupdate-titiler2.0" },
+    { name = "titiler-openeo", specifier = "==0.13.0" },
 ]
 
 [[package]]
@@ -2542,8 +2542,8 @@ wheels = [
 
 [[package]]
 name = "titiler-openeo"
-version = "0.12.0"
-source = { git = "https://github.com/sentinel-hub/titiler-openeo.git?rev=feat%2Fupdate-titiler2.0#09daf9ce5b1d571eae9023da5f46a46670bbe6d1" }
+version = "0.13.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpath-ng" },
     { name = "openeo-pg-parser-networkx" },
@@ -2551,6 +2551,10 @@ dependencies = [
     { name = "pystac-client" },
     { name = "starlette-cramjam" },
     { name = "titiler-core" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/17/cf/baf91e8c54b6144967f91eda7c37775af87d38a045ebb3181dc76817ec0a/titiler_openeo-0.13.0.tar.gz", hash = "sha256:e448417cd942036c22a945f3ce9d854a247d7a6f5ab819469c9c7500834afb9a", size = 198101, upload-time = "2026-03-24T16:06:06.326Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ed/e0/b6d213343e0014cf05aaf8b79f8bf9b0e91a8070c6eacb8c0f8eea02b6f2/titiler_openeo-0.13.0-py3-none-any.whl", hash = "sha256:b636c6e3cc7aca496c83b0c9231eafb6492929a78c526f6be95acb6e8d6cf977", size = 264162, upload-time = "2026-03-24T16:06:07.404Z" },
 ]
 
 [[package]]

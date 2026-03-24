@@ -1,11 +1,8 @@
 """Custom stacApiBackend for EOPF."""
 
-from threading import Lock
-from typing import Dict, List, Optional, Union
+from typing import Dict, Optional, Union
 
 from attrs import define, field
-from cachetools import TTLCache, cached  # type: ignore
-from cachetools.keys import hashkey  # type: ignore
 from openeo_pg_parser_networkx.pg_schema import BoundingBox, TemporalInterval
 from pystac import Collection, Item
 from pystac.extensions import datacube as dc
@@ -22,18 +19,13 @@ from titiler.openeo.errors import (
 from titiler.openeo.processes.implementations.data_model import RasterStack
 from titiler.openeo.reader import _estimate_output_dimensions
 from titiler.openeo.settings import ProcessingSettings
-from titiler.openeo.stacapi import CacheSettings
 from titiler.openeo.stacapi import LoadCollection as BaseLoadCollection
 from titiler.openeo.stacapi import stacApiBackend as BaseBackend
 
 from ..stac import _parse_asset
 from .reader import _reader
 
-cache_config = CacheSettings()
 processing_settings = ProcessingSettings()
-
-collections_cache = TTLCache(maxsize=cache_config.maxsize, ttl=cache_config.ttl)
-collection_cache = TTLCache(maxsize=cache_config.maxsize, ttl=cache_config.ttl)
 
 
 def extract_bands_from_asset(asset) -> list[dict]:
@@ -124,41 +116,10 @@ def get_all_band_names(collection: Collection) -> list[str]:
 class stacApiBackend(BaseBackend):
     """Custom stacApiBackend for EOPF Zarr collections."""
 
-    @cached(  # type: ignore
-        collections_cache,
-        key=lambda self, **kwargs: hashkey(self.url, **kwargs),
-        lock=Lock(),
-    )
-    def get_collections(self, **kwargs) -> List[Dict]:
-        """Return List of STAC Collections."""
-        collections = []
-        for collection in self.client.get_collections():
-            collection = self.add_version_if_missing(collection)
-            collection = self.add_data_cubes_if_missing(collection)
-
-            # Convert to dict and fix summaries bands
-            col_dict = collection.to_dict()
-            col_dict = self.replace_bands_in_summaries_dict(col_dict)
-            collections.append(col_dict)
-        return collections
-
-    @cached(  # type: ignore
-        collection_cache,
-        key=lambda self, collection_id, **kwargs: hashkey(
-            self.url, collection_id, **kwargs
-        ),
-        lock=Lock(),
-    )
-    def get_collection(self, collection_id: str, **kwargs) -> Dict:
-        """Return STAC Collection"""
-        col = self.client.get_collection(collection_id)
-        col = self.add_version_if_missing(col)
-        col = self.add_data_cubes_if_missing(col)
-
-        # Convert to dict first, then modify summaries
-        col_dict = col.to_dict()
-        col_dict = self.replace_bands_in_summaries_dict(col_dict)
-        return col_dict
+    def _fix_collection(self, collection: Dict) -> None:
+        self._normalize_summaries(collection)
+        self.replace_bands_in_summaries_dict(collection)
+        return
 
     def add_data_cubes_if_missing(self, collection: Collection):
         """Add datacubes extension to collection if missing."""
@@ -359,17 +320,17 @@ class stacApiBackend(BaseBackend):
 
         return collection
 
-    def replace_bands_in_summaries_dict(self, collection_dict: Dict) -> Dict:
+    def replace_bands_in_summaries_dict(self, collection_dict: Dict) -> None:
         """Replace band names in summaries dict to match cube:dimension band values."""
         if not collection_dict.get("summaries"):
-            return collection_dict
+            return
 
         # Get the band names from cube dimension
         cube_bands = collection_dict.get("cube:dimensions", {}).get("bands", {})
         cube_band_names = cube_bands.get("values", [])
 
         if not cube_band_names:
-            return collection_dict
+            return
 
         # Get original summaries bands
         original_bands = collection_dict.get("summaries", {}).get("bands", [])
@@ -419,7 +380,7 @@ class stacApiBackend(BaseBackend):
         # Update the summaries in the dictionary
         collection_dict["summaries"]["bands"] = updated_bands
 
-        return collection_dict
+        return
 
 
 def _make_mosaic_task(
