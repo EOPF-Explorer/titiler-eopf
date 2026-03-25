@@ -14,6 +14,7 @@ from typing import Any, Callable, Dict, List, Literal, Union
 from urllib.parse import urlparse
 
 import attr
+import numpy
 import obstore
 import xarray
 from affine import Affine
@@ -263,8 +264,10 @@ def _arrange_dims(da: xarray.DataArray) -> xarray.DataArray:
         da.attrs.update({"valid_min": valid_range[0], "valid_max": valid_range[1]})
 
     # Make sure we have a valid CRS
-    crs = da.rio.crs or "epsg:4326"
-    da = da.rio.write_crs(crs)
+    crs = da.rio.crs
+    if not crs:
+        crs = "epsg:4326"
+        da = da.rio.write_crs(crs)
 
     if crs == "epsg:4326" and (da.x > 180).any():
         # Adjust the longitude coordinates to the -180 to 180 range
@@ -427,6 +430,9 @@ class GeoZarrReader(BaseReader):
     # Avoids re-loading coordinate arrays from S3 for the same group.
     _indexed_ds_cache: Dict[str, xarray.Dataset] = attr.ib(init=False, factory=dict)
 
+    # Cache for per-scale bounds to avoid repeated rioxarray computation.
+    _bounds_cache: Dict[str, tuple] = attr.ib(init=False, factory=dict)
+
     def _get_indexed_dataset(self, path: str) -> xarray.Dataset:
         """Get a dataset with default indexes, cached to avoid repeated S3 coordinate reads.
 
@@ -438,6 +444,13 @@ class GeoZarrReader(BaseReader):
             ds = self.datatree[path].to_dataset()
             self._indexed_ds_cache[path] = _maybe_create_default_indexes(ds)
         return self._indexed_ds_cache[path]
+
+    def _get_scale_bounds(self, scale_path: str) -> tuple:
+        """Get bounds for a scale path, cached to avoid repeated rioxarray computation."""
+        if scale_path not in self._bounds_cache:
+            ds = self._get_indexed_dataset(scale_path)
+            self._bounds_cache[scale_path] = tuple(ds.rio.bounds())
+        return self._bounds_cache[scale_path]
 
     def __attrs_post_init__(self):
         """Set bounds and CRS."""
@@ -1119,38 +1132,173 @@ class GeoZarrReader(BaseReader):
         """
         variables = variables or self.variables
 
-        def _get_info_safe(group_var: str) -> Info | None:
-            """Get info for a single variable, with error handling."""
-            try:
-                group, variable = (
-                    group_var.split(":") if ":" in group_var else ("/", group_var)
-                )
-                with XarrayReader(
-                    self._get_variable(group, variable, sel=sel, method=method),
-                ) as da:
-                    info = da.info()
-                    # Fix band descriptions to use actual variable name
-                    variable_name = (
-                        group_var.split(":")[-1] if ":" in group_var else group_var
-                    )
-                    if info.band_descriptions:
-                        # Replace the band description with the actual variable name
-                        info.band_descriptions = [
-                            (band_idx, variable_name)
-                            for band_idx, _ in info.band_descriptions
-                        ]
-                    return info
-            except Exception as e:
-                logger.info(f"Failed to get info for variable '{group_var}': {e!s}")
-                return None
-
         # Build result dictionary, skipping variables that failed
         result = {}
         for gv in variables:
-            info_data = _get_info_safe(gv)
-            if info_data is not None:
-                result[gv] = info_data
+            try:
+                group, variable = gv.split(":") if ":" in gv else ("/", gv)
+                if sel:
+                    # When dimension selection is needed, use full _get_variable path
+                    info_data = self._get_info_via_reader(
+                        group, variable, gv, sel, method
+                    )
+                else:
+                    # Fast path: build Info directly from metadata
+                    info_data = self._build_info_fast(group, variable, gv)
+                if info_data is not None:
+                    result[gv] = info_data
+            except Exception as e:
+                logger.info(f"Failed to get info for variable '{gv}': {e!s}")
         return result
+
+    def _get_info_via_reader(
+        self,
+        group: str,
+        variable: str,
+        full_name: str,
+        sel: List[str],
+        method: sel_methods | None,
+    ) -> Info | None:
+        """Get info via XarrayReader (fallback for sel/method cases)."""
+        with XarrayReader(
+            self._get_variable(group, variable, sel=sel, method=method),
+        ) as da:
+            info = da.info()
+            variable_name = full_name.split(":")[-1] if ":" in full_name else full_name
+            if info.band_descriptions:
+                info.band_descriptions = [
+                    (band_idx, variable_name) for band_idx, _ in info.band_descriptions
+                ]
+            return info
+
+    def _build_info_fast(  # noqa: C901
+        self,
+        group: str,
+        variable: str,
+        full_name: str,
+    ) -> Info | None:
+        """Build Info directly from metadata, bypassing XarrayReader overhead.
+
+        Avoids the expensive XarrayReader.__init__ (bounds/transform/resolution
+        computation via rioxarray) and redundant write_crs calls.
+        """
+        from rio_tiler.utils import CRS_to_uri
+
+        tree = self.datatree[group]
+        variable_name = full_name.split(":")[-1] if ":" in full_name else full_name
+
+        # Get the raw DataArray and spatial metadata based on group type
+        # GeoZarr V1
+        if tree.attrs.get("spatial:dimensions"):
+            crs = _get_proj_crs(tree.attrs)
+            if _has_multiscales(tree.attrs.get("zarr_conventions", [])):
+                try:
+                    layout = next(
+                        mt
+                        for mt in tree.attrs["multiscales"]["layout"]
+                        if variable in tree[mt["asset"]].data_vars
+                    )
+                except StopIteration as e:
+                    raise MissingVariables(
+                        f"Variable '{variable}' not found in any multiscale level of group '{group}'"
+                    ) from e
+                scale = layout["asset"]
+                scale_path = f"{group}/{scale}" if group != "/" else scale
+                da = self.datatree[scale_path][variable]
+
+                # Try to get bounds from attributes
+                bbox = tree.attrs.get("spatial:bbox")
+                if not bbox:
+                    bbox = layout.get("spatial:bbox") or tree[scale].attrs.get(
+                        "spatial:bbox"
+                    )
+                if not bbox:
+                    dims = tree.attrs["spatial:dimensions"]
+                    shape = layout.get("spatial:shape") or tree[scale].attrs.get(
+                        "spatial:shape"
+                    )
+                    transform = layout.get("spatial:transform") or tree[
+                        scale
+                    ].attrs.get("spatial:transform")
+                    if shape and transform:
+                        w, h = _get_size(dims, shape)
+                        bbox = array_bounds(w, h, Affine(*transform))
+                    else:
+                        bbox = self._get_scale_bounds(scale_path)
+                bounds = tuple(bbox)
+            else:
+                da = self.datatree[group][variable]
+                bbox = tree.attrs.get("spatial:bbox")
+                if not bbox:
+                    bbox = self._get_scale_bounds(group)
+                bounds = tuple(bbox)
+
+        # GeoZarr V0
+        elif ms := tree.attrs.get("multiscales"):
+            crs = CRS.from_user_input(ms["tile_matrix_set"]["crs"])
+            try:
+                scale = next(
+                    mt["id"]
+                    for mt in ms["tile_matrix_set"]["tileMatrices"]
+                    if variable in tree[mt["id"]].data_vars
+                )
+            except StopIteration as e:
+                raise MissingVariables(
+                    f"Variable '{variable}' not found in any multiscale level of group '{group}'"
+                ) from e
+            scale_path = f"{group}/{scale}" if group != "/" else scale
+            da = self.datatree[scale_path][variable]
+            bounds = self._get_scale_bounds(scale_path)
+
+        # Plain group
+        else:
+            ds = self._get_indexed_dataset(group)
+            crs = ds.rio.crs or CRS.from_user_input("epsg:4326")
+            da = ds[variable]
+            bounds = self._get_scale_bounds(group)
+
+        # Get width/height from DataArray dimensions
+        x_names = ["x", "lon", "longitude", "easting"]
+        y_names = ["y", "lat", "latitude", "northing"]
+        lower_dims = {d.lower(): d for d in da.dims}
+        x_dim = next((lower_dims[n] for n in x_names if n in lower_dims), None)
+        y_dim = next((lower_dims[n] for n in y_names if n in lower_dims), None)
+        width = da.sizes[x_dim] if x_dim else 0
+        height = da.sizes[y_dim] if y_dim else 0
+
+        # Non-spatial dimensions
+        spatial_exclude = {x_dim, y_dim, "spatial_ref", "crs_wkt", "grid_mapping"}
+        non_spatial_dims = [d for d in da.dims if d not in spatial_exclude]
+
+        metadata = [band.attrs for d in non_spatial_dims for band in da[d]] or [{}]
+        count = 1
+        for d in non_spatial_dims:
+            count *= da.sizes[d]
+
+        nodata_type = "Nodata" if da.rio.nodata is not None else "None"
+
+        crs_str = CRS_to_uri(crs) or crs.to_wkt()
+
+        meta = {
+            "bounds": bounds,
+            "crs": crs_str,
+            "band_metadata": [(f"b{ix}", v) for ix, v in enumerate(metadata, 1)],
+            "band_descriptions": [
+                (f"b{ix}", variable_name) for ix in range(1, count + 1)
+            ],
+            "dtype": str(da.dtype),
+            "nodata_type": nodata_type,
+            "name": da.name,
+            "count": count,
+            "width": width,
+            "height": height,
+            "dimensions": da.dims,
+            "attrs": {
+                k: (v.tolist() if isinstance(v, (numpy.ndarray, numpy.generic)) else v)
+                for k, v in da.attrs.items()
+            },
+        }
+        return Info(**meta)
 
     def statistics(  # type: ignore
         self,

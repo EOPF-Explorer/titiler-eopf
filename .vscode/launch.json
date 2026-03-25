@@ -15,15 +15,16 @@
         "--port",
         "8081",
         "--log-level",
-        "info",
-        "--access-log"
+        "debug",
+        "--access-log"  
       ],
       "console": "integratedTerminal",
       "jinja": true,
+      "justMyCode": false,
       "env": {
         "PYTHONPATH": "${workspaceFolder}/.venv/bin",
         "LOG_LEVEL": "INFO",
-        "TITILER_EOPF_STORE_URL": "file:///home/emathot/Workspace/eopf-explorer/data-model/tests-output/"
+        "TITILER_EOPF_STORE_URL": "file:///home/emathot/Downloads/s1tiling_test/"
       }
     },
     {
