@@ -9,7 +9,12 @@ import pystac
 from geojson_pydantic import Polygon
 from owslib.wmts import WebMapTileService
 
-from titiler.eopf.stac import EOPFSimpleSTACReader, EOPFSTACAPIBackend
+from titiler.eopf.stac import (
+    VALID_ASSET_OPTIONS,
+    EOPFSimpleSTACReader,
+    EOPFSTACAPIBackend,
+    _parse_asset,
+)
 from titiler.stacapi.dependencies import APIParams, Search
 
 collection_json = os.path.join(os.path.dirname(__file__), "fixtures", "collection.json")
@@ -255,3 +260,46 @@ def test_stac_collection_mosaic(get_assets, _get_collection, app, geozarr_stac):
     params = layer.resourceURLs[0]["template"].split("?")[1]
     query = parse_qs(params)
     assert query["assets"] == ["reflectance|bands=red,green,blue"]
+
+
+def test_parse_asset():
+    """test _parse_asset."""
+    assert _parse_asset(["reflectance"]) == [{"name": "reflectance"}]
+    assert _parse_asset(["reflectance|bidx=1,2"]) == [
+        {"name": "reflectance", "indexes": [1, 2]}
+    ]
+    assert _parse_asset(["reflectance|expression=b04/b03"]) == [
+        {"name": "reflectance", "expression": "b04/b03"}
+    ]
+    assert _parse_asset(["reflectance|bands=red,green,blue"]) == [
+        {"name": "reflectance", "bands": ["red", "green", "blue"]}
+    ]
+    assert _parse_asset(["reflectance|variables=b02,b03,b04"]) == [
+        {"name": "reflectance", "variables": ["b02", "b03", "b04"]}
+    ]
+
+    try:
+        _parse_asset(["reflectance|bidx=invalid"])
+    except ValueError as e:
+        assert str(e) == (
+            "Error parsing asset 'reflectance|bidx=invalid': Invalid bidx value 'invalid'. "
+            "Expected comma-separated integers, e.g. 'bidx=1' or 'bidx=1,2,3'"
+        )
+
+    try:
+        _parse_asset(["reflectance|unknown=foo"])
+    except ValueError as e:
+        assert str(e) == (
+            "Error parsing asset 'reflectance|unknown=foo': Unknown asset option 'unknown'. "
+            f"Valid options: {', '.join(sorted(VALID_ASSET_OPTIONS))}"
+        )
+
+    try:
+        _parse_asset(["reflectance|invalidoption"])
+    except ValueError as e:
+        assert str(e) == (
+            "Invalid asset option 'invalidoption' in 'reflectance|invalidoption'. "
+            "Options must be in 'key=value' format. "
+            f"Valid keys: {', '.join(sorted(VALID_ASSET_OPTIONS))}. "
+            "Example: 'reflectance|bidx=1' or 'reflectance|variables=vv,vh'"
+        )

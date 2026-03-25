@@ -18,26 +18,29 @@ from titiler.stacapi.reader import SimpleSTACReader
 VALID_ASSET_OPTIONS = {"bidx", "expression", "bands", "variables"}
 
 
-def _parse_option(key: str, value: str, raw: str) -> tuple[str, Any]:
+def _parse_option(key: str, value: str) -> tuple[str, Any]:
     """Parse a single asset option key=value pair into (opts_key, opts_value)."""
     if key == "bidx":
         try:
             return ("indexes", list(map(int, value.split(","))))
         except ValueError:
             raise ValueError(
-                f"Invalid bidx value '{value}' in '{raw}'. "
+                f"Invalid bidx value '{value}'. "
                 f"Expected comma-separated integers, e.g. 'bidx=1' or 'bidx=1,2,3'"
             ) from None
+
     if key == "expression":
         return ("expression", value)
+
     if key == "bands":
         return ("bands", value.split(","))
+
     # custom part for Stac/GeoZarrReader
     if key == "variables":
         return ("variables", value.split(","))
 
     raise ValueError(
-        f"Unknown asset option '{key}' in '{raw}'. "
+        f"Unknown asset option '{key}'. "
         f"Valid options: {', '.join(sorted(VALID_ASSET_OPTIONS))}"
     )
 
@@ -58,6 +61,7 @@ def _parse_asset(values: list[str]) -> list[AssetType]:
     """
     assets: list[AssetType] = []
     for v in values:
+        # asset with options
         if "|" in v:
             asset_name, params = v.split("|", 1)
             opts: dict[str, Any] = {"name": asset_name}
@@ -71,13 +75,19 @@ def _parse_asset(values: list[str]) -> list[AssetType]:
                     )
 
                 key, value = option.split("=", 1)
-                opts_key, opts_value = _parse_option(key, value, v)
+                try:
+                    opts_key, opts_value = _parse_option(key, value)
+                except ValueError as e:
+                    raise ValueError(f"Error parsing asset '{v}': {e}") from e
+
                 opts[opts_key] = opts_value
 
             asset = cast(AssetWithOptions, opts)
             assets.append(asset)
+
+        # asset without options
         else:
-            assets.append(v)
+            assets.append({"name": v})
 
     return assets
 
