@@ -15,25 +15,64 @@ from titiler.eopf.reader import GeoZarrReader
 from titiler.stacapi.backend import STACAPIBackend
 from titiler.stacapi.reader import SimpleSTACReader
 
+VALID_ASSET_OPTIONS = {"bidx", "expression", "bands", "variables"}
+
+
+def _parse_option(key: str, value: str, raw: str) -> tuple[str, Any]:
+    """Parse a single asset option key=value pair into (opts_key, opts_value)."""
+    if key == "bidx":
+        try:
+            return ("indexes", list(map(int, value.split(","))))
+        except ValueError:
+            raise ValueError(
+                f"Invalid bidx value '{value}' in '{raw}'. "
+                f"Expected comma-separated integers, e.g. 'bidx=1' or 'bidx=1,2,3'"
+            ) from None
+    if key == "expression":
+        return ("expression", value)
+    if key == "bands":
+        return ("bands", value.split(","))
+    # custom part for Stac/GeoZarrReader
+    if key == "variables":
+        return ("variables", value.split(","))
+
+    raise ValueError(
+        f"Unknown asset option '{key}' in '{raw}'. "
+        f"Valid options: {', '.join(sorted(VALID_ASSET_OPTIONS))}"
+    )
+
 
 def _parse_asset(values: list[str]) -> list[AssetType]:
-    """Parse assets with optional parameter."""
+    """Parse assets with optional parameter.
+
+    Format: ``asset_name`` or ``asset_name|key=value|key=value``
+
+    Supported options:
+        - ``bidx=1,2`` — band indexes
+        - ``expression=...`` — band math expression
+        - ``bands=red,green`` — band names
+        - ``variables=vv,vh`` — variable names (for GeoZarr)
+
+    Raises:
+        ValueError: If an option is missing a ``key=value`` pair or uses an unknown key.
+    """
     assets: list[AssetType] = []
     for v in values:
         if "|" in v:
             asset_name, params = v.split("|", 1)
             opts: dict[str, Any] = {"name": asset_name}
             for option in params.split("|"):
+                if "=" not in option:
+                    raise ValueError(
+                        f"Invalid asset option '{option}' in '{v}'. "
+                        f"Options must be in 'key=value' format. "
+                        f"Valid keys: {', '.join(sorted(VALID_ASSET_OPTIONS))}. "
+                        f"Example: '{asset_name}|bidx=1' or '{asset_name}|variables=vv,vh'"
+                    )
+
                 key, value = option.split("=", 1)
-                if key == "bidx":
-                    opts["indexes"] = list(map(int, value.split(",")))
-                elif key == "expression":
-                    opts["expression"] = value
-                elif key == "bands":
-                    opts["bands"] = value.split(",")
-                # custom part for Stac/GeoZarrReader
-                elif key == "variables":
-                    opts["variables"] = value.split(",")
+                opts_key, opts_value = _parse_option(key, value, v)
+                opts[opts_key] = opts_value
 
             asset = cast(AssetWithOptions, opts)
             assets.append(asset)
