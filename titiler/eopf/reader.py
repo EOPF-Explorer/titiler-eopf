@@ -35,6 +35,7 @@ from rio_tiler.io.xarray import XarrayReader
 from rio_tiler.models import BandStatistics, ImageData, Info, PointData
 from rio_tiler.reader import _get_width_height, _missing_size
 from rio_tiler.types import BBox
+from xarray.backends.api import _maybe_create_default_indexes
 from zarr.storage import ObjectStore
 
 from .cache import RedisCache
@@ -119,6 +120,7 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
             zarr_store,
             decode_times=True,
             decode_coords="all",
+            create_default_indexes=False,
             # By default xarray will try to load the consolidated metadata
             # consolidated=True,
             engine="zarr",
@@ -421,6 +423,22 @@ class GeoZarrReader(BaseReader):
     groups: List[str] = attr.ib(init=False)
     variables: List[str] = attr.ib(init=False)
 
+    # Cache for datasets with indexes created, keyed by datatree path.
+    # Avoids re-loading coordinate arrays from S3 for the same group.
+    _indexed_ds_cache: Dict[str, xarray.Dataset] = attr.ib(init=False, factory=dict)
+
+    def _get_indexed_dataset(self, path: str) -> xarray.Dataset:
+        """Get a dataset with default indexes, cached to avoid repeated S3 coordinate reads.
+
+        When opening with create_default_indexes=False, coordinate arrays stay lazy.
+        Creating indexes materializes them once into PandasIndex (in-memory).
+        This cache ensures that cost is paid only once per unique datatree path.
+        """
+        if path not in self._indexed_ds_cache:
+            ds = self.datatree[path].to_dataset()
+            self._indexed_ds_cache[path] = _maybe_create_default_indexes(ds)
+        return self._indexed_ds_cache[path]
+
     def __attrs_post_init__(self):
         """Set bounds and CRS."""
         if not self.datatree:
@@ -432,6 +450,7 @@ class GeoZarrReader(BaseReader):
         # There might not be global bounds/CRS for a Zarr Store
         try:
             ds = self.datatree.to_dataset()
+            ds = _maybe_create_default_indexes(ds)
             self.bounds = tuple(ds.rio.bounds())
             self.crs = ds.rio.crs or "epsg:4326"
 
@@ -508,6 +527,8 @@ class GeoZarrReader(BaseReader):
                     "tileMatrices"
                 ][0]["id"]
                 ds = self.datatree[g][scale].to_dataset()
+                # NOTE: _validate_zarr only checks dims and CRS attributes,
+                # no need to create indexes (avoids eager S3 coordinate reads)
                 if _validate_zarr(ds):
                     groups.append(g)
 
@@ -518,6 +539,8 @@ class GeoZarrReader(BaseReader):
 
                 elif self.datatree[g].data_vars:
                     ds = self.datatree[g].to_dataset()
+                    # NOTE: _validate_zarr only checks dims and CRS attributes,
+                    # no need to create indexes (avoids eager S3 coordinate reads)
                     if _validate_zarr(ds):
                         groups.append(g)
 
@@ -615,13 +638,14 @@ class GeoZarrReader(BaseReader):
 
                 if not bbox:
                     if not shape:
-                        dataset = tree.to_dataset()
+                        dataset = self._get_indexed_dataset(tree.path)
+
                         width, height = dataset.rio.width, dataset.rio.height
                     else:
                         width, height = _get_size(dims, shape)
 
                     if not transform:
-                        dataset = tree.to_dataset()
+                        dataset = self._get_indexed_dataset(tree.path)
                         transform = dataset.rio.transform()
 
                     bbox = array_bounds(width, height, transform)  # type: ignore
@@ -629,13 +653,15 @@ class GeoZarrReader(BaseReader):
         # GeoZarr V0
         elif ms := tree.attrs.get("multiscales"):
             scale = ms["tile_matrix_set"]["tileMatrices"][0]["id"]
-            ds = tree[scale].to_dataset()
+            ds = self._get_indexed_dataset(
+                f"{group}/{scale}" if group != "/" else scale
+            )
             bbox = ds.rio.bounds()
             bounds_crs = ds.rio.crs
 
         # Not GeoZarr
         else:
-            ds = tree.to_dataset()
+            ds = self._get_indexed_dataset(group)
             bbox = ds.rio.bounds()
             bounds_crs = ds.rio.crs
 
@@ -694,7 +720,7 @@ class GeoZarrReader(BaseReader):
 
             if not transform:
                 # Fall back to rioxarray transform
-                transform = tree.to_dataset().rio.transform()
+                transform = self._get_indexed_dataset(tree.path).rio.transform()
 
             try:
                 tms_crs = self.tms.rasterio_crs
@@ -703,7 +729,7 @@ class GeoZarrReader(BaseReader):
                         width, height = _get_size(dims, shape)
                     else:
                         # Fall back to rioxarray shape
-                        dataset = tree.to_dataset()
+                        dataset = self._get_indexed_dataset(tree.path)
                         width, height = dataset.rio.width, dataset.rio.height
 
                     if not bbox:
@@ -736,9 +762,11 @@ class GeoZarrReader(BaseReader):
         if ms := tree.attrs.get("multiscales"):
             # Select the last level (should be the lowest/coarsest resolution)
             scale = ms["tile_matrix_set"]["tileMatrices"][-1]["id"]
-            ds = tree[scale].to_dataset()
+            ds = self._get_indexed_dataset(
+                f"{group}/{scale}" if group != "/" else scale
+            )
         else:
-            ds = tree.to_dataset()
+            ds = self._get_indexed_dataset(group)
 
         try:
             return self._get_zoom(ds)
@@ -782,7 +810,7 @@ class GeoZarrReader(BaseReader):
 
             if not transform:
                 # Fall back to rioxarray transform
-                transform = tree.to_dataset().rio.transform()
+                transform = self._get_indexed_dataset(tree.path).rio.transform()
 
             try:
                 tms_crs = self.tms.rasterio_crs
@@ -791,7 +819,7 @@ class GeoZarrReader(BaseReader):
                         width, height = _get_size(dims, shape)
                     else:
                         # Fall back to rioxarray shape
-                        dataset = tree.to_dataset()
+                        dataset = self._get_indexed_dataset(tree.path)
                         width, height = dataset.rio.width, dataset.rio.height
 
                     if not bbox:
@@ -824,9 +852,11 @@ class GeoZarrReader(BaseReader):
         if ms := tree.attrs.get("multiscales"):
             # Select the first level (should be the highest/finest resolution)
             scale = ms["tile_matrix_set"]["tileMatrices"][0]["id"]
-            ds = tree[group][scale].to_dataset()
+            ds = self._get_indexed_dataset(
+                f"{group}/{scale}" if group != "/" else f"/{scale}"
+            )
         else:
-            ds = tree[group].to_dataset()
+            ds = self._get_indexed_dataset(group)
 
         try:
             return self._get_zoom(ds)
@@ -910,13 +940,16 @@ class GeoZarrReader(BaseReader):
                 if shape:
                     layout_width, layout_height = _get_size(dims, shape)
                 else:
-                    # Fall back to rioxarray shape
-                    dataset = tree[scale].to_dataset()
+                    # Fall back to rioxarray shape (needs coordinate values)
+                    scale_path = f"{group}/{scale}" if group != "/" else scale
+                    dataset = self._get_indexed_dataset(scale_path)
                     layout_width, layout_height = dataset.rio.width, dataset.rio.height
 
                 if not transform:
-                    # Fall back to rioxarray transform
-                    transform = tree[scale].to_dataset().rio.transform()
+                    # Fall back to rioxarray transform (needs coordinate values)
+                    scale_path = f"{group}/{scale}" if group != "/" else scale
+                    dataset = self._get_indexed_dataset(scale_path)
+                    transform = dataset.rio.transform()
 
                 if not bbox:
                     bbox = array_bounds(layout_width, layout_height, transform)  # type: ignore
@@ -939,7 +972,9 @@ class GeoZarrReader(BaseReader):
                     scale = get_multiscale_level(tree, variable, target_res)  # type: ignore
 
                 # Select the multiscale group and variable
-                da = tree[scale][variable]
+                scale_path = f"{group}/{scale}" if group != "/" else scale
+                ds = self._get_indexed_dataset(scale_path)
+                da = ds[variable]
 
                 logger.info(
                     f"Multiscale - selecting group {group} with scale {scale} and variable {variable}"
@@ -951,7 +986,8 @@ class GeoZarrReader(BaseReader):
 
             else:
                 # Select Variable (xarray.DataArray)
-                da = tree[variable]
+                ds = self._get_indexed_dataset(group)
+                da = ds[variable]
 
         # GeoZarr V0
         elif ms := tree.attrs.get("multiscales"):
@@ -973,7 +1009,9 @@ class GeoZarrReader(BaseReader):
                     f"Variable '{variable}' not found in any multiscale level of group '{group}'"
                 ) from e
 
-            default_dataset = tree[scale].to_dataset()
+            default_dataset = self._get_indexed_dataset(
+                f"{group}/{scale}" if group != "/" else scale
+            )
             transform = default_dataset.rio.transform()
             bbox = default_dataset.rio.bounds()
             layout_height = default_dataset.rio.height
@@ -995,7 +1033,9 @@ class GeoZarrReader(BaseReader):
                 scale = get_multiscale_level(tree, variable, target_res)  # type: ignore
 
             # Select the multiscale group and variable
-            da = tree[scale][variable]
+            scale_path = f"{group}/{scale}" if group != "/" else scale
+            ds = self._get_indexed_dataset(scale_path)
+            da = ds[variable]
 
             logger.info(
                 f"Multiscale - selecting group {group} with scale {scale} and variable {variable}"
@@ -1007,7 +1047,8 @@ class GeoZarrReader(BaseReader):
 
         else:
             # Select Variable (xarray.DataArray)
-            da = tree[variable]
+            ds = self._get_indexed_dataset(group)
+            da = ds[variable]
 
         if sel:
             _idx: Dict[str, List] = {}
