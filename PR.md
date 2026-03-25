@@ -49,6 +49,20 @@ New method builds `Info` objects directly from GeoZarr metadata attributes and t
 
 New `_bounds_cache` dict + `_get_scale_bounds(path)` method caches `ds.rio.bounds()` per scale path, reused across multiple variables in the same group.
 
+### 7. Synthetic coordinates for V1 first-tile optimization
+
+For V1 GeoZarr datasets, the `spatial:transform` and `spatial:shape` attributes fully determine what the x/y coordinate arrays contain (pixel-center values). Instead of reading coordinate arrays from S3 via `_get_indexed_dataset`, we now:
+
+- Compute pixel-center coordinates directly: `x[i] = transform.c + (i + 0.5) * transform.a`
+- Get the raw DataArray from the datatree without creating indexes
+- Assign the synthetic coordinates via `assign_coords`
+
+This eliminates S3 coordinate reads entirely for V1 tile/preview/part operations (when `sel` is not used). Falls back to `_get_indexed_dataset` when:
+- `sel` parameter is provided (needs indexes for `.sel()`)
+- Spatial metadata is incomplete in attributes
+
+Applied to both V1 multiscale (via `_get_v1_dataarray` helper) and V1 non-multiscale paths.
+
 ## Changes
 
 **`titiler/eopf/reader.py`**:
@@ -59,6 +73,9 @@ New `_bounds_cache` dict + `_get_scale_bounds(path)` method caches `ds.rio.bound
 - **`GeoZarrReader._bounds_cache`**: New `Dict` attribute for caching per-scale bounds
 - **`GeoZarrReader._get_indexed_dataset(path)`**: New method — creates and caches datasets with indexes per datatree path
 - **`GeoZarrReader._get_scale_bounds(path)`**: New method — caches `ds.rio.bounds()` per scale path
+- **`GeoZarrReader._get_v1_dataarray()`**: New method — synthesizes x/y coordinates from V1 `spatial:transform`/`spatial:shape` attributes, avoiding S3 coordinate reads
+- **`GeoZarrReader._get_variable()` (V1 multiscale)**: Uses `_get_v1_dataarray` when `sel` is not provided; falls back to `_get_indexed_dataset`
+- **`GeoZarrReader._get_variable()` (V1 non-multiscale)**: Same synthetic coordinate optimization inline
 - **`GeoZarrReader.info()`**: Rewritten with fast path (`_build_info_fast`) and fallback (`_get_info_via_reader`)
 - **`GeoZarrReader._build_info_fast()`**: New method — builds `Info` directly from metadata without XarrayReader
 - **`GeoZarrReader._get_info_via_reader()`**: New method — original XarrayReader-based info (used when `sel` is provided)
@@ -79,6 +96,7 @@ The key wins:
 - **Open** no longer reads coordinate data from S3 at all
 - **`info()`** bypasses XarrayReader and `_get_variable` entirely — pure metadata reads
 - **Data operations** (`tile`, `preview`, `part`) pay coordinate loading cost only once per group (cached)
+- **First tile (V1)** no longer reads coordinate arrays from S3 at all — coordinates are synthesized from spatial metadata attributes
 
 ## Tests
 

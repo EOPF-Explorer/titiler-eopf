@@ -452,6 +452,75 @@ class GeoZarrReader(BaseReader):
             self._bounds_cache[scale_path] = tuple(ds.rio.bounds())
         return self._bounds_cache[scale_path]
 
+    def _get_v1_dataarray(
+        self,
+        scale_path: str,
+        variable: str,
+        dims: list[str],
+        layout_entries: list[dict],
+        scale: str,
+    ) -> xarray.DataArray | None:
+        """Get DataArray with synthetic coordinates from V1 spatial metadata.
+
+        Avoids S3 coordinate reads by computing pixel-center coordinates
+        from spatial:transform and spatial:shape attributes.
+        Returns None if spatial metadata is incomplete.
+        """
+        sel_transform = None
+        sel_shape = None
+
+        # Find spatial metadata for the selected scale in layout entries
+        for mt in layout_entries:
+            if mt["asset"] == scale:
+                if spatial_keys.intersection(mt):
+                    sel_shape = mt["spatial:shape"]
+                    sel_transform = Affine(*mt["spatial:transform"])
+                break
+
+        # Fall back to scale group attributes
+        if not sel_transform:
+            scale_attrs = self.datatree[scale_path].attrs
+            if spatial_keys.intersection(scale_attrs):
+                sel_shape = scale_attrs["spatial:shape"]
+                sel_transform = Affine(*scale_attrs["spatial:transform"])
+
+        if not sel_transform or not sel_shape:
+            return None
+
+        sel_width, sel_height = _get_size(dims, sel_shape)
+
+        # Determine x/y dimension names from spatial:dimensions
+        lower_dims = {d.lower(): d for d in dims}
+        x_name = next(
+            (
+                lower_dims[n]
+                for n in ["x", "lon", "longitude", "easting"]
+                if n in lower_dims
+            ),
+            None,
+        )
+        y_name = next(
+            (
+                lower_dims[n]
+                for n in ["y", "lat", "latitude", "northing"]
+                if n in lower_dims
+            ),
+            None,
+        )
+        if not x_name or not y_name:
+            return None
+
+        # Synthesize pixel-center coordinates from transform
+        x_coords = sel_transform.c + (numpy.arange(sel_width) + 0.5) * sel_transform.a
+        y_coords = sel_transform.f + (numpy.arange(sel_height) + 0.5) * sel_transform.e
+
+        # Get DataArray without creating indexes (no S3 coordinate reads)
+        ds = self.datatree[scale_path].to_dataset()
+        da = ds[variable]
+        da = da.assign_coords({x_name: x_coords, y_name: y_coords})
+
+        return da
+
     def __attrs_post_init__(self):
         """Set bounds and CRS."""
         if not self.datatree:
@@ -986,8 +1055,21 @@ class GeoZarrReader(BaseReader):
 
                 # Select the multiscale group and variable
                 scale_path = f"{group}/{scale}" if group != "/" else scale
-                ds = self._get_indexed_dataset(scale_path)
-                da = ds[variable]
+
+                # For V1, synthesize coordinates from spatial metadata
+                # to avoid S3 coordinate reads (sel requires indexes, so fall back)
+                da = None
+                if not sel:
+                    da = self._get_v1_dataarray(
+                        scale_path,
+                        variable,
+                        dims,
+                        tree.attrs["multiscales"]["layout"],
+                        scale,
+                    )
+                if da is None:
+                    ds = self._get_indexed_dataset(scale_path)
+                    da = ds[variable]
 
                 logger.info(
                     f"Multiscale - selecting group {group} with scale {scale} and variable {variable}"
@@ -999,8 +1081,45 @@ class GeoZarrReader(BaseReader):
 
             else:
                 # Select Variable (xarray.DataArray)
-                ds = self._get_indexed_dataset(group)
-                da = ds[variable]
+                # For V1 non-multiscale, try synthetic coords too
+                da = None
+                if not sel and spatial_keys.intersection(tree.attrs):
+                    v1_shape = tree.attrs["spatial:shape"]
+                    v1_transform = Affine(*tree.attrs["spatial:transform"])
+                    v1_width, v1_height = _get_size(dims, v1_shape)
+                    lower_dims = {d.lower(): d for d in dims}
+                    x_name = next(
+                        (
+                            lower_dims[n]
+                            for n in ["x", "lon", "longitude", "easting"]
+                            if n in lower_dims
+                        ),
+                        None,
+                    )
+                    y_name = next(
+                        (
+                            lower_dims[n]
+                            for n in ["y", "lat", "latitude", "northing"]
+                            if n in lower_dims
+                        ),
+                        None,
+                    )
+                    if x_name and y_name:
+                        x_coords = (
+                            v1_transform.c
+                            + (numpy.arange(v1_width) + 0.5) * v1_transform.a
+                        )
+                        y_coords = (
+                            v1_transform.f
+                            + (numpy.arange(v1_height) + 0.5) * v1_transform.e
+                        )
+                        ds = self.datatree[group].to_dataset()
+                        da = ds[variable]
+                        da = da.assign_coords({x_name: x_coords, y_name: y_coords})
+
+                if da is None:
+                    ds = self._get_indexed_dataset(group)
+                    da = ds[variable]
 
         # GeoZarr V0
         elif ms := tree.attrs.get("multiscales"):
