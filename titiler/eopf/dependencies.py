@@ -8,9 +8,9 @@ from fastapi import Path, Query
 from starlette.requests import Request
 
 from titiler.core.dependencies import BidxParams, DefaultDependency, ExpressionParams
-from titiler.xarray.dependencies import SelDimStr
 
 from .settings import DataStoreSettings
+from .types import SelDimStr
 
 store_settings = DataStoreSettings()
 

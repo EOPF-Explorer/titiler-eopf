@@ -3,9 +3,11 @@
 import numpy
 import pytest
 import xarray
+from pydantic import TypeAdapter
 from rio_tiler.errors import ExpressionMixingWarning
 
-from titiler.eopf.reader import GeoZarrReader, MissingVariables
+from titiler.eopf.reader import GeoZarrReader, MissingVariables, _parse_sel_indices
+from titiler.eopf.types import SelDimStr
 
 
 def test_open(geozarr_dataset):
@@ -253,3 +255,61 @@ def test_feature(geozarr_dataset):
 
         img = src.feature(feat, variables=["/measurements/reflectance:b02"])
         assert img.assets == [geozarr_dataset]
+
+
+def test_sel_dim_str_accepts_iso_datetime():
+    """ISO datetime selectors should pass query validation."""
+    validated = TypeAdapter(SelDimStr).validate_python(
+        "time=2021-06-08T18:49:21.024000000Z"
+    )
+    assert validated == "time=2021-06-08T18:49:21.024000000Z"
+
+
+def test_parse_sel_indices_supports_temporal_iso_and_nearest():
+    """Temporal selectors should be normalized to datetime64[ns]."""
+    da = xarray.DataArray(
+        numpy.arange(8).reshape(2, 2, 2),
+        dims=("time", "y", "x"),
+        coords={
+            "time": numpy.array(
+                ["2021-06-08T18:49:21.024000000", "2021-06-08T18:49:22.024000000"],
+                dtype="datetime64[ns]",
+            ),
+            "y": [0, 1],
+            "x": [0, 1],
+        },
+    )
+
+    sel_idx, method = _parse_sel_indices(
+        da,
+        ["time=2021-06-08T18:49:21.024000000Z"],
+        "nearest",
+    )
+    assert method == "nearest"
+    assert sel_idx["time"].dtype == numpy.dtype("datetime64[ns]")
+
+    selected = da.sel(sel_idx, method=method)
+    numpy.testing.assert_array_equal(selected.values, da.isel(time=0).values)
+
+
+def test_parse_sel_indices_supports_inline_method_and_epoch_ns():
+    """Inline method::value and epoch nanoseconds should be supported."""
+    da = xarray.DataArray(
+        numpy.arange(8).reshape(2, 2, 2),
+        dims=("time", "y", "x"),
+        coords={
+            "time": numpy.array(
+                ["2021-06-08T18:49:21.024000000", "2021-06-08T18:49:22.024000000"],
+                dtype="datetime64[ns]",
+            ),
+            "y": [0, 1],
+            "x": [0, 1],
+        },
+    )
+
+    epoch_ns = str(int(da.time.values[0].astype("datetime64[ns]").astype("int64")))
+    sel_idx, method = _parse_sel_indices(da, [f"time=nearest::{epoch_ns}"], None)
+    assert method == "nearest"
+
+    selected = da.sel(sel_idx, method=method)
+    numpy.testing.assert_array_equal(selected.values, da.isel(time=0).values)

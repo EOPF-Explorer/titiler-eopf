@@ -10,10 +10,11 @@ import re
 import warnings
 from functools import cache, cached_property, lru_cache
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Union
+from typing import Any, Callable, Dict, List, Literal
 from urllib.parse import urlparse
 
 import attr
+import numpy as np
 import obstore
 import xarray
 from affine import Affine
@@ -70,6 +71,69 @@ def cache_settings() -> CacheSettings:
 
 class MissingVariables(RioTilerError):
     """Missing Variables."""
+
+
+def _resolve_sel_method(
+    value: str,
+    method: sel_methods | None,
+) -> tuple[str, sel_methods | None]:
+    """Resolve inline `{method}::{value}` selectors."""
+    allowed_methods = {"nearest", "pad", "ffill", "backfill", "bfill"}
+    if "::" not in value:
+        return value, method
+
+    maybe_method, raw_value = value.split("::", 1)
+    if maybe_method not in allowed_methods:
+        return value, method
+
+    if method is None:
+        return raw_value, maybe_method  # type: ignore[return-value]
+
+    if method != maybe_method:
+        raise ValueError(
+            "Conflicting selection methods provided: " f"{method} and {maybe_method}"
+        )
+
+    return raw_value, method
+
+
+def _cast_sel_value(da: xarray.DataArray, dim: str, value: Any) -> Any:
+    """Cast selector value to coordinate dtype."""
+    if da[dim].dtype == "O":
+        return value
+
+    if np.issubdtype(da[dim].dtype, np.datetime64):
+        if isinstance(value, str):
+            if value.isdigit():
+                return np.datetime64(int(value), "ns")
+            iso_value = value[:-1] if value.endswith("Z") else value
+            return np.datetime64(iso_value, "ns")
+        return np.datetime64(value, "ns")
+
+    return da[dim].dtype.type(value)
+
+
+def _parse_sel_indices(
+    da: xarray.DataArray,
+    sel: List[str],
+    method: sel_methods | None,
+) -> tuple[Dict[str, Any], sel_methods | None]:
+    """Parse query selectors and cast values to coordinate dtype."""
+    idx: Dict[str, List[Any]] = {}
+    effective_method = method
+
+    for selection in sel:
+        dim, val = selection.split("=", 1)
+        val, effective_method = _resolve_sel_method(val, effective_method)
+        val = _cast_sel_value(da, dim, val)
+
+        if dim in idx:
+            idx[dim].append(val)
+        else:
+            idx[dim] = [val]
+
+    sel_idx = {k: v[0] if len(v) < 2 else v for k, v in idx.items()}
+    return sel_idx, effective_method
 
 
 @cache
@@ -1010,22 +1074,8 @@ class GeoZarrReader(BaseReader):
             da = tree[variable]
 
         if sel:
-            _idx: Dict[str, List] = {}
-            for s in sel:
-                val: Union[str, slice]
-                dim, val = s.split("=")
-
-                # cast string to dtype of the dimension
-                if da[dim].dtype != "O":
-                    val = da[dim].dtype.type(val)
-
-                if dim in _idx:
-                    _idx[dim].append(val)
-                else:
-                    _idx[dim] = [val]
-
-            sel_idx = {k: v[0] if len(v) < 2 else v for k, v in _idx.items()}
-            da = da.sel(sel_idx, method=method)
+            sel_idx, effective_method = _parse_sel_indices(da, sel, method)
+            da = da.sel(sel_idx, method=effective_method)
 
         da = _arrange_dims(da)
         assert len(da.dims) in [
