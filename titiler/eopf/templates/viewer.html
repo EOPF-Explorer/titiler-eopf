@@ -256,6 +256,7 @@
               <select id='bmath-selector' class='select select--s select--stroke wmax-full color-black'>
                 <option disabled selected value="default"> -- select an option -- </option>
                 <option value='ni'>Normalized Index (A - B)/(A + B)</option>
+                <option value='pol-rgb'>Polarization RGB (VV, VH, VV/VH)</option>
               </select>
               <div class='select-arrow color-black'></div>
             </div>
@@ -507,6 +508,28 @@ const setBandMathViz = () => {
         setMapLayers(url)
 
         break
+      case 'pol-rgb':
+        const vv_var = document.getElementById('pol-vv-selector').value
+        const vh_var = document.getElementById('pol-vh-selector').value
+        const pol_bidx = document.getElementById('pol-bidx-selector').value
+
+        params = {tilesize: 256}
+        params.bidx = pol_bidx
+        params.rescale = `${document.getElementById('data-min').value},${document.getElementById('data-max').value}`
+        params.expression = encodeURIComponent(`${vv_var};${vh_var};(${vv_var})/(${vh_var})`)
+
+        if (document.getElementById('ColorFormulaValue').value !== '') {
+          params.color_formula = document.getElementById('ColorFormulaValue').value
+        }
+        
+        const cmap_pol = document.getElementById('colormap-selector')[document.getElementById('colormap-selector').selectedIndex]
+        if (cmap_pol.value !== 'b&w') params.colormap_name = cmap_pol.value
+
+        const url_params_pol = Object.keys(params).map(i => `${i}=${params[i]}`).join('&')
+        let url_pol = `{{ tilejson_endpoint }}?${url_params_pol}`
+        setMapLayers(url_pol)
+
+         break
       case 'default':
         break
       default:
@@ -597,6 +620,10 @@ document.getElementById('bmath-selector').addEventListener('change', () => {
     case 'ni':
       // construct band math UI
       normalizedIndexUi()
+      break
+    case 'pol-rgb':
+      // construct band math UI for pol-rgb
+      polarizationRGBUI()
       break
     case 'default':
       break
@@ -815,6 +842,74 @@ const normalizedIndexUi = () => {
   document.getElementById('minmax-data').classList.remove('none')
   document.getElementById('data-min').value = -1
   document.getElementById('data-max').value = 1
+}
+
+const polarizationRGBUI = () => {
+  // Polarization RGB combines 2 polarization angles (VV, VH) to produce an RGB visualization.
+  // VV, VH, and VV/VH ratio are mapped to R, G, B channels respectively.
+
+  const selectVVContainer = document.createElement('div');
+  const selectVVText = document.createElement('span');
+  selectVVText.textContent = "VV: "
+  selectVVContainer.appendChild(selectVVText);
+  const selectVV = document.createElement('select');
+  selectVV.id = 'pol-vv-selector';
+  selectVVContainer.appendChild(selectVV);
+  document.getElementById('band-math-ui').appendChild(selectVVContainer);
+
+  const selectVHContainer = document.createElement('div');
+  const selectVHText = document.createElement('span');
+  selectVHText.textContent = "VH: "
+  selectVHContainer.appendChild(selectVHText);
+  const selectVH = document.createElement('select');
+  selectVH.id = 'pol-vh-selector';
+  selectVHContainer.appendChild(selectVH);
+  document.getElementById('band-math-ui').appendChild(selectVHContainer);
+
+  // Add options, pre-select variables containing vv/vh
+  scope.variables.forEach((opt, idx) => {
+    const option = document.createElement('option');
+    option.value = opt;
+    option.text = opt;
+    if (opt.toLowerCase().includes('vv')) option.selected = true
+    selectVV.appendChild(option);
+  });
+
+  scope.variables.forEach((opt, idx) => {
+    const option = document.createElement('option');
+    option.value = opt;
+    option.text = opt;
+    if (opt.toLowerCase().includes('vh')) option.selected = true
+    selectVH.appendChild(option);
+  });
+
+  // Band index selector
+  const selectBidxContainer = document.createElement('div');
+  const selectBidxText = document.createElement('span');
+  selectBidxText.textContent = "Band: "
+  selectBidxContainer.appendChild(selectBidxText);
+  const selectBidx = document.createElement('select');
+  selectBidx.id = 'pol-bidx-selector';
+  selectBidxContainer.appendChild(selectBidx);
+  document.getElementById('band-math-ui').appendChild(selectBidxContainer);
+
+  // Populate band options from the first selected variable's info
+  const firstVar = selectVV.value || scope.variables[0]
+  const info = scope.dataset_info[firstVar]
+  if (info) {
+    for (let i = 1; i <= info.count; i++) {
+      const option = document.createElement('option');
+      option.value = i;
+      const desc = info.band_descriptions[i - 1]
+      option.text = desc ? `${i} - ${desc[1] || desc[0]}` : `${i}`
+      if (i === 1) option.selected = true
+      selectBidx.appendChild(option);
+    }
+  }
+
+  document.getElementById('minmax-data').classList.remove('none')
+  document.getElementById('data-min').value = 0
+  document.getElementById('data-max').value = 0.5
 }
 
 const updateUI = () => {
