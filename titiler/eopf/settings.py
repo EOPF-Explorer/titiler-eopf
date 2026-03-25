@@ -151,3 +151,15 @@ class EOPFCacheSettings(BaseCacheSettings):
             raise ValueError(f"Unsupported cache backend: {self.backend}")
 
         return self
+
+
+class STACAPISettings(BaseSettings):
+    """STAC API settings"""
+
+    url: str | None = None
+
+    model_config = {
+        "env_prefix": "TITILER_EOPF_STAC_API_",
+        "env_file": ".env",
+        "extra": "ignore",
+    }

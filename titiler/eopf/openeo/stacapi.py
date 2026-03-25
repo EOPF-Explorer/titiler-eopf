@@ -1,10 +1,8 @@
 """Custom stacApiBackend for EOPF."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, Optional, Union
 
 from attrs import define, field
-from cachetools import TTLCache, cached  # type: ignore
-from cachetools.keys import hashkey  # type: ignore
 from openeo_pg_parser_networkx.pg_schema import BoundingBox, TemporalInterval
 from pystac import Collection, Item
 from pystac.extensions import datacube as dc
@@ -21,13 +19,12 @@ from titiler.openeo.errors import (
 from titiler.openeo.processes.implementations.data_model import RasterStack
 from titiler.openeo.reader import _estimate_output_dimensions
 from titiler.openeo.settings import ProcessingSettings
-from titiler.openeo.stacapi import CacheSettings
 from titiler.openeo.stacapi import LoadCollection as BaseLoadCollection
 from titiler.openeo.stacapi import stacApiBackend as BaseBackend
 
+from ..stac import _parse_asset
 from .reader import _reader
 
-cache_config = CacheSettings()
 processing_settings = ProcessingSettings()
 
 
@@ -67,7 +64,7 @@ def get_band_names(asset_name: str, asset) -> list[str]:
         asset: The STAC asset object
 
     Returns:
-        List of band references in format 'asset|band_name' if bands exist,
+        List of band references in format 'asset_name|bands=band_name' if bands exist,
         or just ['asset_name'] if no bands are defined
     """
     bands = extract_bands_from_asset(asset)
@@ -76,16 +73,14 @@ def get_band_names(asset_name: str, asset) -> list[str]:
         # When no bands are defined, return just the asset name
         return [asset_name]
 
-    return [
-        f"{asset_name}|{band.get('name', '')}" for band in bands if band.get("name")
-    ]
+    return [f"{asset_name}|bands={band['name']}" for band in bands if band.get("name")]
 
 
 def get_all_band_names(collection: Collection) -> list[str]:
     """Get all unique band references from collection item assets.
 
     Returns:
-        List of band references in format 'asset|band_name' if bands exist,
+        List of band references in format 'asset_name|bands=band_name' if bands exist,
         or just asset names if no bands are defined for those assets
     """
     all_band_names = set()
@@ -106,13 +101,13 @@ def get_all_band_names(collection: Collection) -> list[str]:
             if band_name:
                 # For spectral bands (b01, b02, etc.), assume they go in reflectance asset
                 if band_name.startswith(("b0", "b1")) and band_name[1:].isdigit():
-                    all_band_names.add(f"reflectance|{band_name}")
+                    all_band_names.add(f"reflectance|bands={band_name}")
                 # For other bands like AOT, WVP, SCL, use them as direct assets
                 elif band_name.upper() in ["AOT", "WVP", "SCL"]:
                     all_band_names.add(band_name)
                 else:
                     # Default to reflectance asset for unknown spectral bands
-                    all_band_names.add(f"reflectance|{band_name}")
+                    all_band_names.add(f"reflectance|bands={band_name}")
 
     return sorted(all_band_names)
 
@@ -121,39 +116,10 @@ def get_all_band_names(collection: Collection) -> list[str]:
 class stacApiBackend(BaseBackend):
     """Custom stacApiBackend for EOPF Zarr collections."""
 
-    @cached(  # type: ignore
-        TTLCache(maxsize=cache_config.maxsize, ttl=cache_config.ttl),
-        key=lambda self, **kwargs: hashkey(self.url, **kwargs),
-    )
-    def get_collections(self, **kwargs) -> List[Dict]:
-        """Return List of STAC Collections."""
-        collections = []
-        for collection in self.client.get_collections():
-            collection = self.add_version_if_missing(collection)
-            collection = self.add_data_cubes_if_missing(collection)
-
-            # Convert to dict and fix summaries bands
-            col_dict = collection.to_dict()
-            col_dict = self.replace_bands_in_summaries_dict(col_dict)
-            collections.append(col_dict)
-        return collections
-
-    @cached(  # type: ignore
-        TTLCache(maxsize=cache_config.maxsize, ttl=cache_config.ttl),
-        key=lambda self, collection_id, **kwargs: hashkey(
-            self.url, collection_id, **kwargs
-        ),
-    )
-    def get_collection(self, collection_id: str, **kwargs) -> Dict:
-        """Return STAC Collection"""
-        col = self.client.get_collection(collection_id)
-        col = self.add_version_if_missing(col)
-        col = self.add_data_cubes_if_missing(col)
-
-        # Convert to dict first, then modify summaries
-        col_dict = col.to_dict()
-        col_dict = self.replace_bands_in_summaries_dict(col_dict)
-        return col_dict
+    def _fix_collection(self, collection: Dict) -> None:
+        self._normalize_summaries(collection)
+        self.replace_bands_in_summaries_dict(collection)
+        return
 
     def add_data_cubes_if_missing(self, collection: Collection):
         """Add datacubes extension to collection if missing."""
@@ -354,17 +320,17 @@ class stacApiBackend(BaseBackend):
 
         return collection
 
-    def replace_bands_in_summaries_dict(self, collection_dict: Dict) -> Dict:
+    def replace_bands_in_summaries_dict(self, collection_dict: Dict) -> None:
         """Replace band names in summaries dict to match cube:dimension band values."""
         if not collection_dict.get("summaries"):
-            return collection_dict
+            return
 
         # Get the band names from cube dimension
         cube_bands = collection_dict.get("cube:dimensions", {}).get("bands", {})
         cube_band_names = cube_bands.get("values", [])
 
         if not cube_band_names:
-            return collection_dict
+            return
 
         # Get original summaries bands
         original_bands = collection_dict.get("summaries", {}).get("bands", [])
@@ -414,7 +380,7 @@ class stacApiBackend(BaseBackend):
         # Update the summaries in the dictionary
         collection_dict["summaries"]["bands"] = updated_bands
 
-        return collection_dict
+        return
 
 
 def _make_mosaic_task(
@@ -429,11 +395,14 @@ def _make_mosaic_task(
 ):
     """Create a closure that loads data for a date group."""
 
+    # parse bands to assets with options format expected by _reader
+    assets = _parse_asset(bands) if bands else None
+
     def task():
         mosaic_kwargs = {
             "threads": 0,
             "bounds_crs": bounds_crs,
-            "assets": bands,
+            "assets": assets,
             "dst_crs": output_crs,
             "width": int(width) if width else width,
             "height": int(height) if height else height,

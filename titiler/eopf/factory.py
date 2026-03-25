@@ -9,9 +9,8 @@ import rasterio
 from attrs import define, field
 from fastapi import Depends, Path, Query
 from geojson_pydantic.features import Feature
-from morecantile.models import crs_axis_inverted
 from rio_tiler.constants import WGS84_CRS
-from rio_tiler.utils import CRS_to_uri, CRS_to_urn
+from rio_tiler.utils import CRS_to_uri
 from starlette.requests import Request
 from starlette.routing import NoMatchFound
 
@@ -21,7 +20,7 @@ from titiler.core.models.mapbox import TileJSON
 from titiler.core.models.OGC import TileSet, TileSetList
 from titiler.core.models.responses import MultiBaseInfo, MultiBaseInfoGeoJSON
 from titiler.core.resources.enums import ImageType
-from titiler.core.resources.responses import GeoJSONResponse, JSONResponse, XMLResponse
+from titiler.core.resources.responses import GeoJSONResponse, JSONResponse
 from titiler.core.utils import bounds_to_geometry
 from titiler.xarray.dependencies import DatasetParams
 
@@ -69,7 +68,6 @@ class TilerFactory(BaseTilerFactory):
         if self.add_viewer:
             self.map_viewer()
 
-        self.wmts()
         self.tilejson()
 
         self.point()
@@ -471,7 +469,7 @@ class TilerFactory(BaseTilerFactory):
                 "minzoom",
                 "maxzoom",
             ]
-            qs = [
+            qs: list[tuple[str, Any]] = [
                 (key, value)
                 for (key, value) in request.query_params._list
                 if key.lower() not in qs_key_to_remove
@@ -514,160 +512,161 @@ class TilerFactory(BaseTilerFactory):
                         "attribution": os.environ.get("TITILER_DEFAULT_ATTRIBUTION"),
                     }
 
-    def wmts(self):  # noqa: C901
-        """Register /wmts endpoint."""
+    # TODO: update and move to Extension
+    # def wmts(self):  # noqa: C901
+    #     """Register /wmts endpoint."""
 
-        @self.router.get(
-            "/{tileMatrixSetId}/WMTSCapabilities.xml",
-            response_class=XMLResponse,
-            operation_id=f"{self.operation_prefix}getWMTS",
-        )
-        def wmts(
-            request: Request,
-            tileMatrixSetId: Annotated[
-                Literal[tuple(self.supported_tms.list())],
-                Path(
-                    description="Identifier selecting one of the TileMatrixSetId supported."
-                ),
-            ],
-            tile_format: Annotated[
-                ImageType,
-                Query(description="Output image type. Default is png."),
-            ] = ImageType.png,
-            tile_scale: Annotated[
-                int,
-                Query(
-                    gt=0, lt=4, description="Tile size scale. 1=256x256, 2=512x512..."
-                ),
-            ] = 1,
-            minzoom: Annotated[
-                Optional[int],
-                Query(description="Overwrite default minzoom."),
-            ] = None,
-            maxzoom: Annotated[
-                Optional[int],
-                Query(description="Overwrite default maxzoom."),
-            ] = None,
-            use_epsg: Annotated[
-                bool,
-                Query(
-                    description="Use EPSG code, not opengis.net, for the ows:SupportedCRS in the TileMatrixSet (set to True to enable ArcMap compatability)"
-                ),
-            ] = False,
-            src_path=Depends(self.path_dependency),
-            reader_params=Depends(self.reader_dependency),
-            tile_params=Depends(self.tile_dependency),
-            layer_params=Depends(self.layer_dependency),
-            dataset_params=Depends(self.dataset_dependency),
-            post_process=Depends(self.process_dependency),
-            colormap=Depends(self.colormap_dependency),
-            render_params=Depends(self.render_dependency),
-            env=Depends(self.environment_dependency),
-        ):
-            """OGC WMTS endpoint."""
-            route_params = {
-                "z": "{TileMatrix}",
-                "x": "{TileCol}",
-                "y": "{TileRow}",
-                "scale": tile_scale,
-                "format": tile_format.value,
-                "tileMatrixSetId": tileMatrixSetId,
-            }
-            tiles_url = self.url_for(request, "tile", **route_params)
+    #     @self.router.get(
+    #         "/{tileMatrixSetId}/WMTSCapabilities.xml",
+    #         response_class=XMLResponse,
+    #         operation_id=f"{self.operation_prefix}getWMTS",
+    #     )
+    #     def wmts(
+    #         request: Request,
+    #         tileMatrixSetId: Annotated[
+    #             Literal[tuple(self.supported_tms.list())],
+    #             Path(
+    #                 description="Identifier selecting one of the TileMatrixSetId supported."
+    #             ),
+    #         ],
+    #         tile_format: Annotated[
+    #             ImageType,
+    #             Query(description="Output image type. Default is png."),
+    #         ] = ImageType.png,
+    #         tile_scale: Annotated[
+    #             int,
+    #             Query(
+    #                 gt=0, lt=4, description="Tile size scale. 1=256x256, 2=512x512..."
+    #             ),
+    #         ] = 1,
+    #         minzoom: Annotated[
+    #             Optional[int],
+    #             Query(description="Overwrite default minzoom."),
+    #         ] = None,
+    #         maxzoom: Annotated[
+    #             Optional[int],
+    #             Query(description="Overwrite default maxzoom."),
+    #         ] = None,
+    #         use_epsg: Annotated[
+    #             bool,
+    #             Query(
+    #                 description="Use EPSG code, not opengis.net, for the ows:SupportedCRS in the TileMatrixSet (set to True to enable ArcMap compatability)"
+    #             ),
+    #         ] = False,
+    #         src_path=Depends(self.path_dependency),
+    #         reader_params=Depends(self.reader_dependency),
+    #         tile_params=Depends(self.tile_dependency),
+    #         layer_params=Depends(self.layer_dependency),
+    #         dataset_params=Depends(self.dataset_dependency),
+    #         post_process=Depends(self.process_dependency),
+    #         colormap=Depends(self.colormap_dependency),
+    #         render_params=Depends(self.render_dependency),
+    #         env=Depends(self.environment_dependency),
+    #     ):
+    #         """OGC WMTS endpoint."""
+    #         route_params = {
+    #             "z": "{TileMatrix}",
+    #             "x": "{TileCol}",
+    #             "y": "{TileRow}",
+    #             "scale": tile_scale,
+    #             "format": tile_format.value,
+    #             "tileMatrixSetId": tileMatrixSetId,
+    #         }
+    #         tiles_url = self.url_for(request, "tile", **route_params)
 
-            qs_key_to_remove = [
-                "tilematrixsetid",
-                "tile_format",
-                "tile_scale",
-                "minzoom",
-                "maxzoom",
-                "service",
-                "use_epsg",
-                "request",
-            ]
-            qs = [
-                (key, value)
-                for (key, value) in request.query_params._list
-                if key.lower() not in qs_key_to_remove
-            ]
+    #         qs_key_to_remove = [
+    #             "tilematrixsetid",
+    #             "tile_format",
+    #             "tile_scale",
+    #             "minzoom",
+    #             "maxzoom",
+    #             "service",
+    #             "use_epsg",
+    #             "request",
+    #         ]
+    #         qs = [
+    #             (key, value)
+    #             for (key, value) in request.query_params._list
+    #             if key.lower() not in qs_key_to_remove
+    #         ]
 
-            tms = self.supported_tms.get(tileMatrixSetId)
-            with rasterio.Env(**env):
-                logger.info(f"opening data with reader: {self.reader}")
-                with self.reader(
-                    src_path, tms=tms, **reader_params.as_dict()
-                ) as src_dst:
-                    variables = layer_params.variables or src_dst.parse_expression(
-                        layer_params.expression
-                    )
-                    groups = {
-                        group_var.split(":")[0] if ":" in group_var else "/"
-                        for group_var in variables
-                    }
-                    minx, miny, maxx, maxy = zip(
-                        *[
-                            src_dst.get_bounds(group, tms.rasterio_geographic_crs)
-                            for group in groups
-                        ]
-                    )
-                    bounds = (min(minx), min(miny), max(maxx), max(maxy))
+    #         tms = self.supported_tms.get(tileMatrixSetId)
+    #         with rasterio.Env(**env):
+    #             logger.info(f"opening data with reader: {self.reader}")
+    #             with self.reader(
+    #                 src_path, tms=tms, **reader_params.as_dict()
+    #             ) as src_dst:
+    #                 variables = layer_params.variables or src_dst.parse_expression(
+    #                     layer_params.expression
+    #                 )
+    #                 groups = {
+    #                     group_var.split(":")[0] if ":" in group_var else "/"
+    #                     for group_var in variables
+    #                 }
+    #                 minx, miny, maxx, maxy = zip(
+    #                     *[
+    #                         src_dst.get_bounds(group, tms.rasterio_geographic_crs)
+    #                         for group in groups
+    #                     ]
+    #                 )
+    #                 bounds = (min(minx), min(miny), max(maxx), max(maxy))
 
-                    if minzoom is None:
-                        minzoom = min([src_dst.get_minzoom(group) for group in groups])
-                    if maxzoom is None:
-                        maxzoom = max([src_dst.get_maxzoom(group) for group in groups])
+    #                 if minzoom is None:
+    #                     minzoom = min([src_dst.get_minzoom(group) for group in groups])
+    #                 if maxzoom is None:
+    #                     maxzoom = max([src_dst.get_maxzoom(group) for group in groups])
 
-            tileMatrix = []
-            for zoom in range(minzoom, maxzoom + 1):
-                matrix = tms.matrix(zoom)
-                tm = f"""
-                        <TileMatrix>
-                            <ows:Identifier>{matrix.id}</ows:Identifier>
-                            <ScaleDenominator>{matrix.scaleDenominator}</ScaleDenominator>
-                            <TopLeftCorner>{matrix.pointOfOrigin[0]} {matrix.pointOfOrigin[1]}</TopLeftCorner>
-                            <TileWidth>{matrix.tileWidth}</TileWidth>
-                            <TileHeight>{matrix.tileHeight}</TileHeight>
-                            <MatrixWidth>{matrix.matrixWidth}</MatrixWidth>
-                            <MatrixHeight>{matrix.matrixHeight}</MatrixHeight>
-                        </TileMatrix>"""
-                tileMatrix.append(tm)
+    #         tileMatrix = []
+    #         for zoom in range(minzoom, maxzoom + 1):
+    #             matrix = tms.matrix(zoom)
+    #             tm = f"""
+    #                     <TileMatrix>
+    #                         <ows:Identifier>{matrix.id}</ows:Identifier>
+    #                         <ScaleDenominator>{matrix.scaleDenominator}</ScaleDenominator>
+    #                         <TopLeftCorner>{matrix.pointOfOrigin[0]} {matrix.pointOfOrigin[1]}</TopLeftCorner>
+    #                         <TileWidth>{matrix.tileWidth}</TileWidth>
+    #                         <TileHeight>{matrix.tileHeight}</TileHeight>
+    #                         <MatrixWidth>{matrix.matrixWidth}</MatrixWidth>
+    #                         <MatrixHeight>{matrix.matrixHeight}</MatrixHeight>
+    #                     </TileMatrix>"""
+    #             tileMatrix.append(tm)
 
-            if use_epsg:
-                supported_crs = f"EPSG:{tms.crs.to_epsg()}"
-            else:
-                supported_crs = tms.crs.srs
+    #         if use_epsg:
+    #             supported_crs = f"EPSG:{tms.crs.to_epsg()}"
+    #         else:
+    #             supported_crs = tms.crs.srs
 
-            bbox_crs_type = "WGS84BoundingBox"
-            bbox_crs_uri = "urn:ogc:def:crs:OGC:2:84"
-            if tms.rasterio_geographic_crs != WGS84_CRS:
-                bbox_crs_type = "BoundingBox"
-                bbox_crs_uri = CRS_to_urn(tms.rasterio_geographic_crs)
-                # WGS88BoundingBox is always xy ordered, but BoundingBox must match the CRS order
-                if crs_axis_inverted(tms.geographic_crs):
-                    # match the bounding box coordinate order to the CRS
-                    bounds = (bounds[1], bounds[0], bounds[3], bounds[2])
+    #         bbox_crs_type = "WGS84BoundingBox"
+    #         bbox_crs_uri = "urn:ogc:def:crs:OGC:2:84"
+    #         if tms.rasterio_geographic_crs != WGS84_CRS:
+    #             bbox_crs_type = "BoundingBox"
+    #             bbox_crs_uri = CRS_to_urn(tms.rasterio_geographic_crs)
+    #             # WGS88BoundingBox is always xy ordered, but BoundingBox must match the CRS order
+    #             if crs_axis_inverted(tms.geographic_crs):
+    #                 # match the bounding box coordinate order to the CRS
+    #                 bounds = (bounds[1], bounds[0], bounds[3], bounds[2])
 
-            layers = [
-                {
-                    "title": "TiTiler",
-                    "name": "default",
-                    "tiles_url": tiles_url,
-                    "query_string": urlencode(qs, doseq=True) if qs else None,
-                    "bounds": bounds,
-                },
-            ]
+    #         layers = [
+    #             {
+    #                 "title": "TiTiler",
+    #                 "name": "default",
+    #                 "tiles_url": tiles_url,
+    #                 "query_string": urlencode(qs, doseq=True) if qs else None,
+    #                 "bounds": bounds,
+    #             },
+    #         ]
 
-            return self.templates.TemplateResponse(
-                request,
-                name="wmts.xml",
-                context={
-                    "tileMatrixSetId": tms.id,
-                    "tileMatrix": tileMatrix,
-                    "supported_crs": supported_crs,
-                    "bbox_crs_type": bbox_crs_type,
-                    "bbox_crs_uri": bbox_crs_uri,
-                    "layers": layers,
-                    "media_type": tile_format.mediatype,
-                },
-                media_type="application/xml",
-            )
+    #         return self.templates.TemplateResponse(
+    #             request,
+    #             name="wmts.xml",
+    #             context={
+    #                 "tileMatrixSetId": tms.id,
+    #                 "tileMatrix": tileMatrix,
+    #                 "supported_crs": supported_crs,
+    #                 "bbox_crs_type": bbox_crs_type,
+    #                 "bbox_crs_uri": bbox_crs_uri,
+    #                 "layers": layers,
+    #                 "media_type": tile_format.mediatype,
+    #             },
+    #             media_type="application/xml",
+    #         )

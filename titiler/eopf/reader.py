@@ -119,7 +119,8 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
             zarr_store,
             decode_times=True,
             decode_coords="all",
-            consolidated=True,
+            # By default xarray will try to load the consolidated metadata
+            # consolidated=True,
             engine="zarr",
         )
 
@@ -151,16 +152,8 @@ def get_multiscale_level(
 ) -> str:
     """Return the multiscale level corresponding to the desired resolution."""
     ms_resolutions: list[tuple[str, float]]
-    # GeoZarr V0
-    if "tile_matrix_set" in dt.attrs.get("multiscales", {}):
-        ms_resolutions = [
-            (mt["id"], mt["cellSize"])
-            for mt in dt.attrs["multiscales"]["tile_matrix_set"]["tileMatrices"]
-            if variable in dt[mt["id"]].data_vars
-        ]
-
     # GeoZarr V1
-    elif "layout" in dt.attrs.get("multiscales", {}):
+    if "layout" in dt.attrs.get("multiscales", {}):
         ms_resolutions = [
             (
                 ms["asset"],
@@ -168,6 +161,15 @@ def get_multiscale_level(
             )
             for ms in dt.attrs["multiscales"]["layout"]
         ]
+
+    # GeoZarr V0
+    elif "tile_matrix_set" in dt.attrs.get("multiscales", {}):
+        ms_resolutions = [
+            (mt["id"], mt["cellSize"])
+            for mt in dt.attrs["multiscales"]["tile_matrix_set"]["tileMatrices"]
+            if variable in dt[mt["id"]].data_vars
+        ]
+
     else:
         raise ValueError(
             "Multiscale group must have either 'tile_matrix_set' or 'layout' in its attributes."
@@ -864,6 +866,8 @@ class GeoZarrReader(BaseReader):
 
         # GeoZarr V1
         if dims := tree.attrs.get("spatial:dimensions"):
+            logger.info("Multiscale - Selection using GeoZarr V1 (Conventions)")
+
             bbox = tree.attrs.get("spatial:bbox")
             crs = _get_proj_crs(tree.attrs)
 
@@ -951,6 +955,7 @@ class GeoZarrReader(BaseReader):
 
         # GeoZarr V0
         elif ms := tree.attrs.get("multiscales"):
+            logger.info("Multiscale - Selection using GeoZarr V0 (TMS)")
             crs = CRS.from_user_input(ms["tile_matrix_set"]["crs"])
 
             # NOTE: Default Scale (where variable is present)
@@ -1032,10 +1037,13 @@ class GeoZarrReader(BaseReader):
 
     @cached_property
     def _variable_idx(self) -> Dict[str, str]:
-        return {v: f"Var{ix}" for ix, v in enumerate(self.variables)}
+        return {v: f"var{ix}" for ix, v in enumerate(self.variables)}
 
     def parse_expression(self, expression: str) -> List[str]:
         """Parse rio-tiler band math expression."""
+        if "eval" in expression:
+            raise InvalidExpression("Invalid expression")
+
         input_assets = "|".join(re.escape(key) for key in self.variables)
         _re = re.compile(rf"(?<!\w)({input_assets})(?!\w)")
         variables = list(set(re.findall(_re, expression)))
@@ -1195,10 +1203,10 @@ class GeoZarrReader(BaseReader):
 
             # NOTE: transform expression back
             img.band_descriptions = [
-                self._convert_expression_from_index(b) for b in img.band_names
+                self._convert_expression_from_index(b) for b in img.band_descriptions
             ]
-            img.band_names = [f"b{ix + 1}" for ix, _ in enumerate(img.band_names)]
 
+        img.band_names = [f"b{ix + 1}" for ix in range(img.count)]
         img.assets = [self.input]
 
         return img
@@ -1291,10 +1299,10 @@ class GeoZarrReader(BaseReader):
 
             # NOTE: transform expression back
             img.band_descriptions = [
-                self._convert_expression_from_index(b) for b in img.band_names
+                self._convert_expression_from_index(b) for b in img.band_descriptions
             ]
-            img.band_names = [f"b{ix + 1}" for ix, _ in enumerate(img.band_names)]
 
+        img.band_names = [f"b{ix + 1}" for ix in range(img.count)]
         img.assets = [self.input]
 
         return img
@@ -1376,10 +1384,10 @@ class GeoZarrReader(BaseReader):
 
             # NOTE: transform expression back
             img.band_descriptions = [
-                self._convert_expression_from_index(b) for b in img.band_names
+                self._convert_expression_from_index(b) for b in img.band_descriptions
             ]
-            img.band_names = [f"b{ix + 1}" for ix, _ in enumerate(img.band_names)]
 
+        img.band_names = [f"b{ix + 1}" for ix in range(img.count)]
         img.assets = [self.input]
 
         return img
@@ -1437,10 +1445,10 @@ class GeoZarrReader(BaseReader):
             pt = pt.apply_expression(expression)
             # transform expression back
             pt.band_descriptions = [
-                self._convert_expression_from_index(b) for b in pt.band_names
+                self._convert_expression_from_index(b) for b in pt.band_descriptions
             ]
-            pt.band_names = [f"b{ix + 1}" for ix, _ in enumerate(pt.band_names)]
 
+        pt.band_names = [f"b{ix + 1}" for ix in range(pt.count)]
         pt.assets = [self.input]
 
         return pt

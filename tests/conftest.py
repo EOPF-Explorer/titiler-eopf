@@ -5,6 +5,7 @@ import shutil
 from threading import Thread
 from typing import Any, Generator
 
+import jinja2
 import pytest
 from fakeredis import TcpFakeServer
 from rasterio.io import MemoryFile
@@ -53,6 +54,20 @@ def geozarr_dataset(geozarr):
     return os.path.join(FIXTURES_DIRECTORY, collection, f"{item}.zarr")
 
 
+@pytest.fixture
+def geozarr_stac(geozarr_dataset):
+    """Create GeoZARR STAC Item."""
+    env = jinja2.Environment(
+        loader=jinja2.ChoiceLoader(
+            [
+                jinja2.FileSystemLoader(FIXTURES_DIRECTORY),
+            ]
+        )
+    )
+    template = env.get_template("item.json")
+    return template.render(store_url=f"file://{geozarr_dataset}")
+
+
 @pytest.fixture(autouse=True)
 def set_env(redis_host, monkeypatch) -> Generator[TestClient, Any, Any]:
     """Set env variables for tests"""
@@ -74,6 +89,9 @@ def set_env(redis_host, monkeypatch) -> Generator[TestClient, Any, Any]:
     # Redis Cache
     monkeypatch.setenv("TITILER_EOPF_CACHE_HOST", redis_host)
     monkeypatch.setenv("TITILER_EOPF_CACHE_ENABLE", "TRUE")
+
+    # STAC API
+    monkeypatch.setenv("TITILER_EOPF_STAC_API_URL", "https://fake.api.io/stac")
 
 
 @pytest.fixture

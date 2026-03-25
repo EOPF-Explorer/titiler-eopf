@@ -89,6 +89,7 @@
         "TITILER_OPENEO_AUTH_OIDC_SCOPES": "openid profile email",
         "TITILER_OPENEO_AUTH_OIDC_NAME_CLAIM": "preferred_username",
         "TITILER_OPENEO_PROCESSING_MAX_ITEMS": "1000",
+        "RIO_TILER_STAC_ALTERNATE_KEY": "s3",
       }
     }
   ]
