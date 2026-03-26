@@ -123,7 +123,7 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
             decode_coords="all",
             create_default_indexes=False,
             # By default xarray will try to load the consolidated metadata
-            # consolidated=True,
+            consolidated=True,
             engine="zarr",
         )
 
@@ -269,12 +269,22 @@ def _arrange_dims(da: xarray.DataArray) -> xarray.DataArray:
         crs = "epsg:4326"
         da = da.rio.write_crs(crs)
 
-    if crs == "epsg:4326" and (da.x > 180).any():
-        # Adjust the longitude coordinates to the -180 to 180 range
-        da = da.assign_coords(x=(da.x + 180) % 360 - 180)
-
-        # Sort the dataset by the updated longitude coordinates
-        da = da.sortby(da.x)
+    if crs == "epsg:4326":
+        # Check if longitude needs wrapping to -180..180 range.
+        # Use bounds (works with or without coordinate arrays).
+        bounds = da.rio.bounds()
+        if bounds[2] > 180:
+            if "x" in da.coords and da.coords["x"].size > 1:
+                da = da.assign_coords(x=(da.x + 180) % 360 - 180)
+                da = da.sortby(da.x)
+            else:
+                # DataArray uses write_transform without coordinate arrays;
+                # shift the transform origin into -180..180 range.
+                t = da.rio.transform()
+                new_c = ((t.c + 180) % 360) - 180
+                da = da.rio.write_transform(
+                    Affine(t.a, t.b, new_c, t.d, t.e, t.f),
+                )
 
     return da
 
@@ -459,11 +469,12 @@ class GeoZarrReader(BaseReader):
         dims: list[str],
         layout_entries: list[dict],
         scale: str,
+        crs: CRS | None = None,
     ) -> xarray.DataArray | None:
         """Get DataArray with synthetic coordinates from V1 spatial metadata.
 
-        Avoids S3 coordinate reads by computing pixel-center coordinates
-        from spatial:transform and spatial:shape attributes.
+        Builds coordinate arrays from spatial:transform + spatial:shape so that
+        rioxarray can resolve bounds/transform without reading from S3.
         Returns None if spatial metadata is incomplete.
         """
         sel_transform = None
@@ -487,8 +498,6 @@ class GeoZarrReader(BaseReader):
         if not sel_transform or not sel_shape:
             return None
 
-        sel_width, sel_height = _get_size(dims, sel_shape)
-
         # Determine x/y dimension names from spatial:dimensions
         lower_dims = {d.lower(): d for d in dims}
         x_name = next(
@@ -510,14 +519,31 @@ class GeoZarrReader(BaseReader):
         if not x_name or not y_name:
             return None
 
-        # Synthesize pixel-center coordinates from transform
-        x_coords = sel_transform.c + (numpy.arange(sel_width) + 0.5) * sel_transform.a
-        y_coords = sel_transform.f + (numpy.arange(sel_height) + 0.5) * sel_transform.e
+        width, height = _get_size(dims, sel_shape)
+
+        # Synthesize coordinate arrays from transform (pixel-center convention)
+        x_coords = (
+            numpy.arange(width) * sel_transform.a
+            + sel_transform.c
+            + sel_transform.a / 2
+        )
+        y_coords = (
+            numpy.arange(height) * sel_transform.e
+            + sel_transform.f
+            + sel_transform.e / 2
+        )
 
         # Get DataArray without creating indexes (no S3 coordinate reads)
         ds = self.datatree[scale_path].to_dataset()
         da = ds[variable]
         da = da.assign_coords({x_name: x_coords, y_name: y_coords})
+
+        if crs:
+            da = da.rio.write_crs(crs)
+
+        # Override the stale GeoTransform stored in spatial_ref (from the
+        # original on-disk coords) so rioxarray uses the correct transform.
+        da = da.rio.write_transform(sel_transform)
 
         return da
 
@@ -1056,7 +1082,7 @@ class GeoZarrReader(BaseReader):
                 # Select the multiscale group and variable
                 scale_path = f"{group}/{scale}" if group != "/" else scale
 
-                # For V1, synthesize coordinates from spatial metadata
+                # For V1, synthesize coordinates from layout metadata
                 # to avoid S3 coordinate reads (sel requires indexes, so fall back)
                 da = None
                 if not sel:
@@ -1066,6 +1092,7 @@ class GeoZarrReader(BaseReader):
                         dims,
                         tree.attrs["multiscales"]["layout"],
                         scale,
+                        crs=crs,
                     )
                 if da is None:
                     ds = self._get_indexed_dataset(scale_path)
@@ -1081,12 +1108,11 @@ class GeoZarrReader(BaseReader):
 
             else:
                 # Select Variable (xarray.DataArray)
-                # For V1 non-multiscale, try synthetic coords too
+                # For V1 non-multiscale, synthesize coords from group attrs
                 da = None
                 if not sel and spatial_keys.intersection(tree.attrs):
-                    v1_shape = tree.attrs["spatial:shape"]
                     v1_transform = Affine(*tree.attrs["spatial:transform"])
-                    v1_width, v1_height = _get_size(dims, v1_shape)
+                    v1_shape = tree.attrs["spatial:shape"]
                     lower_dims = {d.lower(): d for d in dims}
                     x_name = next(
                         (
@@ -1105,17 +1131,22 @@ class GeoZarrReader(BaseReader):
                         None,
                     )
                     if x_name and y_name:
+                        width, height = _get_size(dims, v1_shape)
                         x_coords = (
-                            v1_transform.c
-                            + (numpy.arange(v1_width) + 0.5) * v1_transform.a
+                            numpy.arange(width) * v1_transform.a
+                            + v1_transform.c
+                            + v1_transform.a / 2
                         )
                         y_coords = (
-                            v1_transform.f
-                            + (numpy.arange(v1_height) + 0.5) * v1_transform.e
+                            numpy.arange(height) * v1_transform.e
+                            + v1_transform.f
+                            + v1_transform.e / 2
                         )
                         ds = self.datatree[group].to_dataset()
                         da = ds[variable]
                         da = da.assign_coords({x_name: x_coords, y_name: y_coords})
+                        da = da.rio.write_crs(crs)
+                        da = da.rio.write_transform(v1_transform)
 
                 if da is None:
                     ds = self._get_indexed_dataset(group)

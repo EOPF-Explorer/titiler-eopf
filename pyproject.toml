@@ -3,7 +3,7 @@ name = "titiler.eopf"
 version = "0.7.0"
 description = "TiTiler application for EOPF datasets"
 readme = "README.md"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.12,<3.13"
 license = {file = "LICENSE"}
 authors = [
     {name = "Vincent Sarago", email = "vincent@developmentseed.com"},
@@ -17,7 +17,6 @@ classifiers = [
     "Intended Audience :: Information Technology",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: GIS",
@@ -33,17 +32,19 @@ dependencies = [
     "pydantic-settings~=2.0",
     "starlette-cramjam>=0.4,<1.0",
     "pyinstrument>=5.1.2",
+    "rioxarray>=0.22.0",
+    "xarray>=2026.2",
 ]
 
 [project.optional-dependencies]
-openeo = [
-    "titiler-openeo==0.13.0",
-    "duckdb",
-    "sqlalchemy>=2.0.0",
-    "psycopg2-binary",
-    "cryptography",
-    "httpx",
-]
+# openeo = [
+#     "titiler-openeo==0.13.0",
+#     "duckdb",
+#     "sqlalchemy>=2.0.0",
+#     "psycopg2-binary",
+#     "cryptography",
+#     "httpx",
+# ]
 cache = [
     "redis",
     "boto3",
@@ -65,7 +66,6 @@ dev = [
     "pre-commit",
     "bump-my-version",
     "boto3",
-    "titiler-openeo==0.13.0",
     "ipython",
     "ipykernel",
     "jupyter-client",
