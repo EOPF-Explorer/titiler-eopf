@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from starlette.applications import Starlette
 from starlette.responses import Response
+from starlette.routing import Route
 from starlette.testclient import TestClient
 
 from titiler.cache.middleware import CacheControlMiddleware, TileCacheMiddleware
@@ -319,7 +320,15 @@ class TestMiddlewareIntegration:
         key_generator = CacheKeyGenerator("test-app")
 
         # Create test application
-        app = Starlette()
+        routes = [
+            Route(
+                "/tiles/{z}/{x}/{y}",
+                endpoint=lambda request: Response(
+                    content=b"test tile", media_type="image/png"
+                ),
+            )
+        ]
+        app = Starlette(routes=routes)
 
         # Add middleware
         app.add_middleware(
@@ -328,11 +337,6 @@ class TestMiddlewareIntegration:
             key_generator=key_generator,
         )
         app.add_middleware(CacheControlMiddleware)
-
-        # Add test route
-        @app.route("/tiles/{z}/{x}/{y}")
-        async def get_tile(request):
-            return Response(content=b"test tile", media_type="image/png")
 
         # Test with client
         client = TestClient(app)
