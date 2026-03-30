@@ -3,7 +3,7 @@ name = "titiler.eopf"
 version = "0.7.0"
 description = "TiTiler application for EOPF datasets"
 readme = "README.md"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11,<3.14"
 license = {file = "LICENSE"}
 authors = [
     {name = "Vincent Sarago", email = "vincent@developmentseed.com"},

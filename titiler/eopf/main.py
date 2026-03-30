@@ -139,14 +139,14 @@ cache_backend, cache_key_generator = setup_cache_system()
 
 # HTML templates
 templates = Jinja2Templates(
-    autoescape=jinja2.select_autoescape(["html", "xml"]),
     env=jinja2.Environment(
+        autoescape=jinja2.select_autoescape(["html", "xml"]),
         loader=jinja2.ChoiceLoader(
             [
                 jinja2.PackageLoader(__package__, "templates"),
                 jinja2.PackageLoader("titiler.core", "templates"),
             ]
-        )
+        ),
     ),
 )
 
