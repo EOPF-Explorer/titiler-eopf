@@ -253,3 +253,365 @@ def test_feature(geozarr_dataset):
 
         img = src.feature(feat, variables=["/measurements/reflectance:b02"])
         assert img.assets == [geozarr_dataset]
+
+
+def test_3d_geozarr(geozarr_3d_dataset):
+    """"""
+    with GeoZarrReader(geozarr_3d_dataset) as src:
+        assert src.groups == ["/measurements/reflectance"]
+        assert src.variables == [
+            "/measurements/reflectance:b02",
+            "/measurements/reflectance:b03",
+            "/measurements/reflectance:b04",
+            "/measurements/reflectance:b05",
+            "/measurements/reflectance:b06",
+            "/measurements/reflectance:b07",
+            "/measurements/reflectance:b08",
+            "/measurements/reflectance:b11",
+            "/measurements/reflectance:b12",
+            "/measurements/reflectance:b8a",
+        ]
+
+        # Info
+        info = src.info(variables=["/measurements/reflectance:b02"])
+        v_info = info["/measurements/reflectance:b02"]
+        assert len(v_info.band_descriptions) == 2
+        assert v_info.band_descriptions[0][0] == "b1"
+        assert v_info.band_descriptions[0][1] == "2022-01-01T00:00:00.000000000"
+        assert v_info.name == "b02"
+        assert "time" in v_info.dimensions
+        assert v_info.count == 2
+
+        info = src.info(
+            variables=["/measurements/reflectance:b02"],
+            sel=["time=2022-01-02T00:00:00.000000000"],
+        )
+        v_info = info["/measurements/reflectance:b02"]
+        assert len(v_info.band_descriptions) == 1
+        assert v_info.band_descriptions[0][0] == "b1"
+        assert v_info.band_descriptions[0][1] == "2022-01-02T00:00:00.000000000"
+        assert v_info.name == "b02"
+        assert "time" not in v_info.dimensions
+        assert v_info.count == 1
+
+        info = src.info(
+            variables=["/measurements/reflectance:b02"],
+            sel=["time=nearest::2022-01-03T00:00:00.000000000"],
+        )
+        v_info = info["/measurements/reflectance:b02"]
+        assert len(v_info.band_descriptions) == 1
+        assert v_info.band_descriptions[0][0] == "b1"
+        assert v_info.band_descriptions[0][1] == "2022-01-02T00:00:00.000000000"
+        assert v_info.name == "b02"
+        assert "time" not in v_info.dimensions
+        assert v_info.count == 1
+
+        # Preview
+        img = src.preview(
+            variables=["/measurements/reflectance:b02"],
+        )
+        assert img.band_descriptions == [
+            "/measurements/reflectance:b02|2022-01-01T00:00:00.000000000",
+            "/measurements/reflectance:b02|2022-01-02T00:00:00.000000000",
+        ]
+
+        img = src.preview(
+            variables=[
+                "/measurements/reflectance:b02",
+                "/measurements/reflectance:b03",
+            ],
+        )
+        assert img.band_descriptions == [
+            "/measurements/reflectance:b02|2022-01-01T00:00:00.000000000",
+            "/measurements/reflectance:b02|2022-01-02T00:00:00.000000000",
+            "/measurements/reflectance:b03|2022-01-01T00:00:00.000000000",
+            "/measurements/reflectance:b03|2022-01-02T00:00:00.000000000",
+        ]
+
+        img = src.preview(
+            variables=[
+                "/measurements/reflectance:b02",
+                "/measurements/reflectance:b03",
+            ],
+            sel=["time=nearest::2022-01-03T00:00:00.000000000"],
+        )
+        assert img.band_descriptions == [
+            "/measurements/reflectance:b02|2022-01-02T00:00:00.000000000",
+            "/measurements/reflectance:b03|2022-01-02T00:00:00.000000000",
+        ]
+
+        # Cannot use expression with multi-bands variables
+        with pytest.raises(
+            ValueError, match="Can't use `expression` for multidim dataset"
+        ):
+            _ = src.preview(
+                expression="/measurements/reflectance:b02+/measurements/reflectance:b03",
+            )
+
+        img = src.preview(
+            expression="/measurements/reflectance:b02+/measurements/reflectance:b03",
+            sel=["time=nearest::2022-01-03T00:00:00.000000000"],
+        )
+        assert img.band_descriptions == [
+            "/measurements/reflectance:b02+/measurements/reflectance:b03"
+        ]
+
+        # Point
+        bounds = src.get_geographic_bounds("EPSG:4326")
+        lon, lat = (bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2
+
+        pt = src.point(
+            lon,
+            lat,
+            coord_crs="epsg:4326",
+            variables=["/measurements/reflectance:b02"],
+        )
+        assert pt.band_descriptions == [
+            "/measurements/reflectance:b02|2022-01-01T00:00:00.000000000",
+            "/measurements/reflectance:b02|2022-01-02T00:00:00.000000000",
+        ]
+
+        pt = src.point(
+            lon,
+            lat,
+            coord_crs="epsg:4326",
+            variables=[
+                "/measurements/reflectance:b02",
+                "/measurements/reflectance:b03",
+            ],
+        )
+        assert pt.band_descriptions == [
+            "/measurements/reflectance:b02|2022-01-01T00:00:00.000000000",
+            "/measurements/reflectance:b02|2022-01-02T00:00:00.000000000",
+            "/measurements/reflectance:b03|2022-01-01T00:00:00.000000000",
+            "/measurements/reflectance:b03|2022-01-02T00:00:00.000000000",
+        ]
+
+        pt = src.point(
+            lon,
+            lat,
+            coord_crs="epsg:4326",
+            variables=[
+                "/measurements/reflectance:b02",
+                "/measurements/reflectance:b03",
+            ],
+            sel=["time=nearest::2022-01-03T00:00:00.000000000"],
+        )
+        assert pt.band_descriptions == [
+            "/measurements/reflectance:b02|2022-01-02T00:00:00.000000000",
+            "/measurements/reflectance:b03|2022-01-02T00:00:00.000000000",
+        ]
+
+        # Cannot use expression with multi-bands variables
+        with pytest.raises(
+            ValueError, match="Can't use `expression` for multidim dataset"
+        ):
+            _ = src.point(
+                lon,
+                lat,
+                coord_crs="epsg:4326",
+                expression="/measurements/reflectance:b02+/measurements/reflectance:b03",
+            )
+
+        pt = src.point(
+            lon,
+            lat,
+            coord_crs="epsg:4326",
+            expression="/measurements/reflectance:b02+/measurements/reflectance:b03",
+            sel=["time=nearest::2022-01-03T00:00:00.000000000"],
+        )
+        assert pt.band_descriptions == [
+            "/measurements/reflectance:b02+/measurements/reflectance:b03"
+        ]
+
+        # Tile
+        tile = src.tms.tile(lon, lat, 10)
+
+        img = src.tile(
+            *tile,
+            variables=["/measurements/reflectance:b02"],
+        )
+        assert img.band_descriptions == [
+            "/measurements/reflectance:b02|2022-01-01T00:00:00.000000000",
+            "/measurements/reflectance:b02|2022-01-02T00:00:00.000000000",
+        ]
+
+        img = src.tile(
+            *tile,
+            variables=[
+                "/measurements/reflectance:b02",
+                "/measurements/reflectance:b03",
+            ],
+        )
+        assert img.band_descriptions == [
+            "/measurements/reflectance:b02|2022-01-01T00:00:00.000000000",
+            "/measurements/reflectance:b02|2022-01-02T00:00:00.000000000",
+            "/measurements/reflectance:b03|2022-01-01T00:00:00.000000000",
+            "/measurements/reflectance:b03|2022-01-02T00:00:00.000000000",
+        ]
+
+        img = src.tile(
+            *tile,
+            variables=[
+                "/measurements/reflectance:b02",
+                "/measurements/reflectance:b03",
+            ],
+            sel=["time=nearest::2022-01-03T00:00:00.000000000"],
+        )
+        assert img.band_descriptions == [
+            "/measurements/reflectance:b02|2022-01-02T00:00:00.000000000",
+            "/measurements/reflectance:b03|2022-01-02T00:00:00.000000000",
+        ]
+
+        # Cannot use expression with multi-bands variables
+        with pytest.raises(
+            ValueError, match="Can't use `expression` for multidim dataset"
+        ):
+            _ = src.tile(
+                *tile,
+                expression="/measurements/reflectance:b02+/measurements/reflectance:b03",
+            )
+
+        img = src.tile(
+            *tile,
+            expression="/measurements/reflectance:b02+/measurements/reflectance:b03",
+            sel=["time=nearest::2022-01-03T00:00:00.000000000"],
+        )
+        assert img.band_descriptions == [
+            "/measurements/reflectance:b02+/measurements/reflectance:b03"
+        ]
+
+        # Part
+        bbox = src.tms.xy_bounds(*tile)
+        img = src.part(
+            bbox,
+            bounds_crs="epsg:3857",
+            variables=["/measurements/reflectance:b02"],
+        )
+        assert img.band_descriptions == [
+            "/measurements/reflectance:b02|2022-01-01T00:00:00.000000000",
+            "/measurements/reflectance:b02|2022-01-02T00:00:00.000000000",
+        ]
+
+        img = src.part(
+            bbox,
+            bounds_crs="epsg:3857",
+            variables=[
+                "/measurements/reflectance:b02",
+                "/measurements/reflectance:b03",
+            ],
+        )
+        assert img.band_descriptions == [
+            "/measurements/reflectance:b02|2022-01-01T00:00:00.000000000",
+            "/measurements/reflectance:b02|2022-01-02T00:00:00.000000000",
+            "/measurements/reflectance:b03|2022-01-01T00:00:00.000000000",
+            "/measurements/reflectance:b03|2022-01-02T00:00:00.000000000",
+        ]
+
+        img = src.part(
+            bbox,
+            bounds_crs="epsg:3857",
+            variables=[
+                "/measurements/reflectance:b02",
+                "/measurements/reflectance:b03",
+            ],
+            sel=["time=nearest::2022-01-03T00:00:00.000000000"],
+        )
+        assert img.band_descriptions == [
+            "/measurements/reflectance:b02|2022-01-02T00:00:00.000000000",
+            "/measurements/reflectance:b03|2022-01-02T00:00:00.000000000",
+        ]
+
+        # Cannot use expression with multi-bands variables
+        with pytest.raises(
+            ValueError, match="Can't use `expression` for multidim dataset"
+        ):
+            _ = src.part(
+                bbox,
+                bounds_crs="epsg:3857",
+                expression="/measurements/reflectance:b02+/measurements/reflectance:b03",
+            )
+
+        img = src.part(
+            bbox,
+            bounds_crs="epsg:3857",
+            expression="/measurements/reflectance:b02+/measurements/reflectance:b03",
+            sel=["time=nearest::2022-01-03T00:00:00.000000000"],
+        )
+        assert img.band_descriptions == [
+            "/measurements/reflectance:b02+/measurements/reflectance:b03"
+        ]
+
+        # Feature
+        west, south, east, north = bbox
+        feature = {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [west, south],
+                    [west, north],
+                    [east, north],
+                    [east, south],
+                    [west, south],
+                ]
+            ],
+        }
+
+        img = src.feature(
+            feature,
+            shape_crs="epsg:3857",
+            variables=["/measurements/reflectance:b02"],
+        )
+        assert img.band_descriptions == [
+            "/measurements/reflectance:b02|2022-01-01T00:00:00.000000000",
+            "/measurements/reflectance:b02|2022-01-02T00:00:00.000000000",
+        ]
+
+        img = src.feature(
+            feature,
+            shape_crs="epsg:3857",
+            variables=[
+                "/measurements/reflectance:b02",
+                "/measurements/reflectance:b03",
+            ],
+        )
+        assert img.band_descriptions == [
+            "/measurements/reflectance:b02|2022-01-01T00:00:00.000000000",
+            "/measurements/reflectance:b02|2022-01-02T00:00:00.000000000",
+            "/measurements/reflectance:b03|2022-01-01T00:00:00.000000000",
+            "/measurements/reflectance:b03|2022-01-02T00:00:00.000000000",
+        ]
+
+        img = src.feature(
+            feature,
+            shape_crs="epsg:3857",
+            variables=[
+                "/measurements/reflectance:b02",
+                "/measurements/reflectance:b03",
+            ],
+            sel=["time=nearest::2022-01-03T00:00:00.000000000"],
+        )
+        assert img.band_descriptions == [
+            "/measurements/reflectance:b02|2022-01-02T00:00:00.000000000",
+            "/measurements/reflectance:b03|2022-01-02T00:00:00.000000000",
+        ]
+
+        # Cannot use expression with multi-bands variables
+        with pytest.raises(
+            ValueError, match="Can't use `expression` for multidim dataset"
+        ):
+            _ = src.feature(
+                feature,
+                shape_crs="epsg:3857",
+                expression="/measurements/reflectance:b02+/measurements/reflectance:b03",
+            )
+
+        img = src.feature(
+            feature,
+            shape_crs="epsg:3857",
+            expression="/measurements/reflectance:b02+/measurements/reflectance:b03",
+            sel=["time=nearest::2022-01-03T00:00:00.000000000"],
+        )
+        assert img.band_descriptions == [
+            "/measurements/reflectance:b02+/measurements/reflectance:b03"
+        ]

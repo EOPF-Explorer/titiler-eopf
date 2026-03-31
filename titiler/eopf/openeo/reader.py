@@ -59,6 +59,9 @@ class STACReader(SimpleSTACReader):
         # Variables
         if vars := asset.get("variables"):
             method_options["variables"] = vars
+        # Sel (dimension selection)
+        if vars := asset.get("sel"):
+            method_options["sel"] = vars
         # Bands
         if bands := asset.get("bands"):
             stac_bands = (

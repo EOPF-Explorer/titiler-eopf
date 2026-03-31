@@ -6,6 +6,7 @@ Script to create a optimized pyramid test fixture that mimics the new S2 optimiz
 import math
 import os
 import shutil
+from datetime import datetime
 from typing import Literal
 
 import numpy as np
@@ -19,6 +20,7 @@ from zarr.codecs import BloscCodec
 def create_geozarr_fixture(  # noqa: C901
     fixture_path: str,
     version: Literal["v0", "v1"] = "v0",
+    with_time: bool = False,
 ):
     """Create a optimized pyramid fixture with different variables at different scales."""
     if os.path.exists(fixture_path):
@@ -179,17 +181,39 @@ def create_geozarr_fixture(  # noqa: C901
     reflectance_group.attrs.update(root_attrs)
 
     def create_data_array_v0(
-        name, x_coords, y_coords, scale_factor=0.0001, offset=-0.1
+        name,
+        x_coords,
+        y_coords,
+        scale_factor=0.0001,
+        offset=-0.1,
+        with_time=False,
     ):
         """Create a synthetic data array."""
         height, width = len(y_coords), len(x_coords)
         # Create synthetic but realistic reflectance data
         data = np.random.uniform(1000, 8000, (height, width)).astype(np.uint16)
 
+        if with_time:
+            data = np.expand_dims(data, axis=0)  # create 3d array
+            data = np.repeat(data, 2, axis=0)  # replicate array on the time dimension
+            coords = {
+                "y": y_coords,
+                "x": x_coords,
+                "time": [
+                    datetime(2022, 1, 1),
+                    datetime(2022, 1, 2),
+                ],
+            }
+            dims = ["time", "y", "x"]
+
+        else:
+            coords = {"y": y_coords, "x": x_coords}
+            dims = ["y", "x"]
+
         da = xr.DataArray(
             data,
-            coords={"y": y_coords, "x": x_coords},
-            dims=["y", "x"],
+            coords=coords,
+            dims=dims,
             name=name,
             attrs={
                 "long_name": f"BOA reflectance from MSI acquisition at spectral band {name}",
@@ -220,17 +244,39 @@ def create_geozarr_fixture(  # noqa: C901
         return da
 
     def create_data_array_v1(
-        name, x_coords, y_coords, scale_factor=0.0001, offset=-0.1
+        name,
+        x_coords,
+        y_coords,
+        scale_factor=0.0001,
+        offset=-0.1,
+        with_time=False,
     ):
         """Create a synthetic data array."""
         height, width = len(y_coords), len(x_coords)
         # Create synthetic but realistic reflectance data
         data = np.random.uniform(1000, 8000, (height, width)).astype(np.uint16)
 
+        if with_time:
+            data = np.expand_dims(data, axis=0)  # create 3d array
+            data = np.repeat(data, 2, axis=0)  # replicate array on the time dimension
+            coords = {
+                "y": y_coords,
+                "x": x_coords,
+                "time": [
+                    datetime(2022, 1, 1),
+                    datetime(2022, 1, 2),
+                ],
+            }
+            dims = ["time", "y", "x"]
+
+        else:
+            coords = {"y": y_coords, "x": x_coords}
+            dims = ["y", "x"]
+
         da = xr.DataArray(
             data,
-            coords={"y": y_coords, "x": x_coords},
-            dims=["y", "x"],
+            coords=coords,
+            dims=dims,
             name=name,
             attrs={
                 "zarr_conventions": [
@@ -285,7 +331,7 @@ def create_geozarr_fixture(  # noqa: C901
 
         return da
 
-    def create_coord_arrays(x_coords, y_coords):
+    def create_coord_arrays(x_coords, y_coords) -> dict[str, xr.DataArray]:
         """Create coordinate arrays."""
         x_da = xr.DataArray(
             x_coords,
@@ -308,35 +354,26 @@ def create_geozarr_fixture(  # noqa: C901
                 "long_name": "y coordinate of projection",
             },
         )
-
-        return x_da, y_da
+        return {"x": x_da, "y": y_da}
 
     # Level 0 (10m): Only native 10m bands
     print("Creating Level 0 (10m) with bands: b02, b03, b04, b08")
 
-    x_da, y_da = create_coord_arrays(base_x_10m, base_y_10m)
+    coords = create_coord_arrays(base_x_10m, base_y_10m)
 
     create_data_array = (
         create_data_array_v0 if version == "v0" else create_data_array_v1
     )
 
     # Native 10m bands
-    b02_10m = create_data_array("b02", base_x_10m, base_y_10m)
-    b03_10m = create_data_array("b03", base_x_10m, base_y_10m)
-    b04_10m = create_data_array("b04", base_x_10m, base_y_10m)
-    b08_10m = create_data_array("b08", base_x_10m, base_y_10m)
+    bands_10m = {}
+    for band in ["b02", "b03", "b04", "b08"]:
+        bands_10m[band] = create_data_array(
+            band, base_x_10m, base_y_10m, with_time=with_time
+        )
 
     # Create level 0 dataset
-    level_0_ds = xr.Dataset(
-        {
-            "b02": b02_10m,
-            "b03": b03_10m,
-            "b04": b04_10m,
-            "b08": b08_10m,
-            "x": x_da,
-            "y": y_da,
-        }
-    )
+    level_0_ds = xr.Dataset({**bands_10m, **coords})
 
     # Set CRS at dataset level
     level_0_ds = level_0_ds.rio.write_crs(crs)
@@ -368,20 +405,16 @@ def create_geozarr_fixture(  # noqa: C901
     # Level 1 (20m): All bands (native 20m + downsampled 10m)
     print("Creating Level 1 (20m) with all bands")
 
-    x_da, y_da = create_coord_arrays(base_x_20m, base_y_20m)
+    coords = create_coord_arrays(base_x_20m, base_y_20m)
 
     # All bands at 20m resolution
     bands_20m = {}
     for band in ["b02", "b03", "b04", "b05", "b06", "b07", "b08", "b11", "b12", "b8a"]:
-        bands_20m[band] = create_data_array(band, base_x_20m, base_y_20m)
+        bands_20m[band] = create_data_array(
+            band, base_x_20m, base_y_20m, with_time=with_time
+        )
 
-    level_1_ds = xr.Dataset(
-        {
-            **bands_20m,
-            "x": x_da,
-            "y": y_da,
-        }
-    )
+    level_1_ds = xr.Dataset({**bands_20m, **coords})
 
     # Set CRS at dataset level
     level_1_ds = level_1_ds.rio.write_crs(crs)
@@ -413,20 +446,16 @@ def create_geozarr_fixture(  # noqa: C901
     # Level 2 (60m): All bands
     print("Creating Level 2 (60m) with all bands")
 
-    x_da, y_da = create_coord_arrays(base_x_60m, base_y_60m)
+    coords = create_coord_arrays(base_x_60m, base_y_60m)
 
     # All bands at 60m resolution
     bands_60m = {}
     for band in ["b02", "b03", "b04", "b05", "b06", "b07", "b08", "b11", "b12", "b8a"]:
-        bands_60m[band] = create_data_array(band, base_x_60m, base_y_60m)
+        bands_60m[band] = create_data_array(
+            band, base_x_60m, base_y_60m, with_time=with_time
+        )
 
-    level_2_ds = xr.Dataset(
-        {
-            **bands_60m,
-            "x": x_da,
-            "y": y_da,
-        }
-    )
+    level_2_ds = xr.Dataset({**bands_60m, **coords})
 
     # Set CRS at dataset level
     level_2_ds = level_2_ds.rio.write_crs(crs)
@@ -458,20 +487,16 @@ def create_geozarr_fixture(  # noqa: C901
     # Level 3 (120m): All bands (downsampled from level 2)
     print("Creating Level 3 (120m) with all bands")
 
-    x_da, y_da = create_coord_arrays(base_x_120m, base_y_120m)
+    coords = create_coord_arrays(base_x_120m, base_y_120m)
 
     # All bands at 120m resolution
     bands_120m = {}
     for band in ["b02", "b03", "b04", "b05", "b06", "b07", "b08", "b11", "b12", "b8a"]:
-        bands_120m[band] = create_data_array(band, base_x_120m, base_y_120m)
+        bands_120m[band] = create_data_array(
+            band, base_x_120m, base_y_120m, with_time=with_time
+        )
 
-    level_3_ds = xr.Dataset(
-        {
-            **bands_120m,
-            "x": x_da,
-            "y": y_da,
-        }
-    )
+    level_3_ds = xr.Dataset({**bands_120m, **coords})
 
     # Set CRS at dataset level
     level_3_ds = level_3_ds.rio.write_crs(crs)
