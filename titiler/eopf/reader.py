@@ -1169,7 +1169,10 @@ class GeoZarrReader(BaseReader):
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
 
-                img.band_descriptions = [f"{gv}|{b}" for b in img.band_descriptions]
+                if len(img.band_names) > 1 or sel:
+                    img.band_descriptions = [f"{gv}|{b}" for b in img.band_descriptions]
+                else:
+                    img.band_descriptions = [gv]
 
                 img_stack.append(img)
 
@@ -1261,7 +1264,10 @@ class GeoZarrReader(BaseReader):
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
 
-                img.band_descriptions = [f"{gv}|{b}" for b in img.band_descriptions]
+                if len(img.band_names) > 1 or sel:
+                    img.band_descriptions = [f"{gv}|{b}" for b in img.band_descriptions]
+                else:
+                    img.band_descriptions = [gv]
 
                 img_stack.append(img)
 
@@ -1342,7 +1348,10 @@ class GeoZarrReader(BaseReader):
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
 
-                img.band_descriptions = [f"{gv}|{b}" for b in img.band_descriptions]
+                if len(img.band_names) > 1 or sel:
+                    img.band_descriptions = [f"{gv}|{b}" for b in img.band_descriptions]
+                else:
+                    img.band_descriptions = [gv]
 
                 img_stack.append(img)
 
@@ -1404,7 +1413,10 @@ class GeoZarrReader(BaseReader):
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     pt.band_names = [self._variable_idx[gv]]
 
-                pt.band_descriptions = [f"{gv}|{b}" for b in pt.band_descriptions]
+                if len(pt.band_names) > 1 or sel:
+                    pt.band_descriptions = [f"{gv}|{b}" for b in pt.band_descriptions]
+                else:
+                    pt.band_descriptions = [gv]
 
                 pts_stack.append(pt)
 
@@ -1496,7 +1508,10 @@ class GeoZarrReader(BaseReader):
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
 
-                img.band_descriptions = [f"{gv}|{b}" for b in img.band_descriptions]
+                if len(img.band_names) > 1 or sel:
+                    img.band_descriptions = [f"{gv}|{b}" for b in img.band_descriptions]
+                else:
+                    img.band_descriptions = [gv]
 
                 img_stack.append(img)
 
