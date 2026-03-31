@@ -10,7 +10,7 @@ import re
 import warnings
 from functools import cache, cached_property, lru_cache
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Union
+from typing import Any, Callable, Dict, List, Literal
 from urllib.parse import urlparse
 
 import attr
@@ -36,6 +36,8 @@ from rio_tiler.models import BandStatistics, ImageData, Info, PointData
 from rio_tiler.reader import _get_width_height, _missing_size
 from rio_tiler.types import BBox
 from zarr.storage import ObjectStore
+
+from titiler.xarray.io import _parse_dsl
 
 from .cache import RedisCache
 from .settings import CacheSettings
@@ -842,7 +844,6 @@ class GeoZarrReader(BaseReader):
         variable: str,
         *,
         sel: List[str] | None = None,
-        method: sel_methods | None = None,
         # MultiScale Selection
         bounds: BBox | None = None,
         height: int | None = None,
@@ -1009,23 +1010,20 @@ class GeoZarrReader(BaseReader):
             # Select Variable (xarray.DataArray)
             da = tree[variable]
 
-        if sel:
-            _idx: Dict[str, List] = {}
-            for s in sel:
-                val: Union[str, slice]
-                dim, val = s.split("=")
+        for selector in _parse_dsl(sel):
+            dimension = selector["dimension"]
+            values = selector["values"]
+            method = selector["method"]
 
-                # cast string to dtype of the dimension
-                if da[dim].dtype != "O":
-                    val = da[dim].dtype.type(val)
+            # TODO: add more casting
+            # cast string to dtype of the dimension
+            if da[dimension].dtype != "O":
+                values = [da[dimension].dtype.type(v) for v in values]
 
-                if dim in _idx:
-                    _idx[dim].append(val)
-                else:
-                    _idx[dim] = [val]
-
-            sel_idx = {k: v[0] if len(v) < 2 else v for k, v in _idx.items()}
-            da = da.sel(sel_idx, method=method)
+            da = da.sel(
+                {dimension: values[0] if len(values) < 2 else values},
+                method=method,
+            )
 
         da = _arrange_dims(da)
         assert len(da.dims) in [
@@ -1070,7 +1068,6 @@ class GeoZarrReader(BaseReader):
         *,
         variables: List[str] | None = None,
         sel: List[str] | None = None,
-        method: sel_methods | None = None,
     ) -> Dict[str, Info]:
         """Return xarray.DataArray info.
 
@@ -1085,20 +1082,9 @@ class GeoZarrReader(BaseReader):
                     group_var.split(":") if ":" in group_var else ("/", group_var)
                 )
                 with XarrayReader(
-                    self._get_variable(group, variable, sel=sel, method=method),
+                    self._get_variable(group, variable, sel=sel),
                 ) as da:
-                    info = da.info()
-                    # Fix band descriptions to use actual variable name
-                    variable_name = (
-                        group_var.split(":")[-1] if ":" in group_var else group_var
-                    )
-                    if info.band_descriptions:
-                        # Replace the band description with the actual variable name
-                        info.band_descriptions = [
-                            (band_idx, variable_name)
-                            for band_idx, _ in info.band_descriptions
-                        ]
-                    return info
+                    return da.info()
             except Exception as e:
                 logger.info(f"Failed to get info for variable '{group_var}': {e!s}")
                 return None
@@ -1117,7 +1103,6 @@ class GeoZarrReader(BaseReader):
         variables: List[str] | None = None,
         expression: str | None = None,
         sel: List[str] | None = None,
-        method: sel_methods | None = None,
         **kwargs: Any,
     ) -> Dict[str, Dict[str, BandStatistics]]:
         """Return statistics from a dataset."""
@@ -1133,7 +1118,6 @@ class GeoZarrReader(BaseReader):
         expression: str | None = None,
         tilesize: int = 256,
         sel: List[str] | None = None,
-        method: sel_methods | None = None,
         **kwargs: Any,
     ) -> ImageData:
         """Read a Web Map tile from a dataset."""
@@ -1157,14 +1141,13 @@ class GeoZarrReader(BaseReader):
                 "`variables` must be passed via `expression` or `variables` options."
             )
 
-        for ix, gv in enumerate(variables):
+        for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
             with XarrayReader(
                 self._get_variable(
                     group,
                     variable,
                     sel=sel,
-                    method=method,
                     bounds=tile_bounds,
                     height=tilesize,
                     width=tilesize,
@@ -1185,10 +1168,8 @@ class GeoZarrReader(BaseReader):
                         raise ValueError("Can't use `expression` for multidim dataset")
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
-                else:
-                    img.band_names = [f"b{ix + 1}"]
 
-                img.band_descriptions = [gv]
+                img.band_descriptions = [f"{gv}|{b}" for b in img.band_descriptions]
 
                 img_stack.append(img)
 
@@ -1222,7 +1203,6 @@ class GeoZarrReader(BaseReader):
         height: int | None = None,
         width: int | None = None,
         sel: List[str] | None = None,
-        method: sel_methods | None = None,
         **kwargs: Any,
     ) -> ImageData:
         """Read part of a dataset."""
@@ -1251,14 +1231,13 @@ class GeoZarrReader(BaseReader):
                 "`variables` must be passed via `expression` or `variables` options."
             )
 
-        for ix, gv in enumerate(variables):
+        for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
             with XarrayReader(
                 self._get_variable(
                     group,
                     variable,
                     sel=sel,
-                    method=method,
                     max_size=max_size,
                     height=height,
                     width=width,
@@ -1281,10 +1260,8 @@ class GeoZarrReader(BaseReader):
                         raise ValueError("Can't use `expression` for multidim dataset")
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
-                else:
-                    img.band_names = [f"b{ix + 1}"]
 
-                img.band_descriptions = [gv]
+                img.band_descriptions = [f"{gv}|{b}" for b in img.band_descriptions]
 
                 img_stack.append(img)
 
@@ -1316,7 +1293,6 @@ class GeoZarrReader(BaseReader):
         height: int | None = None,
         width: int | None = None,
         sel: List[str] | None = None,
-        method: sel_methods | None = None,
         dst_crs: CRS | None = None,
         **kwargs: Any,
     ) -> ImageData:
@@ -1338,14 +1314,13 @@ class GeoZarrReader(BaseReader):
                 "`variables` must be passed via `expression` or `variables` options."
             )
 
-        for ix, gv in enumerate(variables):
+        for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
             with XarrayReader(
                 self._get_variable(
                     group,
                     variable,
                     sel=sel,
-                    method=method,
                     max_size=max_size,
                     height=height,
                     width=width,
@@ -1366,10 +1341,8 @@ class GeoZarrReader(BaseReader):
                         raise ValueError("Can't use `expression` for multidim dataset")
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
-                else:
-                    img.band_names = [f"b{ix + 1}"]
 
-                img.band_descriptions = [gv]
+                img.band_descriptions = [f"{gv}|{b}" for b in img.band_descriptions]
 
                 img_stack.append(img)
 
@@ -1398,7 +1371,6 @@ class GeoZarrReader(BaseReader):
         variables: List[str] | None = None,
         expression: str | None = None,
         sel: List[str] | None = None,
-        method: sel_methods | None = None,
         **kwargs: Any,
     ) -> PointData:
         """Read a pixel value from a dataset."""
@@ -1419,10 +1391,10 @@ class GeoZarrReader(BaseReader):
                 "`variables` must be passed via `expression` or `variables` options."
             )
 
-        for ix, gv in enumerate(variables):
+        for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
             with XarrayReader(
-                self._get_variable(group, variable, sel=sel, method=method),
+                self._get_variable(group, variable, sel=sel),
                 tms=self.tms,
             ) as da:
                 pt = da.point(*args, **kwargs)
@@ -1431,10 +1403,8 @@ class GeoZarrReader(BaseReader):
                         raise ValueError("Can't use `expression` for multidim dataset")
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     pt.band_names = [self._variable_idx[gv]]
-                else:
-                    pt.band_names = [f"b{ix + 1}"]
 
-                pt.band_descriptions = [gv]
+                pt.band_descriptions = [f"{gv}|{b}" for b in pt.band_descriptions]
 
                 pts_stack.append(pt)
 
@@ -1463,7 +1433,6 @@ class GeoZarrReader(BaseReader):
         max_size: int | None = 1024,
         height: int | None = None,
         width: int | None = None,
-        method: sel_methods | None = None,
         dst_crs: CRS | None = None,
         **kwargs: Any,
     ) -> ImageData:
@@ -1497,14 +1466,13 @@ class GeoZarrReader(BaseReader):
                 "`variables` must be passed via `expression` or `variables` options."
             )
 
-        for ix, gv in enumerate(variables):
+        for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
             with XarrayReader(
                 self._get_variable(
                     group,
                     variable,
                     sel=sel,
-                    method=method,
                     max_size=max_size,
                     height=height,
                     width=width,
@@ -1527,10 +1495,8 @@ class GeoZarrReader(BaseReader):
                         raise ValueError("Can't use `expression` for multidim dataset")
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
-                else:
-                    img.band_names = [f"b{ix + 1}"]
 
-                img.band_descriptions = [gv]
+                img.band_descriptions = [f"{gv}|{b}" for b in img.band_descriptions]
 
                 img_stack.append(img)
 
@@ -1545,10 +1511,10 @@ class GeoZarrReader(BaseReader):
 
             # NOTE: transform expression back
             img.band_descriptions = [
-                self._convert_expression_from_index(b) for b in img.band_names
+                self._convert_expression_from_index(b) for b in img.band_descriptions
             ]
-            img.band_names = [f"b{ix + 1}" for ix, _ in enumerate(img.band_names)]
 
+        img.band_names = [f"b{ix + 1}" for ix in range(img.count)]
         img.assets = [self.input]
 
         return img

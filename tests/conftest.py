@@ -39,12 +39,12 @@ def redis_host() -> Generator[str, Any, Any]:
 def geozarr(request):
     """Create GeoZarr v1 fixture."""
     version = request.param
-    geozarr_dir = os.path.join(FIXTURES_DIRECTORY, "eopf")
-    geozarr = os.path.join(geozarr_dir, f"geozarr_{version}.zarr")
+    collection_dir = os.path.join(FIXTURES_DIRECTORY, "eopf")
+    geozarr = os.path.join(collection_dir, f"geozarr_{version}.zarr")
     create_geozarr_fixture(geozarr, version=version)
     yield ("eopf", f"geozarr_{version}")
-    if os.path.exists(geozarr_dir):
-        shutil.rmtree(geozarr_dir)
+    if os.path.exists(collection_dir):
+        shutil.rmtree(collection_dir)
 
 
 @pytest.fixture
@@ -66,6 +66,38 @@ def geozarr_stac(geozarr_dataset):
     )
     template = env.get_template("item.json")
     return template.render(store_url=f"file://{geozarr_dataset}")
+
+
+@pytest.fixture
+def geozarr_3d():
+    """Create GeoZarr v1 with time dimension fixture."""
+    collection_dir = os.path.join(FIXTURES_DIRECTORY, "eopf3d")
+    geozarr = os.path.join(collection_dir, "geozarr_with_time.zarr")
+    create_geozarr_fixture(geozarr, version="v1", with_time=True)
+    yield ("eopf3d", "geozarr_with_time")
+    if os.path.exists(collection_dir):
+        shutil.rmtree(collection_dir)
+
+
+@pytest.fixture
+def geozarr_3d_dataset(geozarr_3d):
+    """GeoZarr dataset path."""
+    collection, item = geozarr_3d
+    return os.path.join(FIXTURES_DIRECTORY, collection, f"{item}.zarr")
+
+
+@pytest.fixture
+def geozarr_3d_stac(geozarr_3d_dataset):
+    """Create GeoZARR STAC Item."""
+    env = jinja2.Environment(
+        loader=jinja2.ChoiceLoader(
+            [
+                jinja2.FileSystemLoader(FIXTURES_DIRECTORY),
+            ]
+        )
+    )
+    template = env.get_template("item.json")
+    return template.render(store_url=f"file://{geozarr_3d_dataset}")
 
 
 @pytest.fixture(autouse=True)

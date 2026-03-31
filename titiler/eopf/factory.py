@@ -105,7 +105,7 @@ class TilerFactory(BaseTilerFactory):
                 logger.info(f"opening data with reader: {self.reader}")
                 with self.reader(src_path, **reader_params.as_dict()) as src_dst:
                     variables = variables_params.variables or src_dst.variables
-                    return src_dst.info(variables=variables)
+                    return src_dst.info(variables=variables, sel=variables_params.sel)
 
         @self.router.get(
             "/info.geojson",
@@ -149,7 +149,9 @@ class TilerFactory(BaseTilerFactory):
                         type="Feature",
                         bbox=bounds,
                         geometry=geometry,
-                        properties=src_dst.info(variables=variables),
+                        properties=src_dst.info(
+                            variables=variables, sel=variables_params.sel
+                        ),
                     )
 
     ############################################################################

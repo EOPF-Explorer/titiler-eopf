@@ -2,7 +2,7 @@
 
 import os
 from dataclasses import dataclass
-from typing import Annotated, List, Literal
+from typing import Annotated, List
 
 from fastapi import Path, Query
 from starlette.requests import Request
@@ -29,23 +29,8 @@ def DatasetPathParams(
 
 
 @dataclass
-class XarrayParams(DefaultDependency):
+class VariablesParams(DefaultDependency):
     """Xarray Dataset Options."""
-
-    sel: Annotated[
-        List[SelDimStr] | None,
-        Query(
-            description="Xarray Indexing using dimension names `{dimension}={value}`.",
-        ),
-    ] = None
-
-    method: Annotated[
-        Literal["nearest", "pad", "ffill", "backfill", "bfill"] | None,
-        Query(
-            alias="sel_method",
-            description="Xarray indexing method to use for inexact matches.",
-        ),
-    ] = None
 
     variables: Annotated[
         List[str] | None,
@@ -54,9 +39,16 @@ class XarrayParams(DefaultDependency):
         ),
     ] = None
 
+    sel: Annotated[
+        List[SelDimStr] | None,
+        Query(
+            description="Xarray Indexing using dimension names `{dimension}={value}` or `{dimension}={method}::{value}`.",
+        ),
+    ] = None
+
 
 @dataclass
-class LayerParams(BidxParams, ExpressionParams, XarrayParams):
+class LayerParams(BidxParams, ExpressionParams, VariablesParams):
     """variable + indexes."""
 
     def __post_init__(self):
@@ -65,30 +57,3 @@ class LayerParams(BidxParams, ExpressionParams, XarrayParams):
             raise ValueError(
                 "variables must be defined either via expression or variables options."
             )
-
-
-@dataclass
-class VariablesParams(DefaultDependency):
-    """Xarray Dataset Options."""
-
-    sel: Annotated[
-        List[SelDimStr] | None,
-        Query(
-            description="Xarray Indexing using dimension names `{dimension}={value}`.",
-        ),
-    ] = None
-
-    method: Annotated[
-        Literal["nearest", "pad", "ffill", "backfill", "bfill"] | None,
-        Query(
-            alias="sel_method",
-            description="Xarray indexing method to use for inexact matches.",
-        ),
-    ] = None
-
-    variables: Annotated[
-        List[str] | None,
-        Query(
-            description="Xarray Variable name in form of `{group_name}:{variable_name}`."
-        ),
-    ] = None
