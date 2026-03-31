@@ -73,6 +73,10 @@ dev = [
     "owslib",
 ]
 
+performance = [
+    "pytest-benchmark",
+]
+
 [project.urls]
 Homepage = 'https://github.com/EOPF-Explorer/titiler-eopf'
 Documentation = "https://github.com/EOPF-Explorer/titiler-eopf"
