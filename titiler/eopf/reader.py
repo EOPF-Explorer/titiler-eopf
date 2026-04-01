@@ -263,10 +263,12 @@ def _arrange_dims(da: xarray.DataArray) -> xarray.DataArray:
         da.attrs.update({"valid_min": valid_range[0], "valid_max": valid_range[1]})
 
     # Make sure we have a valid CRS
-    crs = da.rio.crs or "epsg:4326"
-    da = da.rio.write_crs(crs)
+    crs = da.rio.crs
+    if not crs:
+        crs = WGS84_CRS
+        da = da.rio.write_crs(WGS84_CRS)
 
-    if crs == "epsg:4326" and (da.x > 180).any():
+    if crs == WGS84_CRS and (da.x > 180).any():
         # Adjust the longitude coordinates to the -180 to 180 range
         da = da.assign_coords(x=(da.x + 180) % 360 - 180)
 
