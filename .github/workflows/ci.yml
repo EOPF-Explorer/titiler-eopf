@@ -36,7 +36,7 @@ jobs:
         uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
           version: "0.9.*" 
-          enable-cache: true
+          enable-cache: false
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
@@ -75,19 +75,19 @@ jobs:
         uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
           version: "0.9.*" 
-          enable-cache: true
+          enable-cache: false
           python-version: ${{ env.LATEST_PY_VERSION }}
 
       - name: Install dependencies
         run: |
-          uv sync
+          uv sync --frozen
 
       - name: Run Benchmark
         run: |
           uv run --frozen --group performance pytest tests/benchmarks/benchmarks.py --benchmark-only --benchmark-columns 'min, max, mean, median' --benchmark-sort 'min' --benchmark-json output.json
 
       - name: Store and Compare benchmark result
-        uses: benchmark-action/github-action-benchmark@v1
+        uses: benchmark-action/github-action-benchmark@a7bc2366eda11037936ea57d811a43b3418d3073 # v1
         with:
           name: titiler-eopf Benchmarks
           tool: 'pytest'
