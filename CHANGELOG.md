@@ -8,6 +8,28 @@
 
 **Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.4.0...v0.5.0
 
+## 0.8.0 (2026-04-02)
+
+## What's Changed
+* chore(openeo): update titiler-openeo to version 0.12.0 and refactor related code by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/71
+* test: dynamic fixture creation by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/78
+* feat: support GeoZarr V1 by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/79
+* fix: add tilesize in tilejson endpoint by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/83
+* feat: add stac mosaic by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/73
+* fix: update viewer for SAR viz by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/86
+* ci: pin GitHub Actions to commit SHAs (coordination#239) by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/87
+* feat: update titiler-openeo by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/90
+* chore(deps): bump the all group across 1 directory with 9 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/91
+* feat: add support for multiband variables and better dimension selection by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/93
+* feat: add pytest benchmark by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/94
+* feat: update dependencies and set python >=3.12 by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/95
+* perf: avoid writing CRS to dataarray by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/96
+
+## New Contributors
+* @lhoupert made their first contribution in https://github.com/EOPF-Explorer/titiler-eopf/pull/87
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.7.0...v0.8.0
+
 ## 0.7.0 (2026-01-25)
 
 ## What's Changed
