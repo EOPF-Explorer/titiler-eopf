@@ -268,25 +268,15 @@ def _arrange_dims(da: xarray.DataArray) -> xarray.DataArray:
     # Make sure we have a valid CRS
     crs = da.rio.crs
     if not crs:
-        crs = "epsg:4326"
+        crs = WGS84_CRS
         da = da.rio.write_crs(crs)
 
-    if crs == "epsg:4326":
-        # Check if longitude needs wrapping to -180..180 range.
-        # Use bounds (works with or without coordinate arrays).
-        bounds = da.rio.bounds()
-        if bounds[2] > 180:
-            if "x" in da.coords and da.coords["x"].size > 1:
-                da = da.assign_coords(x=(da.x + 180) % 360 - 180)
-                da = da.sortby(da.x)
-            else:
-                # DataArray uses write_transform without coordinate arrays;
-                # shift the transform origin into -180..180 range.
-                t = da.rio.transform()
-                new_c = ((t.c + 180) % 360) - 180
-                da = da.rio.write_transform(
-                    Affine(t.a, t.b, new_c, t.d, t.e, t.f),
-                )
+    if crs == WGS84_CRS and (da.x > 180).any():
+        # Adjust the longitude coordinates to the -180 to 180 range
+        da = da.assign_coords(x=(da.x + 180) % 360 - 180)
+
+        # Sort the dataset by the updated longitude coordinates
+        da = da.sortby(da.x)
 
     return da
 
