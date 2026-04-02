@@ -60,6 +60,52 @@ def test_stac_reader(geozarr_stac):
         assert img.band_descriptions == ["reflectance_b02"]
 
 
+def test_stac_reader_3d(geozarr_3d_stac):
+    """test EOPFSimpleSTACReader."""
+    stac = json.loads(geozarr_3d_stac)
+    simple_item = {
+        "id": stac["id"],
+        "collection": stac["collection"],
+        "bbox": stac["bbox"],
+        "properties": stac["properties"],
+        "assets": stac["assets"],
+    }
+    with EOPFSimpleSTACReader(simple_item) as src:
+        assert src.assets == ["reflectance"]
+
+        info = src._get_asset_info("reflectance")
+        assert info["url"].endswith(".zarr/measurements/reflectance")
+        assert info["name"] == "reflectance"
+
+        info = src._get_asset_info(
+            {
+                "name": "reflectance",
+                "variables": ["b02"],
+                "sel": ["time=2022-01-02T00:00:00.000000000"],
+            }
+        )
+        assert info["url"].endswith(".zarr/measurements/reflectance")
+        assert info["name"] == "reflectance"
+        assert info["method_options"]["sel"] == ["time=2022-01-02T00:00:00.000000000"]
+
+        info = src.info(
+            assets=[
+                {
+                    "name": "reflectance",
+                    "bands": ["blue"],
+                    "sel": ["time=2022-01-02T00:00:00.000000000"],
+                }
+            ]
+        )
+        assert info[
+            "reflectance|bands=['blue']&sel=['time=2022-01-02T00:00:00.000000000']"
+        ]
+        b2_info = info[
+            "reflectance|bands=['blue']&sel=['time=2022-01-02T00:00:00.000000000']"
+        ]["b02"]
+        assert b2_info.band_descriptions[0][1] == "2022-01-02T00:00:00.000000000"
+
+
 @patch("titiler.eopf.stac.EOPFSTACAPIBackend.get_assets")
 def test_stacapi_backend(get_assets, geozarr_stac):
     """test EOPFSTACAPIBackend."""

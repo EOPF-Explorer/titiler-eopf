@@ -3,7 +3,7 @@ name = "titiler.eopf"
 version = "0.7.0"
 description = "TiTiler application for EOPF datasets"
 readme = "README.md"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.12,<3.14"
 license = {file = "LICENSE"}
 authors = [
     {name = "Vincent Sarago", email = "vincent@developmentseed.com"},
@@ -27,24 +27,22 @@ dependencies = [
     "titiler-xarray>=2.0,<3.0",
     "titiler-extensions>=2.0,<3.0",
     "titiler-stacapi>=2.0,<3.0",
+    "rioxarray>=0.22",
     "zarr>=3.1.3",
     "obstore",
     "pydantic-settings~=2.0",
     "starlette-cramjam>=0.4,<1.0",
-    "pyinstrument>=5.1.2",
-    "rioxarray>=0.22.0",
-    "xarray>=2026.2",
 ]
 
 [project.optional-dependencies]
-# openeo = [
-#     "titiler-openeo==0.13.0",
-#     "duckdb",
-#     "sqlalchemy>=2.0.0",
-#     "psycopg2-binary",
-#     "cryptography",
-#     "httpx",
-# ]
+openeo = [
+    "titiler-openeo==0.14.1",
+    "duckdb",
+    "sqlalchemy>=2.0.0",
+    "psycopg2-binary",
+    "cryptography",
+    "httpx",
+]
 cache = [
     "redis",
     "boto3",
@@ -66,12 +64,17 @@ dev = [
     "pre-commit",
     "bump-my-version",
     "boto3",
+    "titiler-openeo==0.14.1",
     "ipython",
     "ipykernel",
     "jupyter-client",
     "matplotlib",
     "folium",
     "owslib",
+]
+
+performance = [
+    "pytest-benchmark",
 ]
 
 [project.urls]

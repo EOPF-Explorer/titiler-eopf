@@ -15,7 +15,7 @@ from titiler.eopf.reader import GeoZarrReader
 from titiler.stacapi.backend import STACAPIBackend
 from titiler.stacapi.reader import SimpleSTACReader
 
-VALID_ASSET_OPTIONS = {"bidx", "expression", "bands", "variables"}
+VALID_ASSET_OPTIONS = {"bidx", "expression", "bands", "variables", "sel"}
 
 
 def _parse_option(key: str, value: str) -> tuple[str, Any]:
@@ -39,6 +39,9 @@ def _parse_option(key: str, value: str) -> tuple[str, Any]:
     if key == "variables":
         return ("variables", value.split(","))
 
+    if key == "sel":
+        return ("sel", value.split(","))
+
     raise ValueError(
         f"Unknown asset option '{key}'. "
         f"Valid options: {', '.join(sorted(VALID_ASSET_OPTIONS))}"
@@ -55,6 +58,7 @@ def _parse_asset(values: list[str]) -> list[AssetType]:
         - ``expression=...`` — band math expression
         - ``bands=red,green`` — band names
         - ``variables=vv,vh`` — variable names (for GeoZarr)
+        - ``sel=time=2022-02-01`` — dimension selection (for GeoZarr)
 
     Raises:
         ValueError: If an option is missing a ``key=value`` pair or uses an unknown key.
@@ -179,6 +183,9 @@ class EOPFSimpleSTACReader(SimpleSTACReader):
             # Variables
             if vars := asset.get("variables"):
                 method_options["variables"] = vars
+            # Sel (dimension selection)
+            if vars := asset.get("sel"):
+                method_options["sel"] = vars
             # Bands
             if bands := asset.get("bands"):
                 stac_bands = asset_info.get("bands") or asset_info.get("eo:bands")
