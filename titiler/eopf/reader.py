@@ -14,6 +14,7 @@ from typing import Any, Callable, Dict, List, Literal
 from urllib.parse import urlparse
 
 import attr
+import numpy
 import obstore
 import xarray
 from affine import Affine
@@ -35,6 +36,7 @@ from rio_tiler.io.xarray import XarrayReader
 from rio_tiler.models import BandStatistics, ImageData, Info, PointData
 from rio_tiler.reader import _get_width_height, _missing_size
 from rio_tiler.types import BBox
+from xarray.backends.api import _maybe_create_default_indexes
 from zarr.storage import ObjectStore
 
 from titiler.xarray.io import _parse_dsl
@@ -121,8 +123,9 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
             zarr_store,
             decode_times=True,
             decode_coords="all",
+            create_default_indexes=False,
             # By default xarray will try to load the consolidated metadata
-            # consolidated=True,
+            consolidated=True,
             engine="zarr",
         )
 
@@ -266,7 +269,7 @@ def _arrange_dims(da: xarray.DataArray) -> xarray.DataArray:
     crs = da.rio.crs
     if not crs:
         crs = WGS84_CRS
-        da = da.rio.write_crs(WGS84_CRS)
+        da = da.rio.write_crs(crs)
 
     if crs == WGS84_CRS and (da.x > 180).any():
         # Adjust the longitude coordinates to the -180 to 180 range
@@ -425,6 +428,117 @@ class GeoZarrReader(BaseReader):
     groups: List[str] = attr.ib(init=False)
     variables: List[str] = attr.ib(init=False)
 
+    # Cache for datasets with indexes created, keyed by datatree path.
+    # Avoids re-loading coordinate arrays from S3 for the same group.
+    _indexed_ds_cache: Dict[str, xarray.Dataset] = attr.ib(init=False, factory=dict)
+
+    # Cache for per-scale bounds to avoid repeated rioxarray computation.
+    _bounds_cache: Dict[str, tuple] = attr.ib(init=False, factory=dict)
+
+    def _get_indexed_dataset(self, path: str) -> xarray.Dataset:
+        """Get a dataset with default indexes, cached to avoid repeated S3 coordinate reads.
+
+        When opening with create_default_indexes=False, coordinate arrays stay lazy.
+        Creating indexes materializes them once into PandasIndex (in-memory).
+        This cache ensures that cost is paid only once per unique datatree path.
+        """
+        if path not in self._indexed_ds_cache:
+            ds = self.datatree[path].to_dataset()
+            self._indexed_ds_cache[path] = _maybe_create_default_indexes(ds)
+        return self._indexed_ds_cache[path]
+
+    def _get_scale_bounds(self, scale_path: str) -> tuple:
+        """Get bounds for a scale path, cached to avoid repeated rioxarray computation."""
+        if scale_path not in self._bounds_cache:
+            ds = self._get_indexed_dataset(scale_path)
+            self._bounds_cache[scale_path] = tuple(ds.rio.bounds())
+        return self._bounds_cache[scale_path]
+
+    def _get_v1_dataarray(
+        self,
+        scale_path: str,
+        variable: str,
+        dims: list[str],
+        layout_entries: list[dict],
+        scale: str,
+        crs: CRS | None = None,
+    ) -> xarray.DataArray | None:
+        """Get DataArray with synthetic coordinates from V1 spatial metadata.
+
+        Builds coordinate arrays from spatial:transform + spatial:shape so that
+        rioxarray can resolve bounds/transform without reading from S3.
+        Returns None if spatial metadata is incomplete.
+        """
+        sel_transform = None
+        sel_shape = None
+
+        # Find spatial metadata for the selected scale in layout entries
+        for mt in layout_entries:
+            if mt["asset"] == scale:
+                if spatial_keys.intersection(mt):
+                    sel_shape = mt["spatial:shape"]
+                    sel_transform = Affine(*mt["spatial:transform"])
+                break
+
+        # Fall back to scale group attributes
+        if not sel_transform:
+            scale_attrs = self.datatree[scale_path].attrs
+            if spatial_keys.intersection(scale_attrs):
+                sel_shape = scale_attrs["spatial:shape"]
+                sel_transform = Affine(*scale_attrs["spatial:transform"])
+
+        if not sel_transform or not sel_shape:
+            return None
+
+        # Determine x/y dimension names from spatial:dimensions
+        lower_dims = {d.lower(): d for d in dims}
+        x_name = next(
+            (
+                lower_dims[n]
+                for n in ["x", "lon", "longitude", "easting"]
+                if n in lower_dims
+            ),
+            None,
+        )
+        y_name = next(
+            (
+                lower_dims[n]
+                for n in ["y", "lat", "latitude", "northing"]
+                if n in lower_dims
+            ),
+            None,
+        )
+        if not x_name or not y_name:
+            return None
+
+        width, height = _get_size(dims, sel_shape)
+
+        # Synthesize coordinate arrays from transform (pixel-center convention)
+        x_coords = (
+            numpy.arange(width) * sel_transform.a
+            + sel_transform.c
+            + sel_transform.a / 2
+        )
+        y_coords = (
+            numpy.arange(height) * sel_transform.e
+            + sel_transform.f
+            + sel_transform.e / 2
+        )
+
+        # Get DataArray without creating indexes (no S3 coordinate reads)
+        ds = self.datatree[scale_path].to_dataset()
+        da = ds[variable]
+        da = da.assign_coords({x_name: x_coords, y_name: y_coords})
+
+        if crs:
+            da = da.rio.write_crs(crs)
+
+        # Override the stale GeoTransform stored in spatial_ref (from the
+        # original on-disk coords) so rioxarray uses the correct transform.
+        da = da.rio.write_transform(sel_transform)
+
+        return da
+
     def __attrs_post_init__(self):
         """Set bounds and CRS."""
         if not self.datatree:
@@ -436,6 +550,7 @@ class GeoZarrReader(BaseReader):
         # There might not be global bounds/CRS for a Zarr Store
         try:
             ds = self.datatree.to_dataset()
+            ds = _maybe_create_default_indexes(ds)
             self.bounds = tuple(ds.rio.bounds())
             self.crs = ds.rio.crs or "epsg:4326"
 
@@ -512,6 +627,8 @@ class GeoZarrReader(BaseReader):
                     "tileMatrices"
                 ][0]["id"]
                 ds = self.datatree[g][scale].to_dataset()
+                # NOTE: _validate_zarr only checks dims and CRS attributes,
+                # no need to create indexes (avoids eager S3 coordinate reads)
                 if _validate_zarr(ds):
                     groups.append(g)
 
@@ -522,6 +639,8 @@ class GeoZarrReader(BaseReader):
 
                 elif self.datatree[g].data_vars:
                     ds = self.datatree[g].to_dataset()
+                    # NOTE: _validate_zarr only checks dims and CRS attributes,
+                    # no need to create indexes (avoids eager S3 coordinate reads)
                     if _validate_zarr(ds):
                         groups.append(g)
 
@@ -619,13 +738,14 @@ class GeoZarrReader(BaseReader):
 
                 if not bbox:
                     if not shape:
-                        dataset = tree.to_dataset()
+                        dataset = self._get_indexed_dataset(tree.path)
+
                         width, height = dataset.rio.width, dataset.rio.height
                     else:
                         width, height = _get_size(dims, shape)
 
                     if not transform:
-                        dataset = tree.to_dataset()
+                        dataset = self._get_indexed_dataset(tree.path)
                         transform = dataset.rio.transform()
 
                     bbox = array_bounds(width, height, transform)  # type: ignore
@@ -633,13 +753,15 @@ class GeoZarrReader(BaseReader):
         # GeoZarr V0
         elif ms := tree.attrs.get("multiscales"):
             scale = ms["tile_matrix_set"]["tileMatrices"][0]["id"]
-            ds = tree[scale].to_dataset()
+            ds = self._get_indexed_dataset(
+                f"{group}/{scale}" if group != "/" else scale
+            )
             bbox = ds.rio.bounds()
             bounds_crs = ds.rio.crs
 
         # Not GeoZarr
         else:
-            ds = tree.to_dataset()
+            ds = self._get_indexed_dataset(group)
             bbox = ds.rio.bounds()
             bounds_crs = ds.rio.crs
 
@@ -698,7 +820,7 @@ class GeoZarrReader(BaseReader):
 
             if not transform:
                 # Fall back to rioxarray transform
-                transform = tree.to_dataset().rio.transform()
+                transform = self._get_indexed_dataset(tree.path).rio.transform()
 
             try:
                 tms_crs = self.tms.rasterio_crs
@@ -707,7 +829,7 @@ class GeoZarrReader(BaseReader):
                         width, height = _get_size(dims, shape)
                     else:
                         # Fall back to rioxarray shape
-                        dataset = tree.to_dataset()
+                        dataset = self._get_indexed_dataset(tree.path)
                         width, height = dataset.rio.width, dataset.rio.height
 
                     if not bbox:
@@ -740,9 +862,11 @@ class GeoZarrReader(BaseReader):
         if ms := tree.attrs.get("multiscales"):
             # Select the last level (should be the lowest/coarsest resolution)
             scale = ms["tile_matrix_set"]["tileMatrices"][-1]["id"]
-            ds = tree[scale].to_dataset()
+            ds = self._get_indexed_dataset(
+                f"{group}/{scale}" if group != "/" else scale
+            )
         else:
-            ds = tree.to_dataset()
+            ds = self._get_indexed_dataset(group)
 
         try:
             return self._get_zoom(ds)
@@ -786,7 +910,7 @@ class GeoZarrReader(BaseReader):
 
             if not transform:
                 # Fall back to rioxarray transform
-                transform = tree.to_dataset().rio.transform()
+                transform = self._get_indexed_dataset(tree.path).rio.transform()
 
             try:
                 tms_crs = self.tms.rasterio_crs
@@ -795,7 +919,7 @@ class GeoZarrReader(BaseReader):
                         width, height = _get_size(dims, shape)
                     else:
                         # Fall back to rioxarray shape
-                        dataset = tree.to_dataset()
+                        dataset = self._get_indexed_dataset(tree.path)
                         width, height = dataset.rio.width, dataset.rio.height
 
                     if not bbox:
@@ -828,9 +952,11 @@ class GeoZarrReader(BaseReader):
         if ms := tree.attrs.get("multiscales"):
             # Select the first level (should be the highest/finest resolution)
             scale = ms["tile_matrix_set"]["tileMatrices"][0]["id"]
-            ds = tree[group][scale].to_dataset()
+            ds = self._get_indexed_dataset(
+                f"{group}/{scale}" if group != "/" else f"/{scale}"
+            )
         else:
-            ds = tree[group].to_dataset()
+            ds = self._get_indexed_dataset(group)
 
         try:
             return self._get_zoom(ds)
@@ -913,13 +1039,16 @@ class GeoZarrReader(BaseReader):
                 if shape:
                     layout_width, layout_height = _get_size(dims, shape)
                 else:
-                    # Fall back to rioxarray shape
-                    dataset = tree[scale].to_dataset()
+                    # Fall back to rioxarray shape (needs coordinate values)
+                    scale_path = f"{group}/{scale}" if group != "/" else scale
+                    dataset = self._get_indexed_dataset(scale_path)
                     layout_width, layout_height = dataset.rio.width, dataset.rio.height
 
                 if not transform:
-                    # Fall back to rioxarray transform
-                    transform = tree[scale].to_dataset().rio.transform()
+                    # Fall back to rioxarray transform (needs coordinate values)
+                    scale_path = f"{group}/{scale}" if group != "/" else scale
+                    dataset = self._get_indexed_dataset(scale_path)
+                    transform = dataset.rio.transform()
 
                 if not bbox:
                     bbox = array_bounds(layout_width, layout_height, transform)  # type: ignore
@@ -942,7 +1071,23 @@ class GeoZarrReader(BaseReader):
                     scale = get_multiscale_level(tree, variable, target_res)  # type: ignore
 
                 # Select the multiscale group and variable
-                da = tree[scale][variable]
+                scale_path = f"{group}/{scale}" if group != "/" else scale
+
+                # For V1, synthesize coordinates from layout metadata
+                # to avoid S3 coordinate reads (sel requires indexes, so fall back)
+                da = None
+                if not sel:
+                    da = self._get_v1_dataarray(
+                        scale_path,
+                        variable,
+                        dims,
+                        tree.attrs["multiscales"]["layout"],
+                        scale,
+                        crs=crs,
+                    )
+                if da is None:
+                    ds = self._get_indexed_dataset(scale_path)
+                    da = ds[variable]
 
                 logger.info(
                     f"Multiscale - selecting group {group} with scale {scale} and variable {variable}"
@@ -954,7 +1099,49 @@ class GeoZarrReader(BaseReader):
 
             else:
                 # Select Variable (xarray.DataArray)
-                da = tree[variable]
+                # For V1 non-multiscale, synthesize coords from group attrs
+                da = None
+                if not sel and spatial_keys.intersection(tree.attrs):
+                    v1_transform = Affine(*tree.attrs["spatial:transform"])
+                    v1_shape = tree.attrs["spatial:shape"]
+                    lower_dims = {d.lower(): d for d in dims}
+                    x_name = next(
+                        (
+                            lower_dims[n]
+                            for n in ["x", "lon", "longitude", "easting"]
+                            if n in lower_dims
+                        ),
+                        None,
+                    )
+                    y_name = next(
+                        (
+                            lower_dims[n]
+                            for n in ["y", "lat", "latitude", "northing"]
+                            if n in lower_dims
+                        ),
+                        None,
+                    )
+                    if x_name and y_name:
+                        width, height = _get_size(dims, v1_shape)
+                        x_coords = (
+                            numpy.arange(width) * v1_transform.a
+                            + v1_transform.c
+                            + v1_transform.a / 2
+                        )
+                        y_coords = (
+                            numpy.arange(height) * v1_transform.e
+                            + v1_transform.f
+                            + v1_transform.e / 2
+                        )
+                        ds = self.datatree[group].to_dataset()
+                        da = ds[variable]
+                        da = da.assign_coords({x_name: x_coords, y_name: y_coords})
+                        da = da.rio.write_crs(crs)
+                        da = da.rio.write_transform(v1_transform)
+
+                if da is None:
+                    ds = self._get_indexed_dataset(group)
+                    da = ds[variable]
 
         # GeoZarr V0
         elif ms := tree.attrs.get("multiscales"):
@@ -976,7 +1163,9 @@ class GeoZarrReader(BaseReader):
                     f"Variable '{variable}' not found in any multiscale level of group '{group}'"
                 ) from e
 
-            default_dataset = tree[scale].to_dataset()
+            default_dataset = self._get_indexed_dataset(
+                f"{group}/{scale}" if group != "/" else scale
+            )
             transform = default_dataset.rio.transform()
             bbox = default_dataset.rio.bounds()
             layout_height = default_dataset.rio.height
@@ -998,7 +1187,9 @@ class GeoZarrReader(BaseReader):
                 scale = get_multiscale_level(tree, variable, target_res)  # type: ignore
 
             # Select the multiscale group and variable
-            da = tree[scale][variable]
+            scale_path = f"{group}/{scale}" if group != "/" else scale
+            ds = self._get_indexed_dataset(scale_path)
+            da = ds[variable]
 
             logger.info(
                 f"Multiscale - selecting group {group} with scale {scale} and variable {variable}"
@@ -1010,7 +1201,8 @@ class GeoZarrReader(BaseReader):
 
         else:
             # Select Variable (xarray.DataArray)
-            da = tree[variable]
+            ds = self._get_indexed_dataset(group)
+            da = ds[variable]
 
         for selector in _parse_dsl(sel):
             dimension = selector["dimension"]
@@ -1077,27 +1269,169 @@ class GeoZarrReader(BaseReader):
         """
         variables = variables or self.variables
 
-        def _get_info_safe(group_var: str) -> Info | None:
-            """Get info for a single variable, with error handling."""
-            try:
-                group, variable = (
-                    group_var.split(":") if ":" in group_var else ("/", group_var)
-                )
-                with XarrayReader(
-                    self._get_variable(group, variable, sel=sel),
-                ) as da:
-                    return da.info()
-            except Exception as e:
-                logger.info(f"Failed to get info for variable '{group_var}': {e!s}")
-                return None
-
         # Build result dictionary, skipping variables that failed
         result = {}
         for gv in variables:
-            info_data = _get_info_safe(gv)
-            if info_data is not None:
-                result[gv] = info_data
+            try:
+                group, variable = gv.split(":") if ":" in gv else ("/", gv)
+                if sel:
+                    # When dimension selection is needed, use full _get_variable path
+                    info_data = self._get_info_via_reader(
+                        group,
+                        variable,
+                        gv,
+                        sel,
+                    )
+                else:
+                    # Fast path: build Info directly from metadata
+                    info_data = self._build_info_fast(group, variable, gv)
+                if info_data is not None:
+                    result[gv] = info_data
+            except Exception as e:
+                logger.info(f"Failed to get info for variable '{gv}': {e!s}")
         return result
+
+    def _get_info_via_reader(
+        self,
+        group: str,
+        variable: str,
+        full_name: str,
+        sel: List[str],
+    ) -> Info | None:
+        """Get info via XarrayReader (fallback for sel/method cases)."""
+        with XarrayReader(
+            self._get_variable(group, variable, sel=sel),
+        ) as da:
+            return da.info()
+
+    def _build_info_fast(  # noqa: C901
+        self,
+        group: str,
+        variable: str,
+        full_name: str,
+    ) -> Info | None:
+        """Build Info directly from metadata, bypassing XarrayReader overhead.
+
+        Avoids the expensive XarrayReader.__init__ (bounds/transform/resolution
+        computation via rioxarray) and redundant write_crs calls.
+        """
+        from rio_tiler.utils import CRS_to_uri
+
+        tree = self.datatree[group]
+        variable_name = full_name.split(":")[-1] if ":" in full_name else full_name
+
+        # Get the raw DataArray and spatial metadata based on group type
+        # GeoZarr V1
+        if tree.attrs.get("spatial:dimensions"):
+            crs = _get_proj_crs(tree.attrs)
+            if _has_multiscales(tree.attrs.get("zarr_conventions", [])):
+                try:
+                    layout = next(
+                        mt
+                        for mt in tree.attrs["multiscales"]["layout"]
+                        if variable in tree[mt["asset"]].data_vars
+                    )
+                except StopIteration as e:
+                    raise MissingVariables(
+                        f"Variable '{variable}' not found in any multiscale level of group '{group}'"
+                    ) from e
+                scale = layout["asset"]
+                scale_path = f"{group}/{scale}" if group != "/" else scale
+                da = self.datatree[scale_path][variable]
+
+                # Try to get bounds from attributes
+                bbox = tree.attrs.get("spatial:bbox")
+                if not bbox:
+                    bbox = layout.get("spatial:bbox") or tree[scale].attrs.get(
+                        "spatial:bbox"
+                    )
+                if not bbox:
+                    dims = tree.attrs["spatial:dimensions"]
+                    shape = layout.get("spatial:shape") or tree[scale].attrs.get(
+                        "spatial:shape"
+                    )
+                    transform = layout.get("spatial:transform") or tree[
+                        scale
+                    ].attrs.get("spatial:transform")
+                    if shape and transform:
+                        w, h = _get_size(dims, shape)
+                        bbox = array_bounds(w, h, Affine(*transform))
+                    else:
+                        bbox = self._get_scale_bounds(scale_path)
+                bounds = tuple(bbox)
+            else:
+                da = self.datatree[group][variable]
+                bbox = tree.attrs.get("spatial:bbox")
+                if not bbox:
+                    bbox = self._get_scale_bounds(group)
+                bounds = tuple(bbox)
+
+        # GeoZarr V0
+        elif ms := tree.attrs.get("multiscales"):
+            crs = CRS.from_user_input(ms["tile_matrix_set"]["crs"])
+            try:
+                scale = next(
+                    mt["id"]
+                    for mt in ms["tile_matrix_set"]["tileMatrices"]
+                    if variable in tree[mt["id"]].data_vars
+                )
+            except StopIteration as e:
+                raise MissingVariables(
+                    f"Variable '{variable}' not found in any multiscale level of group '{group}'"
+                ) from e
+            scale_path = f"{group}/{scale}" if group != "/" else scale
+            da = self.datatree[scale_path][variable]
+            bounds = self._get_scale_bounds(scale_path)
+
+        # Plain group
+        else:
+            ds = self._get_indexed_dataset(group)
+            crs = ds.rio.crs or CRS.from_user_input("epsg:4326")
+            da = ds[variable]
+            bounds = self._get_scale_bounds(group)
+
+        # Get width/height from DataArray dimensions
+        x_names = ["x", "lon", "longitude", "easting"]
+        y_names = ["y", "lat", "latitude", "northing"]
+        lower_dims = {d.lower(): d for d in da.dims}
+        x_dim = next((lower_dims[n] for n in x_names if n in lower_dims), None)
+        y_dim = next((lower_dims[n] for n in y_names if n in lower_dims), None)
+        width = da.sizes[x_dim] if x_dim else 0
+        height = da.sizes[y_dim] if y_dim else 0
+
+        # Non-spatial dimensions
+        spatial_exclude = {x_dim, y_dim, "spatial_ref", "crs_wkt", "grid_mapping"}
+        non_spatial_dims = [d for d in da.dims if d not in spatial_exclude]
+
+        metadata = [band.attrs for d in non_spatial_dims for band in da[d]] or [{}]
+        count = 1
+        for d in non_spatial_dims:
+            count *= da.sizes[d]
+
+        nodata_type = "Nodata" if da.rio.nodata is not None else "None"
+
+        crs_str = CRS_to_uri(crs) or crs.to_wkt()
+
+        meta = {
+            "bounds": bounds,
+            "crs": crs_str,
+            "band_metadata": [(f"b{ix}", v) for ix, v in enumerate(metadata, 1)],
+            "band_descriptions": [
+                (f"b{ix}", variable_name) for ix in range(1, count + 1)
+            ],
+            "dtype": str(da.dtype),
+            "nodata_type": nodata_type,
+            "name": da.name,
+            "count": count,
+            "width": width,
+            "height": height,
+            "dimensions": da.dims,
+            "attrs": {
+                k: (v.tolist() if isinstance(v, (numpy.ndarray, numpy.generic)) else v)
+                for k, v in da.attrs.items()
+            },
+        }
+        return Info(**meta)
 
     def statistics(  # type: ignore
         self,
