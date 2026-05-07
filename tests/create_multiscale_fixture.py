@@ -15,6 +15,7 @@ import xarray as xr
 import zarr
 from affine import Affine
 from pyproj import CRS
+from xarray.backends.zarr import FillValueCoder
 from zarr.codecs import BloscCodec, CastValue, ScaleOffset
 
 spatial_conventions = {
@@ -575,9 +576,7 @@ def create_zarr_with_scale_offset(path: str) -> None:
         {
             "valid_min": float(arr.min()),
             "valid_max": float(arr.max()),
-            # https://github.com/corteva/rioxarray/blob/67e7b63e77c5ad16f6c97ff122faaa0850470fd0/rioxarray/raster_array.py#L162-L177
-            # rioxarray check this or `missing_data`
-            "fill_value": 0.0,
+            "_FillValue": FillValueCoder.encode(0.0, dtype=np.dtype("float32")),
         }
     )
 
