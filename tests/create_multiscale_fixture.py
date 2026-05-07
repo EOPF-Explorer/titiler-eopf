@@ -7,14 +7,37 @@ import math
 import os
 import shutil
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 import rioxarray  # noqa: F401
 import xarray as xr
 import zarr
+from affine import Affine
 from pyproj import CRS
-from zarr.codecs import BloscCodec
+from zarr.codecs import BloscCodec, CastValue, ScaleOffset
+
+spatial_conventions = {
+    "schema_url": "https://raw.githubusercontent.com/zarr-conventions/spatial/refs/tags/v1/schema.json",
+    "spec_url": "https://github.com/zarr-conventions/spatial/blob/v1/README.md",
+    "uuid": "689b58e2-cf7b-45e0-9fff-9cfc0883d6b4",
+    "name": "spatial:",
+    "description": "Spatial coordinate information",
+}
+proj_conventions = {
+    "schema_url": "https://raw.githubusercontent.com/zarr-experimental/geo-proj/refs/tags/v1/schema.json",
+    "spec_url": "https://github.com/zarr-experimental/geo-proj/blob/v1/README.md",
+    "uuid": "f17cb550-5864-4468-aeb7-f3180cfb622f",
+    "name": "proj:",
+    "description": "Coordinate reference system information for geospatial data",
+}
+multiscale_conventions = {
+    "schema_url": "https://raw.githubusercontent.com/zarr-conventions/multiscales/refs/tags/v1/schema.json",
+    "spec_url": "https://github.com/zarr-conventions/multiscales/blob/v1/README.md",
+    "uuid": "d35379db-88df-4056-af3a-620245f8e347",
+    "name": "multiscales",
+    "description": "Multiscale layout of zarr datasets",
+}
 
 
 def create_geozarr_fixture(  # noqa: C901
@@ -115,27 +138,9 @@ def create_geozarr_fixture(  # noqa: C901
         # Create root group with multiscales metadata
         root_attrs = {
             "zarr_conventions": [
-                {
-                    "uuid": "d35379db-88df-4056-af3a-620245f8e347",
-                    "schema_url": "https://raw.githubusercontent.com/zarr-conventions/multiscales/refs/tags/v1/schema.json",
-                    "spec_url": "https://github.com/zarr-conventions/multiscales/blob/v1/README.md",
-                    "name": "multiscales",
-                    "description": "Multiscale layout of zarr datasets",
-                },
-                {
-                    "uuid": "689b58e2-cf7b-45e0-9fff-9cfc0883d6b4",
-                    "schema_url": "https://raw.githubusercontent.com/zarr-conventions/spatial/refs/tags/v1/schema.json",
-                    "spec_url": "https://github.com/zarr-conventions/spatial/blob/v1/README.md",
-                    "name": "spatial:",
-                    "description": "Spatial coordinate and transformation information",
-                },
-                {
-                    "uuid": "f17cb550-5864-4468-aeb7-f3180cfb622f",
-                    "schema_url": "https://raw.githubusercontent.com/zarr-experimental/geo-proj/refs/tags/v1/schema.json",
-                    "spec_url": "https://github.com/zarr-experimental/geo-proj/blob/v1/README.md",
-                    "name": "proj:",
-                    "description": "Coordinate reference system information for geospatial data",
-                },
+                spatial_conventions,
+                proj_conventions,
+                multiscale_conventions,
             ],
             "multiscales": {
                 "layout": [
@@ -532,6 +537,89 @@ def create_geozarr_fixture(  # noqa: C901
     print("  - Level 3 (120m): all bands")
 
     return fixture_path
+
+
+def create_zarr_with_scale_offset(path: str) -> None:
+    """Create a zarr archive."""
+    arr = np.random.rand(1800, 3600)
+    arr = np.expand_dims(arr, axis=0)  # create 3d array
+    arr = np.repeat(arr, 2, axis=0)
+    arr[:, 0:50, 0:50] = 0  # we set the top-left corner to 0
+
+    scale_offset_codec = ScaleOffset(offset=-0.1, scale=10000)
+    cast_value_codec = CastValue(
+        data_type="uint16",
+        rounding="nearest-even",
+    )
+
+    attributes: dict[str, Any] = {}
+    attributes["zarr_conventions"] = [
+        spatial_conventions,
+        proj_conventions,
+    ]
+    attributes.update(
+        {
+            "spatial:dimensions": ["y", "x"],
+            "spatial:transform": list(
+                Affine.translation(-180, 90) * Affine.scale(0.1, -0.1)
+            ),
+            "spatial:bbox": [-180.0, -90.0, 180.0, 90.0],
+            "proj:code": "EPSG:4326",
+        }
+    )
+
+    root = zarr.open_group(path, mode="w", zarr_format=3, attributes=attributes)
+
+    array_attributes = attributes.copy()
+    array_attributes.update(
+        {
+            "valid_min": float(arr.min()),
+            "valid_max": float(arr.max()),
+            # https://github.com/corteva/rioxarray/blob/67e7b63e77c5ad16f6c97ff122faaa0850470fd0/rioxarray/raster_array.py#L162-L177
+            # rioxarray check this or `missing_data`
+            "fill_value": 0.0,
+        }
+    )
+
+    # Create the main dataset array
+    dataset = root.create_array(
+        "dataset",
+        shape=arr.shape,
+        chunks=(1, 64, 64),
+        dtype="float32",
+        fill_value=0.0,
+        filters=(scale_offset_codec, cast_value_codec),
+        dimension_names=["time", "y", "x"],
+        attributes=array_attributes,
+    )
+    dataset[:] = arr
+
+    # Create coordinate arrays
+    # NOTE: in Xarray/rioxarray world they consider the node coordinate (center of pixel)
+    x_coords = np.arange(-179.9, 180.1, 0.1)
+    root.create_array(
+        "x",
+        data=x_coords,
+        dimension_names=["x"],
+    )
+
+    # NOTE: in Xarray/rioxarray world they consider the node coordinate (center of pixel)
+    y_coords = np.arange(89.9, -90.1, -0.1)
+    root.create_array(
+        "y",
+        data=y_coords,
+        dimension_names=["y"],
+    )
+
+    time_coords = np.array(["2022-01-01", "2022-01-02"], dtype="datetime64[D]")
+    root.create_array(
+        "time",
+        data=time_coords,
+        dimension_names=["time"],
+    )
+
+    # Write consolidated metadata
+    zarr.consolidate_metadata(root.store)
 
 
 if __name__ == "__main__":
