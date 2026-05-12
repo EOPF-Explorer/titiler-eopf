@@ -31,7 +31,7 @@ def redis_host() -> Generator[str, Any, Any]:
 
 @pytest.fixture(
     params=[
-        "v0",
+        # "v0",
         "v1",
     ],
     scope="session",

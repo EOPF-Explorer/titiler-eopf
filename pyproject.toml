@@ -32,6 +32,7 @@ dependencies = [
     "obstore",
     "pydantic-settings~=2.0",
     "starlette-cramjam>=0.4,<1.0",
+    "rio-tiler@git+https://github.com/cogeotiff/rio-tiler.git@feat/experimental-geoxarray",
 ]
 
 [project.optional-dependencies]

@@ -7,6 +7,10 @@ resolution-markers = [
     "sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
+[options]
+exclude-newer = "2026-04-13T14:09:01.202793Z"
+exclude-newer-span = "P3D"
+
 [[package]]
 name = "affine"
 version = "2.4.0"
@@ -1564,7 +1568,7 @@ name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ptyprocess" },
+    { name = "ptyprocess", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450, upload-time = "2023-11-25T09:07:26.339Z" }
 wheels = [
@@ -2182,8 +2186,8 @@ wheels = [
 
 [[package]]
 name = "rio-tiler"
-version = "9.0.4"
-source = { registry = "https://pypi.org/simple" }
+version = "9.0.6"
+source = { git = "https://github.com/cogeotiff/rio-tiler.git?rev=feat%2Fexperimental-geoxarray#64f558922dbb86542f701be2122f1de71e0ebf77" }
 dependencies = [
     { name = "attrs" },
     { name = "cachetools" },
@@ -2195,10 +2199,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pystac" },
     { name = "rasterio" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ca/d7/6a1e16f0bd5608c24a93be830d760437f6a0b4673e13a45e4bbe1b9dfd47/rio_tiler-9.0.4.tar.gz", hash = "sha256:5769e533f07c6d8cafafe84614b4fc9086cfefb7265eeda7849f0f927d299c2a", size = 190915, upload-time = "2026-03-24T17:12:20.39Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d9/03/7812700200411866c02ce1e4e06ff3c7c7ee78eebfa838a76cba9b026e73/rio_tiler-9.0.4-py3-none-any.whl", hash = "sha256:4877844d5fd339496d94cd130737376403b09aa33563bf21aa048925f7b49dd1", size = 287499, upload-time = "2026-03-24T17:12:18.336Z" },
+    { name = "typing-extensions" },
 ]
 
 [[package]]
@@ -2435,6 +2436,7 @@ dependencies = [
     { name = "obstore" },
     { name = "orjson" },
     { name = "pydantic-settings" },
+    { name = "rio-tiler" },
     { name = "rioxarray" },
     { name = "starlette-cramjam" },
     { name = "titiler-core" },
@@ -2497,6 +2499,7 @@ requires-dist = [
     { name = "psycopg2-binary", marker = "extra == 'openeo'" },
     { name = "pydantic-settings", specifier = "~=2.0" },
     { name = "redis", marker = "extra == 'cache'" },
+    { name = "rio-tiler", git = "https://github.com/cogeotiff/rio-tiler.git?rev=feat%2Fexperimental-geoxarray" },
     { name = "rioxarray", specifier = ">=0.22" },
     { name = "sqlalchemy", marker = "extra == 'openeo'", specifier = ">=2.0.0" },
     { name = "starlette-cramjam", specifier = ">=0.4,<1.0" },

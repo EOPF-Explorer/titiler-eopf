@@ -24,14 +24,11 @@ from rasterio.features import bounds as featureBounds
 from rasterio.transform import array_bounds, from_bounds
 from rasterio.warp import calculate_default_transform, transform_bounds
 from rio_tiler.constants import WEB_MERCATOR_TMS, WGS84_CRS
-from rio_tiler.errors import (
-    ExpressionMixingWarning,
-    InvalidExpression,
-    InvalidGeographicBounds,
-    RioTilerError,
-)
+from rio_tiler.errors import ExpressionMixingWarning, InvalidExpression, RioTilerError
+
+# from rio_tiler.io.xarray import XarrayReader
+from rio_tiler.experimental.xarray import GeoArrayReader
 from rio_tiler.io.base import BaseReader
-from rio_tiler.io.xarray import XarrayReader
 from rio_tiler.models import BandStatistics, ImageData, Info, PointData
 from rio_tiler.reader import _get_width_height, _missing_size
 from rio_tiler.types import BBox
@@ -121,6 +118,7 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
             zarr_store,
             decode_times=True,
             decode_coords="all",
+            create_default_indexes=False,
             # By default xarray will try to load the consolidated metadata
             # consolidated=True,
             engine="zarr",
@@ -153,29 +151,13 @@ def get_multiscale_level(
     zoom_level_strategy: Literal["AUTO", "LOWER", "UPPER"] = "AUTO",
 ) -> str:
     """Return the multiscale level corresponding to the desired resolution."""
-    ms_resolutions: list[tuple[str, float]]
-    # GeoZarr V1
-    if "layout" in dt.attrs.get("multiscales", {}):
-        ms_resolutions = [
-            (
-                ms["asset"],
-                min(abs(ms["spatial:transform"][0]), abs(ms["spatial:transform"][4])),
-            )
-            for ms in dt.attrs["multiscales"]["layout"]
-        ]
-
-    # GeoZarr V0
-    elif "tile_matrix_set" in dt.attrs.get("multiscales", {}):
-        ms_resolutions = [
-            (mt["id"], mt["cellSize"])
-            for mt in dt.attrs["multiscales"]["tile_matrix_set"]["tileMatrices"]
-            if variable in dt[mt["id"]].data_vars
-        ]
-
-    else:
-        raise ValueError(
-            "Multiscale group must have either 'tile_matrix_set' or 'layout' in its attributes."
+    ms_resolutions: list[tuple[str, float]] = [
+        (
+            ms["asset"],
+            min(abs(ms["spatial:transform"][0]), abs(ms["spatial:transform"][4])),
         )
+        for ms in dt.attrs["multiscales"]["layout"]
+    ]
 
     # Based on aiocogeo:
     # https://github.com/geospatial-jeff/aiocogeo/blob/5a1d32c3f22c883354804168a87abb0a2ea1c328/aiocogeo/partial_reads.py#L113-L147
@@ -199,27 +181,27 @@ def get_multiscale_level(
     return ms_resolutions[0][0]
 
 
-def _validate_zarr(ds: xarray.Dataset) -> bool:
-    if "x" not in ds.dims and "y" not in ds.dims:
-        try:
-            _ = next(
-                name
-                for name in ["lat", "latitude", "LAT", "LATITUDE", "Lat"]
-                if name in ds.dims
-            )
-            _ = next(
-                name
-                for name in ["lon", "longitude", "LON", "LONGITUDE", "Lon"]
-                if name in ds.dims
-            )
-        except StopIteration:
-            return False
+# def _validate_zarr(ds: xarray.Dataset) -> bool:
+#     if "x" not in ds.dims and "y" not in ds.dims:
+#         try:
+#             _ = next(
+#                 name
+#                 for name in ["lat", "latitude", "LAT", "LATITUDE", "Lat"]
+#                 if name in ds.dims
+#             )
+#             _ = next(
+#                 name
+#                 for name in ["lon", "longitude", "LON", "LONGITUDE", "Lon"]
+#                 if name in ds.dims
+#             )
+#         except StopIteration:
+#             return False
 
-    # NOTE: ref: https://github.com/EOPF-Explorer/data-model/issues/12
-    if not ds.rio.crs:
-        return False
+#     # NOTE: ref: https://github.com/EOPF-Explorer/data-model/issues/12
+#     if not ds.rio.crs:
+#         return False
 
-    return True
+#     return True
 
 
 def _arrange_dims(da: xarray.DataArray) -> xarray.DataArray:
@@ -262,18 +244,18 @@ def _arrange_dims(da: xarray.DataArray) -> xarray.DataArray:
         valid_range = da.attrs.get("valid_range")
         da.attrs.update({"valid_min": valid_range[0], "valid_max": valid_range[1]})
 
-    # Make sure we have a valid CRS
-    crs = da.rio.crs
-    if not crs:
-        crs = WGS84_CRS
-        da = da.rio.write_crs(WGS84_CRS)
+    # # Make sure we have a valid CRS
+    # crs = da.rio.crs
+    # if not crs:
+    #     crs = WGS84_CRS
+    #     da = da.rio.write_crs(WGS84_CRS)
 
-    if crs == WGS84_CRS and (da.x > 180).any():
-        # Adjust the longitude coordinates to the -180 to 180 range
-        da = da.assign_coords(x=(da.x + 180) % 360 - 180)
+    # if crs == WGS84_CRS and (da.x > 180).any():
+    #     # Adjust the longitude coordinates to the -180 to 180 range
+    #     da = da.assign_coords(x=(da.x + 180) % 360 - 180)
 
-        # Sort the dataset by the updated longitude coordinates
-        da = da.sortby(da.x)
+    #     # Sort the dataset by the updated longitude coordinates
+    #     da = da.sortby(da.x)
 
     return da
 
@@ -283,7 +265,6 @@ def _has_multiscales(conventions: list[dict]) -> bool:
         (
             True
             for c in conventions
-            # TODO: if c["name"] == "multiscales"
             if c["uuid"] == "d35379db-88df-4056-af3a-620245f8e347"
         ),
         False,
@@ -295,11 +276,24 @@ def _has_spatial(conventions: list[dict]) -> bool:
         (
             True
             for c in conventions
-            # TODO: if c["name"] == "spatial:"
             if c["uuid"] == "689b58e2-cf7b-45e0-9fff-9cfc0883d6b4"
         ),
         False,
     )
+
+
+def _write_spatial(conventions: list[dict]) -> list[dict]:
+    if not _has_spatial(conventions):
+        conventions.append(
+            {
+                "schema_url": "https://raw.githubusercontent.com/zarr-conventions/spatial/refs/tags/v1/schema.json",
+                "spec_url": "https://github.com/zarr-conventions/spatial/blob/v1/README.md",
+                "uuid": "689b58e2-cf7b-45e0-9fff-9cfc0883d6b4",
+                "name": "spatial:",
+                "description": "Spatial coordinate information",
+            }
+        )
+    return conventions
 
 
 def _has_proj(conventions: list[dict]) -> bool:
@@ -307,11 +301,24 @@ def _has_proj(conventions: list[dict]) -> bool:
         (
             True
             for c in conventions
-            # TODO: if c["name"] == "proj:"
             if c["uuid"] == "f17cb550-5864-4468-aeb7-f3180cfb622f"
         ),
         False,
     )
+
+
+def _write_proj(conventions: list[dict]) -> list[dict]:
+    if not _has_proj(conventions):
+        conventions.append(
+            {
+                "uuid": "f17cb550-5864-4468-aeb7-f3180cfb622f",
+                "schema_url": "https://raw.githubusercontent.com/zarr-experimental/geo-proj/refs/tags/v1/schema.json",
+                "spec_url": "https://github.com/zarr-experimental/geo-proj/blob/v1/README.md",
+                "name": "proj:",
+                "description": "Coordinate reference system information for geospatial data",
+            }
+        )
+    return conventions
 
 
 def _get_proj_crs(attributes: dict) -> CRS:
@@ -395,6 +402,30 @@ def get_target_resolution(
     return from_bounds(*bounds, height=height, width=width).a
 
 
+def _get_zoom(
+    tms: TileMatrixSet,
+    crs: CRS,
+    width: int,
+    height: int,
+    bounds: BBox,
+) -> int:
+    """Get MaxZoom for a Group."""
+    tms_crs = tms.rasterio_crs
+    if crs != tms_crs:
+        transform, _, _ = calculate_default_transform(
+            crs,
+            tms_crs,
+            width,
+            height,
+            *bounds,
+        )
+    else:
+        transform = from_bounds(*bounds, width, height)
+
+    resolution = max(abs(transform[0]), abs(transform[4]))
+    return tms.zoom_for_res(resolution)
+
+
 @attr.s
 class GeoZarrReader(BaseReader):
     """Zarr dataset Reader.
@@ -425,7 +456,7 @@ class GeoZarrReader(BaseReader):
     groups: List[str] = attr.ib(init=False)
     variables: List[str] = attr.ib(init=False)
 
-    def __attrs_post_init__(self):
+    def __attrs_post_init__(self) -> None:
         """Set bounds and CRS."""
         if not self.datatree:
             self.datatree = self.opener(self.input, **self.opener_options)
@@ -433,50 +464,34 @@ class GeoZarrReader(BaseReader):
         self.groups = self._get_groups()
         self.variables = self._get_variables()
 
-        # There might not be global bounds/CRS for a Zarr Store
-        try:
-            ds = self.datatree.to_dataset()
-            self.bounds = tuple(ds.rio.bounds())
-            self.crs = ds.rio.crs or "epsg:4326"
+        attributes = self.datatree.attrs
+        conventions: list[dict] = attributes.get("zarr_conventions", [])
 
-            # adds half x/y resolution on each values
-            # https://github.com/corteva/rioxarray/issues/645#issuecomment-1461070634
-            xres, yres = map(abs, ds.rio.resolution())
-            if self.crs == WGS84_CRS and (
-                self.bounds[0] + xres / 2 < -180
-                or self.bounds[1] + yres / 2 < -90
-                or self.bounds[2] - xres / 2 > 180
-                or self.bounds[3] - yres / 2 > 90
-            ):
-                raise InvalidGeographicBounds(
-                    f"Invalid geographic bounds: {self.bounds}. Must be within (-180, -90, 180, 90)."
-                )
+        bounds: BBox | None = None
+        crs: CRS | None = None
 
-            self.transform = ds.rio.transform()
-            self.height = ds.rio.height
-            self.width = ds.rio.width
+        # bbox and crs
+        if _has_spatial(conventions) and _has_proj(conventions):
+            bounds = attributes.get("spatial:bbox")
+            crs = _get_proj_crs(attributes)
 
-            # Default to user input or Dataset min/max zoom
-            self.minzoom = self.minzoom if self.minzoom is not None else self._minzoom
-            self.maxzoom = self.maxzoom if self.maxzoom is not None else self._maxzoom
-
-        except:  # noqa
+        if all([bounds, crs]):
+            self.bounds = bounds
+            self.crs = crs
+        else:
+            # There might not be global bounds/CRS for a Zarr Store
+            # ref: https://github.com/EOPF-Explorer/data-model/issues/156
             self.crs = WGS84_CRS
             minx, miny, maxx, maxy = zip(
                 *[self.get_bounds(group, self.crs) for group in self.groups]
             )
             self.bounds = (min(minx), min(miny), max(maxx), max(maxy))
 
-            # Default to user input or TMS min/max zoom
-            self.minzoom = (
-                self.minzoom if self.minzoom is not None else self.tms.minzoom
-            )
-            self.maxzoom = (
-                self.maxzoom if self.maxzoom is not None else self.tms.maxzoom
-            )
+        self.minzoom = self.minzoom if self.minzoom is not None else self.tms.minzoom
+        self.maxzoom = self.maxzoom if self.maxzoom is not None else self.tms.maxzoom
 
     def _get_groups(self) -> List[str]:  # noqa: C901
-        """return groups within the datatree."""
+        """return GeoZARR groups within the datatree."""
         groups: List[str] = []
         ms_groups: List[str] = []
 
@@ -503,27 +518,19 @@ class GeoZarrReader(BaseReader):
                             # validate spatial/proj?
                             groups.append(g)
 
-            # GeoZarr V0
-            elif "multiscales" in self.datatree[g].attrs:
-                ms_groups.append(g)
-
-                # Validate Group using First Level of MultiScale
-                scale = self.datatree[g].attrs["multiscales"]["tile_matrix_set"][
-                    "tileMatrices"
-                ][0]["id"]
-                ds = self.datatree[g][scale].to_dataset()
-                if _validate_zarr(ds):
-                    groups.append(g)
-
+            # TODO: Check if the group has geozarr Arrays
             else:
                 # We skip if group is within a multiscale
                 if any(g.startswith(msg) for msg in ms_groups):
                     continue
 
+                # Array within group without conventions
                 elif self.datatree[g].data_vars:
-                    ds = self.datatree[g].to_dataset()
-                    if _validate_zarr(ds):
-                        groups.append(g)
+                    for _, data_array in self.datatree[g].data_vars.items():
+                        if conventions := data_array.attrs.get("zarr_conventions"):
+                            if _has_spatial(conventions) and _has_proj(conventions):
+                                groups.append(g)
+                                break
 
         return groups
 
@@ -551,26 +558,6 @@ class GeoZarrReader(BaseReader):
                     )
                 variables.extend(f"{g}:{v}" for v in sorted(all_vars))
 
-            # GeoZarr V0
-            elif "multiscales" in tree.attrs:
-                # Get all variables across all multiscale levels
-                all_vars = set()
-                for matrix in tree.attrs["multiscales"]["tile_matrix_set"][
-                    "tileMatrices"
-                ]:
-                    scale = matrix["id"]
-                    if scale in tree:
-                        scale_group = tree[scale]
-                        # Only include multidimensional data variables (not 0D attributes)
-                        all_vars.update(
-                            {
-                                var
-                                for var, data_array in scale_group.data_vars.items()
-                                if data_array.ndim > 0
-                            }
-                        )
-
-                variables.extend(f"{g}:{v}" for v in sorted(all_vars))
             else:
                 # Only include multidimensional data variables (not 0D attributes)
                 multidim_vars = [
@@ -585,260 +572,137 @@ class GeoZarrReader(BaseReader):
     def get_bounds(self, group: str, crs: CRS = WGS84_CRS) -> BBox:  # noqa: C901
         """Get BBox for a Group."""
         tree = self.datatree[group]
+        conventions = tree.attrs.get("zarr_conventions", [])
+
+        bbox: list[float] | None
+        bounds_crs: CRS | None
 
         # GeoZarr V1
-        if dims := tree.attrs.get("spatial:dimensions"):
+        if _has_proj(conventions) and _has_spatial(conventions):
             bounds_crs = _get_proj_crs(tree.attrs)
 
-            # Check top level group attributes
-            bbox: list[float] | None = tree.attrs.get("spatial:bbox")
-            shape: list[int] | None = None
-            transform: Affine | None = None
-            if not bbox:
-                if spatial_keys.intersection(tree.attrs):
-                    shape = tree.attrs["spatial:shape"]
-                    transform = Affine(*tree.attrs["spatial:transform"])
-
-                if _has_multiscales(tree.attrs.get("zarr_conventions", [])):
-                    # NOTE: Check multiscale layout and group attributes
-                    # NOTE: We check only the first Layout
-                    scale_layout = tree.attrs["multiscales"]["layout"][0]
-                    tree = tree[scale_layout["asset"]]
-
-                    # NOTE: metadata can be stored at both level: Multiscale convention or Group Attributes
-                    bbox = scale_layout.get("spatial:bbox") or tree.attrs.get(
-                        "spatial:bbox"
-                    )
-                    if not shape and not transform:
-                        if spatial_keys.intersection(scale_layout):
-                            shape = scale_layout["spatial:shape"]
-                            transform = Affine(*scale_layout["spatial:transform"])
-                        elif spatial_keys.intersection(tree.attrs):
-                            shape = tree.attrs["spatial:shape"]
-                            transform = Affine(*tree.attrs["spatial:transform"])
-
-                if not bbox:
-                    if not shape:
-                        dataset = tree.to_dataset()
-                        width, height = dataset.rio.width, dataset.rio.height
-                    else:
-                        width, height = _get_size(dims, shape)
-
-                    if not transform:
-                        dataset = tree.to_dataset()
-                        transform = dataset.rio.transform()
-
-                    bbox = array_bounds(width, height, transform)  # type: ignore
-
-        # GeoZarr V0
-        elif ms := tree.attrs.get("multiscales"):
-            scale = ms["tile_matrix_set"]["tileMatrices"][0]["id"]
-            ds = tree[scale].to_dataset()
-            bbox = ds.rio.bounds()
-            bounds_crs = ds.rio.crs
+            # NOTE: Not on spec but titiler-eopf makes bbox mandatory for GeoZarr V1
+            bbox = tree.attrs.get("spatial:bbox")
 
         # Not GeoZarr
         else:
-            ds = tree.to_dataset()
-            bbox = ds.rio.bounds()
-            bounds_crs = ds.rio.crs
+            raise ValueError(
+                f"Group {group} does not have spatial attributes or multiscales."
+            )
+
+        assert (
+            bounds_crs is not None and bbox is not None
+        ), f"Counldn't determine bounds and CRS for group {group}"
 
         return transform_bounds(bounds_crs, crs, *bbox, densify_pts=21)  # type: ignore
-
-    def _get_zoom(self, ds: xarray.Dataset) -> int:
-        """Get MaxZoom for a Group."""
-        crs = ds.rio.crs
-        tms_crs = self.tms.rasterio_crs
-        if crs != tms_crs:
-            transform, _, _ = calculate_default_transform(
-                crs,
-                tms_crs,
-                ds.rio.width,
-                ds.rio.height,
-                *ds.rio.bounds(),
-            )
-        else:
-            transform = ds.rio.transform()
-
-        resolution = max(abs(transform[0]), abs(transform[4]))
-        return self.tms.zoom_for_res(resolution)
 
     # TODO: add cache
     def get_minzoom(self, group: str) -> int:  # noqa: C901
         """Get MinZoom for a Group."""
         tree = self.datatree[group]
+        conventions = tree.attrs.get("zarr_conventions", [])
 
+        # NOTE: If not multiscale we return `maxzoom`
         # GeoZarr V1
-        if dims := tree.attrs.get("spatial:dimensions"):
+        if (
+            _has_multiscales(conventions)
+            and _has_proj(conventions)
+            and _has_spatial(conventions)
+        ):
             crs = _get_proj_crs(tree.attrs)
 
-            bbox: list[float] | None = tree.attrs.get("spatial:bbox")
-            shape: list[int] | None = None
+            # NOTE: Layout should be ordered from highest/finest to lowest/coarsest resolution, so we select the last one
+            layout = tree.attrs["multiscales"]["layout"][-1]
+
+            # NOTE: Not on spec but titiler-eopf makes transform/shape mandatory for GeoZarr V1
             transform: Affine | None = None
+            height: int | None = None
+            width: int | None = None
+            # Get transform/shape from layout object or fallback to group attributes
+            if (shape := layout.get("spatial:shape")) and (
+                tr := layout.get("spatial:transform")
+            ):
+                transform = Affine(*tr)
+                height, width = shape
+            else:
+                ms_attrs = tree[layout["asset"]].attrs
+                if (shape := ms_attrs.get("spatial:shape")) and (
+                    tr := ms_attrs.get("spatial:transform")
+                ):
+                    transform = Affine(*tr)
+                    height, width = shape
 
-            if spatial_keys.intersection(tree.attrs):
-                shape = tree.attrs["spatial:shape"]
-                transform = Affine(*tree.attrs["spatial:transform"])
+            assert (
+                transform and height and width
+            ), f"Couldn't determine transform and shape for group {group}"
 
-            if _has_multiscales(tree.attrs.get("zarr_conventions", [])):
-                # NOTE: is the last layout the lower resolution?
-                layout = tree.attrs["multiscales"]["layout"][-1]
-                tree = tree[layout["asset"]]
+            bbox = list(array_bounds(height, width, transform))
+            return _get_zoom(
+                self.tms,
+                crs,
+                width,
+                height,
+                bbox,
+            )
 
-                # NOTE: metadata can be stored at both level: Multiscale convention or Group Attributes
-                bbox = (
-                    bbox or layout.get("spatial:bbox") or tree.attrs.get("spatial:bbox")
-                )
-                if spatial_keys.intersection(layout):
-                    shape = layout["spatial:shape"]
-                    transform = Affine(*layout["spatial:transform"])
-                elif spatial_keys.intersection(tree.attrs):
-                    shape = tree.attrs["spatial:shape"]
-                    transform = Affine(*tree.attrs["spatial:transform"])
-
-            if not transform:
-                # Fall back to rioxarray transform
-                transform = tree.to_dataset().rio.transform()
-
-            try:
-                tms_crs = self.tms.rasterio_crs
-                if crs != tms_crs:
-                    if shape:
-                        width, height = _get_size(dims, shape)
-                    else:
-                        # Fall back to rioxarray shape
-                        dataset = tree.to_dataset()
-                        width, height = dataset.rio.width, dataset.rio.height
-
-                    if not bbox:
-                        # NOTE: we could also fall back to rio.bounds() here
-                        # but we need height/width + transform to be available
-                        # so we use it them to get the bounds
-                        bbox = array_bounds(width, height, transform)  # type: ignore
-
-                    transform, _, _ = calculate_default_transform(
-                        crs,
-                        tms_crs,
-                        width,
-                        height,
-                        *bbox,  # type: ignore
-                    )
-
-                resolution = max(abs(transform[0]), abs(transform[4]))  # type: ignore
-                return self.tms.zoom_for_res(resolution)
-
-            except:  # noqa
-                warnings.warn(
-                    f"Cannot determine MinZoom for group {group}.",
-                    UserWarning,
-                    stacklevel=2,
-                )
-
-            return self.tms.minzoom
-
-        # GeoZarr V0
-        if ms := tree.attrs.get("multiscales"):
-            # Select the last level (should be the lowest/coarsest resolution)
-            scale = ms["tile_matrix_set"]["tileMatrices"][-1]["id"]
-            ds = tree[scale].to_dataset()
-        else:
-            ds = tree.to_dataset()
-
-        try:
-            return self._get_zoom(ds)
-        except:  # noqa
-            print("error", ds)
-            pass
-
-        return self.tms.minzoom
+        return self.get_maxzoom(group)
 
     # TODO: add cache
     def get_maxzoom(self, group: str) -> int:  # noqa: C901
         """Get MaxZoom for a Group."""
         tree = self.datatree[group]
+        conventions = tree.attrs.get("zarr_conventions", [])
 
         # GeoZarr V1
-        if dims := tree.attrs.get("spatial:dimensions"):
+        if _has_proj(conventions) and _has_spatial(conventions):
             crs = _get_proj_crs(tree.attrs)
-            bbox: list[float] | None = tree.attrs.get("spatial:bbox")
-            shape: list[int] | None = None
+
+            # NOTE: Not on spec but titiler-eopf makes transform/shape mandatory for GeoZarr V1
             transform: Affine | None = None
+            height: int | None = None
+            width: int | None = None
 
-            if spatial_keys.intersection(tree.attrs):
-                shape = tree.attrs["spatial:shape"]
-                transform = Affine(*tree.attrs["spatial:transform"])
-
-            if _has_multiscales(tree.attrs.get("zarr_conventions", [])):
-                # NOTE: is the first layout the highest resolution?
+            if _has_multiscales(conventions):
+                # NOTE: Layout should be ordered from highest/finest to lowest/coarsest resolution, so we select the first one
                 layout = tree.attrs["multiscales"]["layout"][0]
-                tree = tree[layout["asset"]]
 
-                # NOTE: metadata can be stored at both level: Multiscale convention or Group Attributes
-                bbox = (
-                    bbox or layout.get("spatial:bbox") or tree.attrs.get("spatial:bbox")
-                )
-                if spatial_keys.intersection(layout):
-                    shape = layout["spatial:shape"]
-                    transform = Affine(*layout["spatial:transform"])
-                elif spatial_keys.intersection(tree.attrs):
-                    shape = tree.attrs["spatial:shape"]
-                    transform = Affine(*tree.attrs["spatial:transform"])
+                # Get transform/shape from layout object or fallback to group attributes
+                if (shape := layout.get("spatial:shape")) and (
+                    tr := layout.get("spatial:transform")
+                ):
+                    transform = Affine(*tr)
+                    height, width = shape
+                else:
+                    ms_attrs = tree[layout["asset"]].attrs
+                    if (shape := ms_attrs.get("spatial:shape")) and (
+                        tr := ms_attrs.get("spatial:transform")
+                    ):
+                        transform = Affine(*tr)
+                        height, width = shape
 
-            if not transform:
-                # Fall back to rioxarray transform
-                transform = tree.to_dataset().rio.transform()
+            elif (shape := tree.attrs.get("spatial:shape")) and (
+                tr := tree.attrs.get("spatial:transform")
+            ):
+                transform = Affine(*tr)
+                height, width = shape
 
-            try:
-                tms_crs = self.tms.rasterio_crs
-                if crs != tms_crs:
-                    if shape:
-                        width, height = _get_size(dims, shape)
-                    else:
-                        # Fall back to rioxarray shape
-                        dataset = tree.to_dataset()
-                        width, height = dataset.rio.width, dataset.rio.height
+            assert (
+                transform and height and width
+            ), f"Couldn't determine transform and shape for group {group}"
 
-                    if not bbox:
-                        # NOTE: we could also fall back to rio.bounds() here
-                        # but we need height/width + transform to be available
-                        # so we use it them to get the bounds
-                        bbox = array_bounds(width, height, transform)  # type: ignore
+            bbox = list(array_bounds(height, width, transform))
+            return _get_zoom(
+                self.tms,
+                crs,
+                width,
+                height,
+                bbox,
+            )
 
-                    transform, _, _ = calculate_default_transform(
-                        crs,
-                        tms_crs,
-                        width,
-                        height,
-                        *bbox,  # type: ignore
-                    )
-
-                resolution = max(abs(transform[0]), abs(transform[4]))  # type: ignore
-                return self.tms.zoom_for_res(resolution)
-
-            except:  # noqa
-                warnings.warn(
-                    f"Cannot determine MaxZoom for group {group}.",
-                    UserWarning,
-                    stacklevel=2,
-                )
-
-            return self.tms.maxzoom
-
-        # GeoZarr V0
-        if ms := tree.attrs.get("multiscales"):
-            # Select the first level (should be the highest/finest resolution)
-            scale = ms["tile_matrix_set"]["tileMatrices"][0]["id"]
-            ds = tree[group][scale].to_dataset()
         else:
-            ds = tree[group].to_dataset()
-
-        try:
-            return self._get_zoom(ds)
-        except:  # noqa
-            print("error", ds)
-            pass
-
-        return self.tms.maxzoom
+            raise ValueError(
+                f"Group {group} does not have spatial attributes or multiscales, can't determine maxzoom."
+            )
 
     def _get_variable(  # noqa: C901
         self,
@@ -863,112 +727,41 @@ class GeoZarrReader(BaseReader):
             max_size = None
 
         tree = self.datatree[group]
+        conventions = tree.attrs.get("zarr_conventions", [])
 
-        bbox: list[float] | None = None
-        transform: list[float] | Affine | None = None
+        dataset_crs: CRS | None = None
+        dataset_bbox: list[float] | None = None
+        dataset_transform: list[float] | Affine | None = None
+        dataset_shape: list[int] | None = None
+        spatial_dims: list[str] | None = None
+        layout_height: int
+        layout_width: int
 
         # GeoZarr V1
-        if dims := tree.attrs.get("spatial:dimensions"):
+        if _has_multiscales(conventions):
             logger.info("Multiscale - Selection using GeoZarr V1 (Conventions)")
 
-            bbox = tree.attrs.get("spatial:bbox")
-            crs = _get_proj_crs(tree.attrs)
+            # NOTE: Should EOPF GeoZarr enforce spatial/proj conventions for multiscale groups?
+            # if not _has_proj(conventions) and not _has_spatial(conventions):
+            #     raise ValueError(f"Multiscale group {group} should have spatial and proj conventions.")
 
-            if _has_multiscales(tree.attrs.get("zarr_conventions", [])):
-                # NOTE: Default asset (where variable is present)
-                # This assume, the Multiscale are ordered from higher resolution To lower resolution
-                try:
-                    layout = next(
-                        (
-                            mt
-                            for mt in tree.attrs["multiscales"]["layout"]
-                            if variable in tree[mt["asset"]].data_vars
-                        )
-                    )
-                except StopIteration as e:
-                    raise MissingVariables(
-                        f"Variable '{variable}' not found in any multiscale level of group '{group}'"
-                    ) from e
+            # 1. Get Spatial/Proj info from the multiscale group
+            if _has_proj(conventions):
+                dataset_crs = _get_proj_crs(tree.attrs)
 
-                scale = layout["asset"]  # Default asset from first layout
+            if _has_spatial(conventions):
+                spatial_dims = tree.attrs["spatial:dimensions"]
+                dataset_bbox = tree.attrs.get("spatial:bbox")
+                dataset_transform = tree.attrs.get("spatial:transform")
 
-                shape: list[int] | None = None
-
-                bbox = (
-                    bbox
-                    or layout.get("spatial:bbox")
-                    or tree[scale].attrs.get("spatial:bbox")
-                )
-                if {"spatial:shape", "spatial:transform"}.intersection(layout):
-                    shape = layout["spatial:shape"]
-                    transform = Affine(*layout["spatial:transform"])
-                elif {"spatial:shape", "spatial:transform"}.intersection(
-                    tree[scale].attrs
-                ):
-                    shape = tree[scale].attrs["spatial:shape"]
-                    transform = Affine(*tree[scale].attrs["spatial:transform"])
-
-                layout_height: int
-                layout_width: int
-                if shape:
-                    layout_width, layout_height = _get_size(dims, shape)
-                else:
-                    # Fall back to rioxarray shape
-                    dataset = tree[scale].to_dataset()
-                    layout_width, layout_height = dataset.rio.width, dataset.rio.height
-
-                if not transform:
-                    # Fall back to rioxarray transform
-                    transform = tree[scale].to_dataset().rio.transform()
-
-                if not bbox:
-                    bbox = array_bounds(layout_width, layout_height, transform)  # type: ignore
-
-                # NOTE: Select a Multiscale Layer based on output resolution
-                if any([bounds, height, width, max_size]):
-                    target_res = get_target_resolution(
-                        input_crs=crs,
-                        output_crs=dst_crs,
-                        input_bounds=bbox,  # type: ignore
-                        input_height=layout_height,
-                        input_width=layout_width,
-                        input_transform=transform,  # type: ignore
-                        output_bounds=bounds,
-                        output_max_size=max_size,
-                        output_height=height,
-                        output_width=width,
-                    )
-
-                    scale = get_multiscale_level(tree, variable, target_res)  # type: ignore
-
-                # Select the multiscale group and variable
-                da = tree[scale][variable]
-
-                logger.info(
-                    f"Multiscale - selecting group {group} with scale {scale} and variable {variable}"
-                )
-
-                # NOTE: Make sure the multiscale levels have the same CRS
-                # ref: https://github.com/EOPF-Explorer/data-model/issues/12
-                da = da.rio.write_crs(crs)
-
-            else:
-                # Select Variable (xarray.DataArray)
-                da = tree[variable]
-
-        # GeoZarr V0
-        elif ms := tree.attrs.get("multiscales"):
-            logger.info("Multiscale - Selection using GeoZarr V0 (TMS)")
-            crs = CRS.from_user_input(ms["tile_matrix_set"]["crs"])
-
-            # NOTE: Default Scale (where variable is present)
-            # This assume, the tile_matrix_set are ordered from higher resolution To lower resolution
+            # NOTE: Default asset (where variable is present)
+            # This assume, the Multiscale are ordered from higher resolution To lower resolution
             try:
-                scale = next(
+                layout = next(
                     (
-                        mt["id"]
-                        for mt in ms["tile_matrix_set"]["tileMatrices"]
-                        if variable in tree[mt["id"]].data_vars
+                        mt
+                        for mt in tree.attrs["multiscales"]["layout"]
+                        if variable in tree[mt["asset"]].data_vars
                     )
                 )
             except StopIteration as e:
@@ -976,41 +769,126 @@ class GeoZarrReader(BaseReader):
                     f"Variable '{variable}' not found in any multiscale level of group '{group}'"
                 ) from e
 
-            default_dataset = tree[scale].to_dataset()
-            transform = default_dataset.rio.transform()
-            bbox = default_dataset.rio.bounds()
-            layout_height = default_dataset.rio.height
-            layout_width = default_dataset.rio.width
+            scale = layout["asset"]  # Default asset from first layout
 
+            # 2. Check the first layout for spatial/proj info
+            dataset_bbox = dataset_bbox or layout.get("spatial:bbox")
+            dataset_transform = dataset_transform or layout.get("spatial:transform")
+            dataset_shape = tree[scale].attrs.get("spatial:shape")
+
+            # 3. Check Zarr conventions from the Zarr Array
+            layout_conventions = tree[scale].attrs.get("zarr_conventions", [])
+            # Get Spatial/Proj info from the Array
+            if _has_proj(layout_conventions):
+                dataset_crs = _get_proj_crs(tree[scale].attrs)
+
+            if _has_spatial(layout_conventions):
+                spatial_dims = tree[scale].attrs["spatial:dimensions"]
+                dataset_bbox = tree[scale].attrs.get("spatial:bbox", dataset_bbox)
+                dataset_transform = tree[scale].attrs.get(
+                    "spatial:transform", dataset_transform
+                )
+                dataset_shape = tree[scale].attrs.get("spatial:shape", dataset_shape)
+
+            assert (
+                spatial_dims
+            ), f"Group {group} and/or multiscale do not have spatial conventions set."
+
+            if not dataset_shape:
+                if len(spatial_dims) > 2:
+                    spatial_dims = spatial_dims[:2]
+
+                ydim = spatial_dims[0]
+                xdim = spatial_dims[1]
+                shape = tree[scale][variable].shape
+                dims = list(tree[scale][variable].dims)
+                dataset_shape = [shape[dims.index(ydim)], shape[dims.index(xdim)]]
+
+            layout_height, layout_width = dataset_shape
+
+            # NOTE: none of those required attributes are in the current specification
+            assert dataset_bbox, f"Couldn't determine dataset bounds for group {group} and variable {variable}"
+            assert dataset_crs, f"Couldn't determine dataset CRS for group {group} and variable {variable}"
+            assert dataset_transform, f"Couldn't determine dataset transform for group {group} and variable {variable}"
+
+            # NOTE: Select a Multiscale Layer based on output resolution
             if any([bounds, height, width, max_size]):
                 target_res = get_target_resolution(
-                    input_crs=crs,
+                    input_crs=dataset_crs,
                     output_crs=dst_crs,
-                    input_bounds=bbox,  # type: ignore
+                    input_bounds=dataset_bbox,
                     input_height=layout_height,
                     input_width=layout_width,
-                    input_transform=transform,  # type: ignore
+                    input_transform=Affine(*dataset_transform),  # type: ignore
                     output_bounds=bounds,
                     output_max_size=max_size,
                     output_height=height,
                     output_width=width,
                 )
+
                 scale = get_multiscale_level(tree, variable, target_res)  # type: ignore
+
+                layout = next(
+                    filter(
+                        lambda x: x["asset"] == scale,
+                        tree.attrs["multiscales"]["layout"],
+                    )
+                )
+                dataset_transform = tree[scale].attrs.get(
+                    "spatial:transform", layout["spatial:transform"]
+                )
 
             # Select the multiscale group and variable
             da = tree[scale][variable]
+            if not da.attrs.get("zarr_conventions"):
+                da.attrs["zarr_conventions"] = []
+
+            _write_spatial(da.attrs["zarr_conventions"])
+            _write_proj(da.attrs["zarr_conventions"])
+            da.attrs["proj:code"] = dataset_crs.to_epsg()
+            da.attrs["spatial:dimensions"] = spatial_dims
+            if dataset_transform:
+                da.attrs["spatial:transform"] = dataset_transform
 
             logger.info(
                 f"Multiscale - selecting group {group} with scale {scale} and variable {variable}"
             )
 
-            # NOTE: Make sure the multiscale levels have the same CRS
-            # ref: https://github.com/EOPF-Explorer/data-model/issues/12
-            da = da.rio.write_crs(crs)
+        # No Multiscale but group as spatial/proj conventions
+        elif _has_proj(conventions) and _has_spatial(conventions):
+            logger.info("No Multiscale")
 
+            da = tree[variable]
+
+            # Forward conventions from group to array
+            if not da.attrs.get("zarr_conventions"):
+                da.attrs["zarr_conventions"] = []
+
+            _write_spatial(da.attrs["zarr_conventions"])
+            _write_proj(da.attrs["zarr_conventions"])
+
+            for key in ["proj:code", "proj:wkt2", "proj:projjson"]:
+                if key not in da.attrs and key in tree.attrs:
+                    da.attrs[key] = tree.attrs[key]
+
+            da.attrs["spatial:dimensions"] = da.attrs.get(
+                "spatial:dimensions", tree.attrs["spatial:dimensions"]
+            )
+            if tr := tree.attrs.get("spatial:transform"):
+                da.attrs["spatial:transform"] = da.attrs.get("spatial:transform", tr)
+
+        # No Multiscale and no spatial/proj conventions at group level
         else:
+            logger.info("No Multiscale")
+
             # Select Variable (xarray.DataArray)
             da = tree[variable]
+
+        conventions = tree.attrs.get("zarr_conventions", [])
+        if not _has_proj(conventions) and _has_spatial(conventions):
+            raise ValueError(
+                f"Group {group} or Variable {variable} do not have spatial/geo-proj conventions."
+            )
 
         for selector in _parse_dsl(sel):
             dimension = selector["dimension"]
@@ -1083,7 +961,7 @@ class GeoZarrReader(BaseReader):
                 group, variable = (
                     group_var.split(":") if ":" in group_var else ("/", group_var)
                 )
-                with XarrayReader(
+                with GeoArrayReader(
                     self._get_variable(group, variable, sel=sel),
                 ) as da:
                     return da.info()
@@ -1145,7 +1023,7 @@ class GeoZarrReader(BaseReader):
 
         for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
-            with XarrayReader(
+            with GeoArrayReader(
                 self._get_variable(
                     group,
                     variable,
@@ -1238,7 +1116,7 @@ class GeoZarrReader(BaseReader):
 
         for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
-            with XarrayReader(
+            with GeoArrayReader(
                 self._get_variable(
                     group,
                     variable,
@@ -1324,7 +1202,7 @@ class GeoZarrReader(BaseReader):
 
         for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
-            with XarrayReader(
+            with GeoArrayReader(
                 self._get_variable(
                     group,
                     variable,
@@ -1404,7 +1282,7 @@ class GeoZarrReader(BaseReader):
 
         for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
-            with XarrayReader(
+            with GeoArrayReader(
                 self._get_variable(group, variable, sel=sel),
                 tms=self.tms,
             ) as da:
@@ -1482,7 +1360,7 @@ class GeoZarrReader(BaseReader):
 
         for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
-            with XarrayReader(
+            with GeoArrayReader(
                 self._get_variable(
                     group,
                     variable,
