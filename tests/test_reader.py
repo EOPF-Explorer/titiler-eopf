@@ -615,3 +615,12 @@ def test_3d_geozarr(geozarr_3d_dataset):
         assert img.band_descriptions == [
             "/measurements/reflectance:b02+/measurements/reflectance:b03"
         ]
+
+
+def test_scale_offset(geozarr_so):
+    """test preview method."""
+    with GeoZarrReader(geozarr_so) as src:
+        img = src.preview(variables=["dataset"], max_size=128)
+        assert img.array.shape == (2, 64, 128)
+        assert img.array.dtype == numpy.float32
+        assert img.array.mask[0, 0, 0]
