@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776414020186,
+  "lastUpdate": 1779262004565,
   "repoUrl": "https://github.com/EOPF-Explorer/titiler-eopf",
   "entries": {
     "titiler-eopf Benchmarks": [
@@ -208,6 +208,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.025573319687378485",
             "extra": "mean: 272.62609205999695 msec\nrounds: 50"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "vincent.sarago@gmail.com",
+            "name": "Vincent Sarago",
+            "username": "vincentsarago"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "49f51a0f9672cff32c29bdd222ba4ecce4bafaa3",
+          "message": "Merge pull request #102 from EOPF-Explorer/feat/add-scale-offset-support\n\nfeat: add support for scale/offset codec",
+          "timestamp": "2026-05-20T09:23:35+02:00",
+          "tree_id": "43c7aaf95e0c0b66b886463f31a238304866cf65",
+          "url": "https://github.com/EOPF-Explorer/titiler-eopf/commit/49f51a0f9672cff32c29bdd222ba4ecce4bafaa3"
+        },
+        "date": 1779262004213,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "GeoZarrReader-Open",
+            "value": 37.28802505382324,
+            "unit": "iter/sec",
+            "range": "stddev: 0.011852257702054",
+            "extra": "mean: 26.81826131999628 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Info",
+            "value": 35.747272786934715,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000721935725609733",
+            "extra": "mean: 27.974162000002707 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Preview",
+            "value": 2.8038318887021916,
+            "unit": "iter/sec",
+            "range": "stddev: 0.01940222568069906",
+            "extra": "mean: 356.6547638000043 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Tile",
+            "value": 3.4411367336124172,
+            "unit": "iter/sec",
+            "range": "stddev: 0.036162465041944994",
+            "extra": "mean: 290.60164632000124 msec\nrounds: 50"
           }
         ]
       }
