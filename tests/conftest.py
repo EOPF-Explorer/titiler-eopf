@@ -11,7 +11,10 @@ from fakeredis import TcpFakeServer
 from rasterio.io import MemoryFile
 from starlette.testclient import TestClient
 
-from .create_multiscale_fixture import create_geozarr_fixture
+from .create_multiscale_fixture import (
+    create_geozarr_fixture,
+    create_zarr_with_scale_offset,
+)
 
 FIXTURES_DIRECTORY = os.path.join(os.path.dirname(__file__), "fixtures")
 
@@ -52,6 +55,17 @@ def geozarr_dataset(geozarr):
     """GeoZarr dataset path."""
     collection, item = geozarr
     return os.path.join(FIXTURES_DIRECTORY, collection, f"{item}.zarr")
+
+
+@pytest.fixture
+def geozarr_so():
+    """Create GeoZarr with scale offset."""
+    collection_dir = os.path.join(FIXTURES_DIRECTORY, "eopf_so")
+    geozarr = os.path.join(collection_dir, "geozarr.zarr")
+    create_zarr_with_scale_offset(geozarr)
+    yield os.path.join(FIXTURES_DIRECTORY, "eopf_so", "geozarr.zarr")
+    if os.path.exists(collection_dir):
+        shutil.rmtree(collection_dir)
 
 
 @pytest.fixture
