@@ -887,7 +887,7 @@ class GeoZarrReader(BaseReader):
         conventions = tree.attrs.get("zarr_conventions", [])
         if not _has_proj(conventions) and _has_spatial(conventions):
             raise ValueError(
-                f"Group {group} or Variable {variable} do not have spatial/geo-proj conventions."
+                f"Group {group} or Array {variable} do not have spatial/geo-proj conventions."
             )
 
         for selector in _parse_dsl(sel):

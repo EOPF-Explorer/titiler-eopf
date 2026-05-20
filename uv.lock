@@ -7,10 +7,6 @@ resolution-markers = [
     "sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
-[options]
-exclude-newer = "2026-04-13T14:09:01.202793Z"
-exclude-newer-span = "P3D"
-
 [[package]]
 name = "affine"
 version = "2.4.0"
@@ -2187,7 +2183,7 @@ wheels = [
 [[package]]
 name = "rio-tiler"
 version = "9.0.6"
-source = { git = "https://github.com/cogeotiff/rio-tiler.git?rev=feat%2Fexperimental-geoxarray#64f558922dbb86542f701be2122f1de71e0ebf77" }
+source = { git = "https://github.com/cogeotiff/rio-tiler.git?rev=feat%2Fexperimental-geoxarray#02342913e4629de20bc0abe349424bbd6bf3c29d" }
 dependencies = [
     { name = "attrs" },
     { name = "cachetools" },
