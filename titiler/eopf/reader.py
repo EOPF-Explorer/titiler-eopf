@@ -121,6 +121,8 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
             create_default_indexes=False,
             # By default xarray will try to load the consolidated metadata
             # consolidated=True,
+            # See https://github.com/pydata/xarray/issues/11361
+            # use_zarr_fill_value_as_mask=True,
             engine="zarr",
         )
 
