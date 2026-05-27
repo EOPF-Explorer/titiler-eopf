@@ -33,14 +33,11 @@ def redis_host() -> Generator[str, Any, Any]:
 
 
 @pytest.fixture(
-    params=[
-        # "v0",
-        "v1",
-    ],
+    params=["v1"],
     scope="session",
 )
 def geozarr(request):
-    """Create GeoZarr v1 fixture."""
+    """Create GeoZarr fixture."""
     version = request.param
     collection_dir = os.path.join(FIXTURES_DIRECTORY, "eopf")
     geozarr = os.path.join(collection_dir, f"geozarr_{version}.zarr")
