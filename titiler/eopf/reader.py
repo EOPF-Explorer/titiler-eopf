@@ -8,9 +8,10 @@ import os
 import pickle
 import re
 import warnings
+from collections.abc import Callable
 from functools import cache, cached_property, lru_cache
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 import attr
@@ -30,8 +31,8 @@ from rio_tiler.errors import ExpressionMixingWarning, InvalidExpression, RioTile
 from rio_tiler.experimental.xarray import GeoArrayReader
 from rio_tiler.io.base import BaseReader
 from rio_tiler.models import BandStatistics, ImageData, Info, PointData
-from rio_tiler.reader import _get_width_height, _missing_size
 from rio_tiler.types import BBox
+from rio_tiler.utils import _get_width_height, _missing_size
 from zarr.storage import ObjectStore
 
 from titiler.xarray.io import _parse_dsl
@@ -183,38 +184,8 @@ def get_multiscale_level(
     return ms_resolutions[0][0]
 
 
-# def _validate_zarr(ds: xarray.Dataset) -> bool:
-#     if "x" not in ds.dims and "y" not in ds.dims:
-#         try:
-#             _ = next(
-#                 name
-#                 for name in ["lat", "latitude", "LAT", "LATITUDE", "Lat"]
-#                 if name in ds.dims
-#             )
-#             _ = next(
-#                 name
-#                 for name in ["lon", "longitude", "LON", "LONGITUDE", "Lon"]
-#                 if name in ds.dims
-#             )
-#         except StopIteration:
-#             return False
-
-#     # NOTE: ref: https://github.com/EOPF-Explorer/data-model/issues/12
-#     if not ds.rio.crs:
-#         return False
-
-#     return True
-
-
 def _arrange_dims(da: xarray.DataArray) -> xarray.DataArray:
-    """Arrange coordinates and time dimensions.
-
-    An rioxarray.exceptions.InvalidDimensionOrder error is raised if the coordinates are not in the correct order time, y, and x.
-    See: https://github.com/corteva/rioxarray/discussions/674
-
-    We conform to using x and y as the spatial dimension names..
-
-    """
+    """Arrange coordinates and time dimensions."""
     if "x" not in da.dims and "y" not in da.dims:
         try:
             latitude_var_name = next(
@@ -243,21 +214,8 @@ def _arrange_dims(da: xarray.DataArray) -> xarray.DataArray:
     # If min/max values are stored in `valid_range` we add them in `valid_min/valid_max`
     vmin, vmax = da.attrs.get("valid_min"), da.attrs.get("valid_max")
     if "valid_range" in da.attrs and not (vmin is not None and vmax is not None):
-        valid_range = da.attrs.get("valid_range")
+        valid_range = da.attrs["valid_range"]
         da.attrs.update({"valid_min": valid_range[0], "valid_max": valid_range[1]})
-
-    # # Make sure we have a valid CRS
-    # crs = da.rio.crs
-    # if not crs:
-    #     crs = WGS84_CRS
-    #     da = da.rio.write_crs(WGS84_CRS)
-
-    # if crs == WGS84_CRS and (da.x > 180).any():
-    #     # Adjust the longitude coordinates to the -180 to 180 range
-    #     da = da.assign_coords(x=(da.x + 180) % 360 - 180)
-
-    #     # Sort the dataset by the updated longitude coordinates
-    #     da = da.sortby(da.x)
 
     return da
 
@@ -335,32 +293,15 @@ def _get_proj_crs(attributes: dict) -> CRS:
     return CRS.from_user_input(proj_string)
 
 
-def _get_size(dims: list[str], shape: list[int]) -> tuple[int, int]:
-    """Get Height/Width (x, y) dimension from shape/dimension zarr conventions."""
-    x_dim = ["lon", "longitude", "easting", "x"]
-    y_dim = ["lat", "latitude", "northing", "y"]
-    lower_dims = [d.lower() for d in dims]
-    try:
-        name = next(d for d in x_dim if d in lower_dims)
-        width = shape[lower_dims.index(name)]
-
-        name = next(d for d in y_dim if d in lower_dims)
-        height = shape[lower_dims.index(name)]
-    except StopIteration as e:
-        raise ValueError(f"Couldn't find X dimensions in {dims}") from e
-
-    return width, height
-
-
 def get_target_resolution(
     *,
     input_crs: CRS,
     output_crs: CRS,
-    input_bounds: list[float],
+    input_bounds: BBox,
     input_height: int,
     input_width: int,
     input_transform: Affine,
-    output_bounds: list[float] | None = None,
+    output_bounds: BBox | None = None,
     output_max_size: int | None = None,
     output_height: int | None = None,
     output_width: int | None = None,
@@ -453,10 +394,10 @@ class GeoZarrReader(BaseReader):
     maxzoom: int = attr.ib(default=None)
 
     opener: Callable[..., xarray.DataTree] = attr.ib(default=open_dataset)
-    opener_options: Dict = attr.ib(factory=dict)
+    opener_options: dict = attr.ib(factory=dict)
 
-    groups: List[str] = attr.ib(init=False)
-    variables: List[str] = attr.ib(init=False)
+    groups: list[str] = attr.ib(init=False)
+    variables: list[str] = attr.ib(init=False)
 
     def __attrs_post_init__(self) -> None:
         """Set bounds and CRS."""
@@ -492,10 +433,10 @@ class GeoZarrReader(BaseReader):
         self.minzoom = self.minzoom if self.minzoom is not None else self.tms.minzoom
         self.maxzoom = self.maxzoom if self.maxzoom is not None else self.tms.maxzoom
 
-    def _get_groups(self) -> List[str]:  # noqa: C901
+    def _get_groups(self) -> list[str]:  # noqa: C901
         """return GeoZARR groups within the datatree."""
-        groups: List[str] = []
-        ms_groups: List[str] = []
+        groups: list[str] = []
+        ms_groups: list[str] = []
 
         for g in self.datatree.groups:
             # GeoZarr V1
@@ -536,9 +477,9 @@ class GeoZarrReader(BaseReader):
 
         return groups
 
-    def _get_variables(self) -> List[str]:
+    def _get_variables(self) -> list[str]:
         """Return available variables for a group."""
-        variables: List[str] = []
+        variables: list[str] = []
 
         for g in self.groups:
             # Select a group
@@ -711,7 +652,7 @@ class GeoZarrReader(BaseReader):
         group: str,
         variable: str,
         *,
-        sel: List[str] | None = None,
+        sel: list[str] | None = None,
         # MultiScale Selection
         bounds: BBox | None = None,
         height: int | None = None,
@@ -818,7 +759,12 @@ class GeoZarrReader(BaseReader):
                 target_res = get_target_resolution(
                     input_crs=dataset_crs,
                     output_crs=dst_crs,
-                    input_bounds=dataset_bbox,
+                    input_bounds=(
+                        dataset_bbox[0],
+                        dataset_bbox[1],
+                        dataset_bbox[2],
+                        dataset_bbox[3],
+                    ),
                     input_height=layout_height,
                     input_width=layout_width,
                     input_transform=Affine(*dataset_transform),  # type: ignore
@@ -916,10 +862,10 @@ class GeoZarrReader(BaseReader):
         return da
 
     @cached_property
-    def _variable_idx(self) -> Dict[str, str]:
+    def _variable_idx(self) -> dict[str, str]:
         return {v: f"var{ix}" for ix, v in enumerate(self.variables)}
 
-    def parse_expression(self, expression: str) -> List[str]:
+    def parse_expression(self, expression: str) -> list[str]:
         """Parse rio-tiler band math expression."""
         if "eval" in expression:
             raise InvalidExpression("Invalid expression")
@@ -948,9 +894,9 @@ class GeoZarrReader(BaseReader):
     def info(  # type: ignore
         self,
         *,
-        variables: List[str] | None = None,
-        sel: List[str] | None = None,
-    ) -> Dict[str, Info]:
+        variables: list[str] | None = None,
+        sel: list[str] | None = None,
+    ) -> dict[str, Info]:
         """Return xarray.DataArray info.
 
         Variables that fail to load will be skipped and logged as warnings.
@@ -964,7 +910,8 @@ class GeoZarrReader(BaseReader):
                     group_var.split(":") if ":" in group_var else ("/", group_var)
                 )
                 with GeoArrayReader(
-                    self._get_variable(group, variable, sel=sel),
+                    input=self._get_variable(group, variable, sel=sel),
+                    options={},
                 ) as da:
                     return da.info()
             except Exception as e:
@@ -982,11 +929,11 @@ class GeoZarrReader(BaseReader):
     def statistics(  # type: ignore
         self,
         *args: Any,
-        variables: List[str] | None = None,
+        variables: list[str] | None = None,
         expression: str | None = None,
-        sel: List[str] | None = None,
+        sel: list[str] | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Dict[str, BandStatistics]]:
+    ) -> dict[str, dict[str, BandStatistics]]:
         """Return statistics from a dataset."""
         raise NotImplementedError
 
@@ -996,17 +943,17 @@ class GeoZarrReader(BaseReader):
         tile_y: int,
         tile_z: int,
         *args: Any,
-        variables: List[str] | None = None,
+        variables: list[str] | None = None,
         expression: str | None = None,
         tilesize: int = 256,
-        sel: List[str] | None = None,
+        sel: list[str] | None = None,
         **kwargs: Any,
     ) -> ImageData:
         """Read a Web Map tile from a dataset."""
         tile_bounds = tuple(self.tms.xy_bounds(Tile(x=tile_x, y=tile_y, z=tile_z)))
         dst_crs = self.tms.rasterio_crs
 
-        img_stack: List[ImageData] = []
+        img_stack: list[ImageData] = []
 
         if variables and expression:
             warnings.warn(
@@ -1026,16 +973,22 @@ class GeoZarrReader(BaseReader):
         for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
             with GeoArrayReader(
-                self._get_variable(
+                input=self._get_variable(
                     group,
                     variable,
                     sel=sel,
-                    bounds=tile_bounds,
+                    bounds=(
+                        tile_bounds[0],
+                        tile_bounds[1],
+                        tile_bounds[2],
+                        tile_bounds[3],
+                    ),
                     height=tilesize,
                     width=tilesize,
                     dst_crs=dst_crs,
                 ),
                 tms=self.tms,
+                options={},
             ) as da:
                 img = da.tile(
                     tile_x,
@@ -1082,12 +1035,12 @@ class GeoZarrReader(BaseReader):
         bbox: BBox,
         dst_crs: CRS | None = None,
         bounds_crs: CRS = WGS84_CRS,
-        variables: List[str] | None = None,
+        variables: list[str] | None = None,
         expression: str | None = None,
         max_size: int | None = None,
         height: int | None = None,
         width: int | None = None,
-        sel: List[str] | None = None,
+        sel: list[str] | None = None,
         **kwargs: Any,
     ) -> ImageData:
         """Read part of a dataset."""
@@ -1099,7 +1052,7 @@ class GeoZarrReader(BaseReader):
             else bbox
         )
 
-        img_stack: List[ImageData] = []
+        img_stack: list[ImageData] = []
 
         if variables and expression:
             warnings.warn(
@@ -1119,17 +1072,18 @@ class GeoZarrReader(BaseReader):
         for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
             with GeoArrayReader(
-                self._get_variable(
+                input=self._get_variable(
                     group,
                     variable,
                     sel=sel,
-                    max_size=max_size,
+                    bounds=bounds_in_dst_crs,
                     height=height,
                     width=width,
-                    bounds=bounds_in_dst_crs,
+                    max_size=max_size,
                     dst_crs=dst_crs,
                 ),
                 tms=self.tms,
+                options={},
             ) as da:
                 img = da.part(
                     bbox,
@@ -1175,17 +1129,17 @@ class GeoZarrReader(BaseReader):
     def preview(
         self,
         *args: Any,
-        variables: List[str] | None = None,
+        variables: list[str] | None = None,
         expression: str | None = None,
         max_size: int | None = 1024,
         height: int | None = None,
         width: int | None = None,
-        sel: List[str] | None = None,
+        sel: list[str] | None = None,
         dst_crs: CRS | None = None,
         **kwargs: Any,
     ) -> ImageData:
         """Return a preview of a dataset."""
-        img_stack: List[ImageData] = []
+        img_stack: list[ImageData] = []
 
         if variables and expression:
             warnings.warn(
@@ -1205,16 +1159,17 @@ class GeoZarrReader(BaseReader):
         for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
             with GeoArrayReader(
-                self._get_variable(
+                input=self._get_variable(
                     group,
                     variable,
                     sel=sel,
-                    max_size=max_size,
                     height=height,
                     width=width,
+                    max_size=max_size,
                     dst_crs=dst_crs,
                 ),
                 tms=self.tms,
+                options={},
             ) as da:
                 img = da.preview(
                     *args,
@@ -1259,13 +1214,13 @@ class GeoZarrReader(BaseReader):
     def point(  # type: ignore
         self,
         *args: Any,
-        variables: List[str] | None = None,
+        variables: list[str] | None = None,
         expression: str | None = None,
-        sel: List[str] | None = None,
+        sel: list[str] | None = None,
         **kwargs: Any,
     ) -> PointData:
         """Read a pixel value from a dataset."""
-        pts_stack: List[PointData] = []
+        pts_stack: list[PointData] = []
 
         if variables and expression:
             warnings.warn(
@@ -1285,8 +1240,9 @@ class GeoZarrReader(BaseReader):
         for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
             with GeoArrayReader(
-                self._get_variable(group, variable, sel=sel),
+                input=self._get_variable(group, variable, sel=sel),
                 tms=self.tms,
+                options={},
             ) as da:
                 pt = da.point(*args, **kwargs)
                 if expression:
@@ -1319,11 +1275,11 @@ class GeoZarrReader(BaseReader):
 
     def feature(  # type: ignore
         self,
-        shape: Dict,
+        shape: dict,
         shape_crs: CRS = WGS84_CRS,
-        variables: List[str] | None = None,
+        variables: list[str] | None = None,
         expression: str | None = None,
-        sel: List[str] | None = None,
+        sel: list[str] | None = None,
         max_size: int | None = 1024,
         height: int | None = None,
         width: int | None = None,
@@ -1343,7 +1299,7 @@ class GeoZarrReader(BaseReader):
             else bbox
         )
 
-        img_stack: List[ImageData] = []
+        img_stack: list[ImageData] = []
 
         if variables and expression:
             warnings.warn(
@@ -1363,17 +1319,18 @@ class GeoZarrReader(BaseReader):
         for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
             with GeoArrayReader(
-                self._get_variable(
+                input=self._get_variable(
                     group,
                     variable,
                     sel=sel,
-                    max_size=max_size,
+                    bounds=bounds_in_dst_crs,
                     height=height,
                     width=width,
-                    bounds=bounds_in_dst_crs,
+                    max_size=max_size,
                     dst_crs=dst_crs,
                 ),
                 tms=self.tms,
+                options={},
             ) as da:
                 img = da.feature(
                     shape,

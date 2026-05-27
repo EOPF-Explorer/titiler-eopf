@@ -57,7 +57,7 @@ class DatasetMetadataExtension(FactoryExtension):
         )
         def dataset_metadata_html(src_path=Depends(factory.path_dependency)):
             """Returns the HTML representation of the Xarray Dataset."""
-            with factory.reader(src_path) as ds:
+            with factory.reader(input=src_path) as ds:
                 return HTMLResponse(ds.datatree._repr_html_())
 
         @factory.router.get(
@@ -68,7 +68,7 @@ class DatasetMetadataExtension(FactoryExtension):
         )
         def dataset_metadata_dict(src_path=Depends(factory.path_dependency)):
             """Returns the full Xarray dataset as a dictionary."""
-            with factory.reader(src_path) as ds:
+            with factory.reader(input=src_path) as ds:
                 return {
                     k: g.to_dataset().to_dict(data=False)
                     for k, g in ds.datatree.subtree_with_keys
@@ -83,7 +83,7 @@ class DatasetMetadataExtension(FactoryExtension):
         )
         def dataset_groups(src_path=Depends(factory.path_dependency)):
             """Returns the list of groups in the DataTree."""
-            with factory.reader(src_path) as ds:
+            with factory.reader(input=src_path) as ds:
                 return ds.groups
 
         @factory.router.get(
@@ -97,7 +97,7 @@ class DatasetMetadataExtension(FactoryExtension):
         )
         def dataset_variables(src_path=Depends(factory.path_dependency)):
             """Returns the list of keys/variables in the DataTree."""
-            with factory.reader(src_path) as ds:
+            with factory.reader(input=src_path) as ds:
                 return ds.variables
 
 
@@ -234,7 +234,7 @@ class EOPFChunkVizExtension(FactoryExtension):
             src_path=Depends(factory.path_dependency),
         ):
             """Chunk Viewer."""
-            with factory.reader(src_path) as src_dst:
+            with factory.reader(input=src_path) as src_dst:
                 groups = src_dst.groups
                 minx, miny, maxx, maxy = zip(
                     *[src_dst.get_bounds(group, WGS84_CRS) for group in groups]
@@ -366,7 +366,7 @@ class EOPFChunkVizExtension(FactoryExtension):
             src_path=Depends(factory.path_dependency),
         ):
             """return geojson."""
-            with factory.reader(src_path) as src_dst:
+            with factory.reader(input=src_path) as src_dst:
                 if multiscales := src_dst.datatree[group].attrs.get("multiscales"):
                     # Find matrix by id
                     matrix = next(
@@ -475,7 +475,9 @@ class EOPFwmtsExtension(wmtsExtension):
         ):
             """OGC RESTful WMTS endpoint."""
             with rasterio.Env(**env):
-                with factory.reader(src_path, **reader_params.as_dict()) as src_dst:
+                with factory.reader(
+                    input=src_path, **reader_params.as_dict()
+                ) as src_dst:
                     variables = layer_params.variables or src_dst.parse_expression(
                         layer_params.expression
                     )
@@ -521,7 +523,7 @@ class EOPFwmtsExtension(wmtsExtension):
                 tms = factory.supported_tms.get(tms_id)
                 try:
                     with factory.reader(
-                        src_path, tms=tms, **reader_params.as_dict()
+                        input=src_path, tms=tms, **reader_params.as_dict()
                     ) as src_dst:
                         minx, miny, maxx, maxy = zip(
                             *[src_dst.get_bounds(group, self.crs) for group in groups]

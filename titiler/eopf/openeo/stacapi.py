@@ -1,7 +1,5 @@
 """Custom stacApiBackend for EOPF."""
 
-from typing import Dict, Optional, Union
-
 from attrs import define, field
 from openeo_pg_parser_networkx.pg_schema import BoundingBox, TemporalInterval
 from pystac import Collection, Item
@@ -116,7 +114,7 @@ def get_all_band_names(collection: Collection) -> list[str]:
 class stacApiBackend(BaseBackend):
     """Custom stacApiBackend for EOPF Zarr collections."""
 
-    def _fix_collection(self, collection: Dict) -> None:
+    def _fix_collection(self, collection: dict) -> None:
         self._normalize_summaries(collection)
         self.replace_bands_in_summaries_dict(collection)
         return
@@ -134,7 +132,7 @@ class stacApiBackend(BaseBackend):
 
         return collection
 
-    def getzarrdimensions(self, collection: Collection) -> Dict[str, dc.Dimension]:
+    def getzarrdimensions(self, collection: Collection) -> dict[str, dc.Dimension]:
         """Get datacube dimensions for EOPF Zarr collection.
 
         Returns standard dimensions for satellite imagery data:
@@ -176,7 +174,7 @@ class stacApiBackend(BaseBackend):
             ),
         }
 
-    def getzarrvariables(self, collection: Collection) -> Dict[str, dc.Variable]:
+    def getzarrvariables(self, collection: Collection) -> dict[str, dc.Variable]:
         """Get datacube variables from EOPF collection assets.
 
         Creates variables in the format expected by load_collection:
@@ -320,7 +318,7 @@ class stacApiBackend(BaseBackend):
 
         return collection
 
-    def replace_bands_in_summaries_dict(self, collection_dict: Dict) -> None:
+    def replace_bands_in_summaries_dict(self, collection_dict: dict) -> None:
         """Replace band names in summaries dict to match cube:dimension band values."""
         if not collection_dict.get("summaries"):
             return
@@ -388,10 +386,10 @@ def _make_mosaic_task(
     bbox: list[float],
     bounds_crs,
     output_crs,
-    bands: Optional[list[str]],
-    width: Optional[int],
-    height: Optional[int],
-    tile_buffer: Optional[float],
+    bands: list[str] | None,
+    width: int | None,
+    height: int | None,
+    tile_buffer: float | None,
 ):
     """Create a closure that loads data for a date group."""
 
@@ -445,10 +443,10 @@ def _build_tasks(
     bbox: list[float],
     bounds_crs,
     output_crs,
-    bands: Optional[list[str]],
-    width: Optional[int],
-    height: Optional[int],
-    tile_buffer: Optional[float],
+    bands: list[str] | None,
+    width: int | None,
+    height: int | None,
+    tile_buffer: float | None,
 ) -> list:
     """Build task list for RasterStack from grouped items."""
     tasks = []
@@ -488,7 +486,7 @@ class LoadCollection(BaseLoadCollection):
     stac_api: stacApiBackend = field()
 
     def _validate_limits(
-        self, items: list[Item], width: Optional[int], height: Optional[int]
+        self, items: list[Item], width: int | None, height: int | None
     ) -> None:
         """Validate item count and pixel limits."""
         if len(items) > processing_settings.max_items:
@@ -509,16 +507,16 @@ class LoadCollection(BaseLoadCollection):
     def load_collection(
         self,
         id: str,
-        spatial_extent: Optional[BoundingBox] = None,
-        temporal_extent: Optional[TemporalInterval] = None,
-        bands: Optional[list[str]] = None,
-        properties: Optional[dict] = None,
+        spatial_extent: BoundingBox | None = None,
+        temporal_extent: TemporalInterval | None = None,
+        bands: list[str] | None = None,
+        properties: dict | None = None,
         # private arguments
-        width: Optional[int] = 1024,
-        height: Optional[int] = 1024,
-        tile_buffer: Optional[float] = None,
-        named_parameters: Optional[dict] = None,
-        target_crs: Optional[Union[int, str]] = None,
+        width: int | None = 1024,
+        height: int | None = 1024,
+        tile_buffer: float | None = None,
+        named_parameters: dict | None = None,
+        target_crs: int | str | None = None,
     ) -> RasterStack:
         """Load Collection with Zarr support.
 
