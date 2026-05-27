@@ -26,8 +26,6 @@ from rasterio.transform import array_bounds, from_bounds
 from rasterio.warp import calculate_default_transform, transform_bounds
 from rio_tiler.constants import WEB_MERCATOR_TMS, WGS84_CRS
 from rio_tiler.errors import ExpressionMixingWarning, InvalidExpression, RioTilerError
-
-# from rio_tiler.io.xarray import XarrayReader
 from rio_tiler.experimental.xarray import GeoArrayReader
 from rio_tiler.io.base import BaseReader
 from rio_tiler.models import BandStatistics, ImageData, Info, PointData
