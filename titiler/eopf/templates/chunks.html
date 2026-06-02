@@ -456,7 +456,7 @@
 
     const update_viz = () => {
         const group = document.getElementById('group-selector').selectedOptions[0].getAttribute("group")
-        const level = document.getElementById('ms-selector').selectedOptions[0].getAttribute("level")
+        const level = document.getElementById('ms-selector').selectedOptions[0].getAttribute("idx")
         
         const metadata = scope.metadata[group][level]
         document.getElementById('group-shape').innerText = `Array shape: (${metadata.Width}, ${metadata.Height})`
@@ -464,7 +464,7 @@
         document.getElementById('decimation').innerText = `Decimation: ${(metadata.Decimation).toFixed(1)}`
         document.getElementById('zoom-level').innerText = `Mercator zoom: ${metadata.MercatorZoom}`
 
-        add_chunks_grid(group, level)
+        add_chunks_grid(group, metadata["Level"])
         add_tiles_grid(metadata.MercatorZoom)
     }
 
@@ -473,6 +473,7 @@
         const group = document.getElementById('group-selector').selectedOptions[0].getAttribute("group")
         scope.metadata[group].forEach((opt, idx) => {
             const option = document.createElement('option')
+            option.setAttribute('idx', idx)
             option.setAttribute('level', opt.Level)
             option.text = `Level: "${opt.Level}"`
             if (idx === 0) option.selected = "selected"
@@ -527,6 +528,7 @@
 
         scope.metadata[groups[0]].forEach((opt, idx) => {
             const option = document.createElement('option')
+            option.setAttribute('idx', idx)
             option.setAttribute('level', opt.Level)
             option.setAttribute('zoom', opt.MercatorZoom)
             option.text = `Level: ${opt.Level}`
@@ -555,7 +557,7 @@
             document.getElementById('loader').classList.toggle('off')
 
             const group = document.getElementById('group-selector').selectedOptions[0].getAttribute("group")
-            const level = document.getElementById('ms-selector').selectedOptions[0].getAttribute("level")
+            const level = document.getElementById('ms-selector').selectedOptions[0].getAttribute("idx")
             const metadata = scope.metadata[group][level]
             const variable_name = `${group}:${metadata.Variables[0]}`
 
