@@ -2,7 +2,7 @@
 
 import logging
 import os
-from typing import Annotated, Any, Callable, Literal, Optional, Type
+from typing import Annotated, Any, Callable, Literal
 from urllib.parse import urlencode
 
 import rasterio
@@ -34,25 +34,25 @@ logger = logging.getLogger(__name__)
 class TilerFactory(BaseTilerFactory):
     """Xarray Tiler Factory."""
 
-    reader: Type[GeoZarrReader] = GeoZarrReader
+    reader: type[GeoZarrReader] = GeoZarrReader
 
     path_dependency: Callable[..., Any] = DatasetPathParams
 
-    reader_dependency: Type[DefaultDependency] = DefaultDependency
+    reader_dependency: type[DefaultDependency] = DefaultDependency
 
     # variable/sel/method options
     # Used in info/statistics endpoints
-    variables_dependency: Type[DefaultDependency] = VariablesParams
+    variables_dependency: type[DefaultDependency] = VariablesParams
 
     # Variables/Expression/Indexes Options
     # User in /tiles/... endpoints
-    layer_dependency: Type[DefaultDependency] = LayerParams
+    layer_dependency: type[DefaultDependency] = LayerParams
 
     # Dataset Options (nodata, reproject)
-    dataset_dependency: Type[DefaultDependency] = DatasetParams
+    dataset_dependency: type[DefaultDependency] = DatasetParams
 
     # Tile/Tilejson/WMTS Dependencies  (Not used in titiler.xarray)
-    tile_dependency: Type[DefaultDependency] = DefaultDependency
+    tile_dependency: type[DefaultDependency] = DefaultDependency
 
     add_ogc_maps: bool = field(default=True)
     add_part: bool = field(default=True)
@@ -431,17 +431,17 @@ class TilerFactory(BaseTilerFactory):
                 Query(gt=0, description="Tilesize in pixels. Default to 512."),
             ] = 512,
             tile_format: Annotated[
-                Optional[ImageType],
+                ImageType | None,
                 Query(
                     description="Default will be automatically defined if the output image needs a mask (png) or not (jpeg).",
                 ),
             ] = None,
             minzoom: Annotated[
-                Optional[int],
+                int | None,
                 Query(description="Overwrite default minzoom."),
             ] = None,
             maxzoom: Annotated[
-                Optional[int],
+                int | None,
                 Query(description="Overwrite default maxzoom."),
             ] = None,
             src_path=Depends(self.path_dependency),

@@ -3,7 +3,8 @@
 import logging
 import time
 import warnings
-from typing import Any, Dict, Sequence, Type
+from collections.abc import Sequence
+from typing import Any
 
 import attr
 import pystac
@@ -29,7 +30,7 @@ logger = logging.getLogger(__name__)
 class STACReader(SimpleSTACReader):
     """STACReader with support of Zarr or COG."""
 
-    def _get_reader(self, asset_info: AssetInfo) -> Type[BaseReader]:
+    def _get_reader(self, asset_info: AssetInfo) -> type[BaseReader]:
         """Get Asset Reader."""
         if asset_type := asset_info.get("media_type", None):
             if asset_type.split(";")[0] in [
@@ -183,7 +184,7 @@ class STACReader(SimpleSTACReader):
             )
 
             with self.ctx(**asset_info.get("env", {})):
-                with reader(uri, tms=self.tms, **reader_options) as src:
+                with reader(input=uri, tms=self.tms, **reader_options) as src:
                     bounds_crs = method_options.get("bounds_crs", "epsg:4326")
 
                     transformed_bbox = bbox
@@ -258,7 +259,7 @@ class STACReader(SimpleSTACReader):
         return img
 
 
-def _reader(item: Dict[str, Any], bbox: BBox, **kwargs: Any) -> ImageData:
+def _reader(item: dict[str, Any], bbox: BBox, **kwargs: Any) -> ImageData:
     """Read a STAC item and return an ImageData object.
 
     This is the Zarr-aware reader function that uses STACReader

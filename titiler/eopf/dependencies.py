@@ -2,7 +2,7 @@
 
 import os
 from dataclasses import dataclass
-from typing import Annotated, List
+from typing import Annotated
 
 from fastapi import Path, Query
 from starlette.requests import Request
@@ -33,14 +33,14 @@ class VariablesParams(DefaultDependency):
     """Xarray Dataset Options."""
 
     variables: Annotated[
-        List[str] | None,
+        list[str] | None,
         Query(
             description="Xarray Variable name in form of `{group_name}:{variable_name}`."
         ),
     ] = None
 
     sel: Annotated[
-        List[SelDimStr] | None,
+        list[SelDimStr] | None,
         Query(
             description="Xarray Indexing using dimension names `{dimension}={value}` or `{dimension}={method}::{value}`.",
         ),
