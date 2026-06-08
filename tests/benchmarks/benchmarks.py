@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from titiler.eopf.reader import GeoZarrReader, open_dataset
-from titiler.eopf.settings import CacheSettings
+from titiler.eopf.settings import EOPFCacheSettings
 
 from ..create_multiscale_fixture import create_geozarr_fixture
 
@@ -26,7 +26,7 @@ def geozarr_benchmark():
 @patch("titiler.eopf.reader.cache_settings")
 def test_open(cache_settings, geozarr_benchmark, benchmark):
     """Benchmark GeoZarrReader open method."""
-    cache_settings.side_effect = lambda: CacheSettings(enable=False)
+    cache_settings.side_effect = lambda: EOPFCacheSettings(enable=False)
 
     benchmark.name = "GeoZarrReader-Open"
     benchmark.fullname = "GeoZarrReader-Open"
@@ -43,7 +43,7 @@ def test_open(cache_settings, geozarr_benchmark, benchmark):
 @patch("titiler.eopf.reader.cache_settings")
 def test_info(cache_settings, geozarr_benchmark, benchmark):
     """Benchmark GeoZarrReader.info method."""
-    cache_settings.side_effect = lambda: CacheSettings(enable=False)
+    cache_settings.side_effect = lambda: EOPFCacheSettings(enable=False)
 
     benchmark.name = "GeoZarrReader-Info"
     benchmark.fullname = "GeoZarrReader-Info"
@@ -60,7 +60,7 @@ def test_info(cache_settings, geozarr_benchmark, benchmark):
 @patch("titiler.eopf.reader.cache_settings")
 def test_preview(cache_settings, geozarr_benchmark, benchmark):
     """Benchmark GeoZarrReader.preview method."""
-    cache_settings.side_effect = lambda: CacheSettings(enable=False)
+    cache_settings.side_effect = lambda: EOPFCacheSettings(enable=False)
 
     benchmark.name = "GeoZarrReader-Preview"
     benchmark.fullname = "GeoZarrReader-Preview"
@@ -83,7 +83,7 @@ def test_preview(cache_settings, geozarr_benchmark, benchmark):
 @patch("titiler.eopf.reader.cache_settings")
 def test_tile(cache_settings, geozarr_benchmark, benchmark):
     """Benchmark GeoZarrReader.tile method."""
-    cache_settings.side_effect = lambda: CacheSettings(enable=False)
+    cache_settings.side_effect = lambda: EOPFCacheSettings(enable=False)
 
     benchmark.name = "GeoZarrReader-Tile"
     benchmark.fullname = "GeoZarrReader-Tile"
