@@ -28,8 +28,5 @@ class RedisCache:
                 port=port,
                 password=password.get_secret_value() if password else None,
                 db=0,
-                # Use RESP3 to stay aligned with the async cache backend
-                # (and to work with the fakeredis server used in tests).
-                protocol=3,
             )
         return cls._instance

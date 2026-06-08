@@ -36,7 +36,7 @@ from zarr.storage import ObjectStore
 from titiler.xarray.io import _parse_dsl
 
 from .cache import RedisCache
-from .settings import EOPFCacheSettings
+from .settings import CacheSettings
 
 logger = logging.getLogger(__name__)
 
@@ -61,9 +61,9 @@ spatial_keys = {"spatial:shape", "spatial:transform"}
 
 
 @lru_cache(maxsize=1)
-def cache_settings() -> EOPFCacheSettings:
-    """This function returns a cached instance of the EOPFCacheSettings object."""
-    return EOPFCacheSettings()
+def cache_settings() -> CacheSettings:
+    """This function returns a cached instance of the CacheSettings object."""
+    return CacheSettings()
 
 
 class MissingVariables(RioTilerError):
@@ -125,33 +125,20 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
             engine="zarr",
         )
 
-    settings = cache_settings()
-    if settings.enable and settings.redis and settings.redis.host:
+    if cache_settings().enable and cache_settings().host:
         pool = RedisCache.get_instance(
-            settings.redis.host,
-            settings.redis.port,
-            settings.redis.password,
+            cache_settings().host,  # type: ignore
+            cache_settings().port,
+            cache_settings().password,
         )
         cache_client = redis.Redis(connection_pool=pool)
-
-        dt = None
-        try:
-            if data_bytes := cache_client.get(src_path):
-                logger.info(f"Cache - found dataset in Cache {src_path}")
-                dt = pickle.loads(data_bytes)
-        except redis.RedisError as e:
-            # A cache outage must never break dataset opening.
-            logger.warning(f"Cache - failed to read dataset from Cache {src_path}: {e}")
-
-        if dt is None:
+        if data_bytes := cache_client.get(src_path):
+            logger.info(f"Cache - found dataset in Cache {src_path}")
+            dt = pickle.loads(data_bytes)
+        else:
             dt = _open_dataset(src_path)
-            try:
-                logger.info(f"Cache - adding dataset in Cache {src_path}")
-                cache_client.set(src_path, pickle.dumps(dt), ex=settings.metadata_ttl)
-            except redis.RedisError as e:
-                logger.warning(
-                    f"Cache - failed to write dataset to Cache {src_path}: {e}"
-                )
+            logger.info(f"Cache - adding dataset in Cache {src_path}")
+            cache_client.set(src_path, pickle.dumps(dt), ex=300)
     else:
         dt = _open_dataset(src_path)
 
