@@ -1,3 +1,15 @@
+## 0.9.0 (2026-06-03)
+
+## What's Changed
+* feat: add support for scale/offset codec by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/102
+* chore(deps): bump the all group across 1 directory with 5 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/100
+* chore(deps): bump the all group with 7 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/105
+* chore(deps): bump docker/setup-qemu-action from 4.0.0 to 4.1.0 in the all group by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/106
+* fix: chunk viewer and remove comment by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/107
+* feat: use experimental xarray-GeoZarr Reader by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/99
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.8.0...v0.9.0
 
 ## 0.8.0 (2026-04-02)
 
