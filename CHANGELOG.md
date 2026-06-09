@@ -11,6 +11,16 @@
 
 **Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.8.0...v0.9.0
 
+## 0.9.1 (2026-06-09)
+
+## What's Changed
+* fix: remove legacy cache implementation by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/111
+* fix: update release-please action to use a personal access token by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/112
+* fix: update Python command for version checks to use specified pythonLocation by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/113
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.9.0...v0.9.1
+
 ## 0.8.0 (2026-04-02)
 
 ## What's Changed
