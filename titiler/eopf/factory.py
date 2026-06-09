@@ -2,7 +2,7 @@
 
 import logging
 import os
-from typing import Annotated, Any, Callable, Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import urlencode
 
 import rasterio
@@ -24,7 +24,7 @@ from titiler.core.resources.responses import GeoJSONResponse, JSONResponse
 from titiler.core.utils import bounds_to_geometry
 from titiler.xarray.dependencies import DatasetParams
 
-from .dependencies import DatasetPathParams, LayerParams, VariablesParams
+from .dependencies import LayerParams, VariablesParams
 from .reader import GeoZarrReader
 
 logger = logging.getLogger(__name__)
@@ -35,8 +35,6 @@ class TilerFactory(BaseTilerFactory):
     """Xarray Tiler Factory."""
 
     reader: type[GeoZarrReader] = GeoZarrReader
-
-    path_dependency: Callable[..., Any] = DatasetPathParams
 
     reader_dependency: type[DefaultDependency] = DefaultDependency
 

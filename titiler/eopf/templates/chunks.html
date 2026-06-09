@@ -424,7 +424,7 @@
         if (map.getLayer('tile-grid')) map.removeLayer('tile-grid')
         if (map.getSource('tile-grid')) map.removeSource('tile-grid')
 
-        return fetch(`{{ grid_endpoint }}?group=${group}&level=${level}`)
+        return fetch(`{{ grid_endpoint }}?asset={{ asset }}&group=${group}&level=${level}`)
             .then(res => {
                 if (res.ok) return res.json()
                 throw new Error('Network response was not ok.');
@@ -559,13 +559,13 @@
             const group = document.getElementById('group-selector').selectedOptions[0].getAttribute("group")
             const level = document.getElementById('ms-selector').selectedOptions[0].getAttribute("idx")
             const metadata = scope.metadata[group][level]
-            const variable_name = `${group}:${metadata.Variables[0]}`
+            const variable_name = metadata.Variables[0]
 
             // the tile_endpoint contains ${z}, ${x}, ${y}
             const x = props.x
             const y = props.y
             const z = props.z
-            fetch(`{{ tile_endpoint }}?variables=${variable_name}`)
+            fetch(`{{ tile_endpoint }}?assets={{ asset }}|variables=${variable_name}`)
                 .then(res => {
                     if (res.ok) return res.headers
                     throw new Error('Network response was not ok.');
