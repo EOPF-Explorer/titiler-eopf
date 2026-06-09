@@ -77,7 +77,6 @@ def _parse_asset(values: list[str]) -> list[AssetType]:
     """
     assets: list[AssetType] = []
     for v in values:
-        print(v)
         # asset with options
         if "|" in v:
             asset_name, params = v.split("|", 1)
