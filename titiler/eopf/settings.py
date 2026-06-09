@@ -1,6 +1,6 @@
 """API settings."""
 
-from pydantic import AnyUrl, SecretStr, ValidationInfo, field_validator, model_validator
+from pydantic import AnyUrl, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing_extensions import Self
 
@@ -63,33 +63,6 @@ class DataStoreSettings(BaseSettings):
         raise ValueError(
             "Either 'url' must be provided or both 'scheme' and 'host' must be provided"
         )
-
-
-class CacheSettings(BaseSettings):
-    """Legacy Redis Cache Settings - replaced by TiTiler Cache Extension.
-
-    This class maintains backward compatibility with existing EOPF cache settings
-    while providing access to the new comprehensive cache system.
-    """
-
-    host: str | None = None
-    port: int = 6379
-    password: SecretStr | None = None
-    enable: bool = False
-
-    model_config = SettingsConfigDict(
-        env_prefix="TITILER_EOPF_CACHE_REDIS_", env_file=".env", extra="ignore"
-    )
-
-    @model_validator(mode="after")
-    def check_cache_settings(self) -> Self:
-        """Check if cache is disabled."""
-        if self.enable and not self.host:
-            raise ValueError(
-                "Redis TITILER_EOPF_CACHE_REDIS_HOST must be set when cache is enabled"
-            )
-
-        return self
 
 
 class EOPFCacheSettings(BaseCacheSettings):
