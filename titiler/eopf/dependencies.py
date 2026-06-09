@@ -1,31 +1,12 @@
 """titiler.eopf.dependencies."""
 
-import os
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Path, Query
-from starlette.requests import Request
+from fastapi import Query
 
 from titiler.core.dependencies import BidxParams, DefaultDependency, ExpressionParams
 from titiler.xarray.dependencies import SelDimStr
-
-from .settings import DataStoreSettings
-
-store_settings = DataStoreSettings()
-
-
-def DatasetPathParams(
-    request: Request,
-    collection_id: Annotated[
-        str,
-        Path(description="Copernicus Collection Identifier"),
-    ],
-    item_id: Annotated[str, Path(description="Copernicus Item Identifier")],
-) -> str:
-    """Item dependency."""
-    store_url = str(store_settings.url)
-    return os.path.join(store_url, collection_id, item_id) + ".zarr"
 
 
 @dataclass

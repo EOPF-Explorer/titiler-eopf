@@ -23,23 +23,39 @@ from titiler.cache.backends.redis import RedisCacheBackend
 from titiler.cache.backends.s3 import S3StorageBackend
 from titiler.cache.backends.s3_redis import S3RedisCacheBackend
 from titiler.core.errors import DEFAULT_STATUS_CODES, add_exception_handlers
-from titiler.core.factory import AlgorithmFactory, ColorMapFactory, TMSFactory
+from titiler.core.factory import (
+    AlgorithmFactory,
+    ColorMapFactory,
+    MultiBaseTilerFactory,
+    TMSFactory,
+)
 from titiler.core.middleware import CacheControlMiddleware, TotalTimeMiddleware
 from titiler.core.models.OGC import Conformance, Landing
 from titiler.core.resources.enums import MediaType
 from titiler.core.utils import accept_media_type, create_html_response, update_openapi
+from titiler.extensions.render import _adapt_render_for_v2
+from titiler.extensions.wmts import wmtsExtension
+from titiler.mosaic.errors import MOSAIC_STATUS_CODES
+from titiler.mosaic.extensions.wmts import wmtsExtension as wmtsExtensionMosaic
+from titiler.mosaic.factory import MosaicTilerFactory
+from titiler.stacapi.dependencies import (
+    BackendParams,
+    CollectionSearch,
+    ItemIdParams,
+    STACAPIExtensionParams,
+)
+from titiler.stacapi.errors import STACAPI_STATUS_CODES
 
 from . import __version__ as titiler_version
 from .cache_deps import setup_cache
-from .dependencies import DatasetPathParams
-from .extensions import (
-    DatasetMetadataExtension,
-    EOPFChunkVizExtension,
-    EOPFViewerExtension,
-    EOPFwmtsExtension,
-)
-from .factory import TilerFactory
 from .settings import ApiSettings, EOPFCacheSettings, STACAPISettings
+from .stac import (
+    AssetsExprParams,
+    AssetsParams,
+    EOPFSimpleSTACReader,
+    EOPFSTACAPIBackend,
+    EOPFSTACAPIReader,
+)
 
 # Configure logging
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -167,6 +183,8 @@ app = FastAPI(
     version=titiler_version,
 )
 
+app.state.stac_url = stacapi_settings.url
+
 update_openapi(app)
 
 TITILER_CONFORMS_TO = {
@@ -178,68 +196,88 @@ TITILER_CONFORMS_TO = {
 }
 
 
-md = TilerFactory(
-    templates=templates,
-    extensions=[
-        DatasetMetadataExtension(),
-        EOPFViewerExtension(),
-        EOPFChunkVizExtension(),
-        EOPFwmtsExtension(),
-    ],
-    path_dependency=DatasetPathParams,
+# STAC Item Endpoints
+def _get_renders_item(obj) -> dict:
+    renders = obj.item.properties.get("renders", {})
+    for render in renders.values():
+        _adapt_render_for_v2(render)
+    return renders
+
+
+items = MultiBaseTilerFactory(
+    reader=EOPFSTACAPIReader,
+    path_dependency=ItemIdParams,
+    assets_dependency=AssetsParams,
+    layer_dependency=AssetsExprParams,
     router_prefix="/collections/{collection_id}/items/{item_id}",
+    add_viewer=True,
+    extensions=[
+        # EOPFChunkVizExtension(),
+        wmtsExtension(get_renders=_get_renders_item),  # type: ignore [attr-defined]
+    ],
+    templates=templates,
 )
 app.include_router(
-    md.router,
-    prefix="/collections/{collection_id}/items/{item_id}",
+    items.router,
     tags=["EOPF Items"],
+    prefix="/collections/{collection_id}/items/{item_id}",
 )
+TITILER_CONFORMS_TO.update(items.conforms_to)
 
-TITILER_CONFORMS_TO.update(md.conforms_to)
+# STAC COLLECTION Endpoints
+# Notes:
+# - The `path_dependency` is set to `STACCollectionSearchParams` which define `{collection_id}`
+# `Path` dependency and other Query parameters used to construct STAC API Search request.
+collection = MosaicTilerFactory(
+    path_dependency=CollectionSearch,
+    backend=EOPFSTACAPIBackend,
+    backend_dependency=BackendParams,
+    dataset_reader=EOPFSimpleSTACReader,
+    assets_accessor_dependency=STACAPIExtensionParams,
+    layer_dependency=AssetsExprParams,
+    router_prefix="/collections/{collection_id}",
+    add_viewer=True,
+    templates=templates,
+    extensions=[
+        wmtsExtensionMosaic(),
+    ],
+)
+app.include_router(
+    collection.router,
+    tags=["EOPF Collections"],
+    prefix="/collections/{collection_id}",
+)
+TITILER_CONFORMS_TO.update(collection.conforms_to)
 
-###############################################################################
-# STACPI Endpoints
-if stacapi_settings.url:
-    from titiler.mosaic.errors import MOSAIC_STATUS_CODES
-    from titiler.mosaic.extensions.wmts import wmtsExtension
-    from titiler.mosaic.factory import MosaicTilerFactory
-    from titiler.stacapi.dependencies import (
-        BackendParams,
-        CollectionSearch,
-        STACAPIExtensionParams,
+
+# External EOPF product
+if settings.enable_external_dataset_endpoints:
+    from .extensions import (
+        DatasetMetadataExtension,
+        EOPFChunkVizExtension,
+        EOPFViewerExtension,
+        EOPFwmtsExtension,
     )
-    from titiler.stacapi.errors import STACAPI_STATUS_CODES
+    from .factory import TilerFactory
 
-    from .stac import AssetsExprParams, EOPFSimpleSTACReader, EOPFSTACAPIBackend
-
-    app.state.stac_url = stacapi_settings.url
-
-    # STAC COLLECTION Endpoints
-    # Notes:
-    # - The `path_dependency` is set to `STACCollectionSearchParams` which define `{collection_id}`
-    # `Path` dependency and other Query parameters used to construct STAC API Search request.
-    collection = MosaicTilerFactory(
-        path_dependency=CollectionSearch,
-        backend=EOPFSTACAPIBackend,
-        backend_dependency=BackendParams,
-        dataset_reader=EOPFSimpleSTACReader,
-        assets_accessor_dependency=STACAPIExtensionParams,
-        layer_dependency=AssetsExprParams,
-        router_prefix="/collections/{collection_id}",
-        add_viewer=True,
+    external = TilerFactory(
         templates=templates,
         extensions=[
-            wmtsExtension(),
+            DatasetMetadataExtension(),
+            EOPFViewerExtension(),
+            EOPFChunkVizExtension(),
+            EOPFwmtsExtension(),
         ],
+        router_prefix="/external",
     )
     app.include_router(
-        collection.router,
-        tags=["EOPF Collections"],
-        prefix="/collections/{collection_id}",
+        external.router,
+        prefix="/external",
+        tags=["EOPF Products"],
     )
-    TITILER_CONFORMS_TO.update(collection.conforms_to)
-    add_exception_handlers(app, STACAPI_STATUS_CODES)
-    add_exception_handlers(app, MOSAIC_STATUS_CODES)
+
+    TITILER_CONFORMS_TO.update(external.conforms_to)
+
 
 ###############################################################################
 # TileMatrixSets endpoints
@@ -264,7 +302,9 @@ app.include_router(
 )
 TITILER_CONFORMS_TO.update(cmaps.conforms_to)
 
-add_exception_handlers(app, DEFAULT_STATUS_CODES)
+# Error handlers
+ERRORS = {**DEFAULT_STATUS_CODES, **MOSAIC_STATUS_CODES, **STACAPI_STATUS_CODES}
+add_exception_handlers(app, ERRORS)
 
 # Set all CORS enabled origins
 app.add_middleware(

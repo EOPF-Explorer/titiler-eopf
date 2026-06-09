@@ -1,19 +1,31 @@
 """titiler-eopf stac backend."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Annotated, Any, cast
 
 import attr
+import pystac
 from fastapi import Query
 from pydantic import AfterValidator
 from rio_tiler.errors import InvalidAssetName
-from rio_tiler.io.stac import STAC_ALTERNATE_KEY
+from rio_tiler.io.stac import DEFAULT_VALID_TYPE, STAC_ALTERNATE_KEY
+from rio_tiler.models import Info
 from rio_tiler.types import AssetInfo, AssetType, AssetWithOptions
 
 from titiler.core.dependencies import DefaultDependency, ExpressionParams
 from titiler.eopf.reader import GeoZarrReader
 from titiler.stacapi.backend import STACAPIBackend
-from titiler.stacapi.reader import SimpleSTACReader
+from titiler.stacapi.reader import SimpleSTACReader, STACAPIReader
+
+_VALID_TYPE = {
+    *DEFAULT_VALID_TYPE,
+    "application/x-zarr",
+    "application/vnd.zarr",
+    "application/vnd+zarr",
+    "application/vnd.zarr; version=3",
+    "application/vnd.zarr; version=3; profile=multiscales",
+}
 
 VALID_ASSET_OPTIONS = {"bidx", "expression", "bands", "variables", "sel"}
 
@@ -65,6 +77,7 @@ def _parse_asset(values: list[str]) -> list[AssetType]:
     """
     assets: list[AssetType] = []
     for v in values:
+        print(v)
         # asset with options
         if "|" in v:
             asset_name, params = v.split("|", 1)
@@ -139,11 +152,112 @@ class AssetsExprParams(ExpressionParams, AssetsParams):
 
 
 @attr.s
-class EOPFSimpleSTACReader(SimpleSTACReader):
-    """Custom EOPF Simple STAC Reader, used in STACAPI Mosaic Backend.
+class EOPFSTACAPIReader(STACAPIReader):
+    """Custom EOPF STACAPI Reader."""
 
-    NOTE: This reader takes a simple dictionary as item.
-    """
+    reader: type[GeoZarrReader] = attr.ib(default=GeoZarrReader)
+    include_asset_types: set[str] = attr.ib(default=_VALID_TYPE)
+
+    def info(
+        self,
+        assets: Sequence[AssetType] | AssetType | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Info]:
+        """Return metadata from multiple assets.
+
+        Args:
+            assets (sequence of str or str, optional): assets to fetch info from. Required keyword argument.
+
+        Returns:
+            dict: Multiple assets info in form of {"asset1": rio_tile.models.Info}.
+
+        """
+        infos = super().info(assets=assets, **kwargs)
+        return {
+            f"{asset_name}_{key}": value
+            for asset_name, info in infos.items()
+            for key, value in info.items()
+        }
+
+    def _get_options(
+        self,
+        asset: AssetWithOptions,
+        metadata: pystac.Asset,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        method_options: dict[str, Any] = {}
+        reader_options: dict[str, Any] = {}
+
+        # Indexes
+        if indexes := asset.get("indexes"):
+            method_options["indexes"] = indexes
+        # Expression
+        if expr := asset.get("expression"):
+            method_options["expression"] = expr
+        # Variables
+        if vars := asset.get("variables"):
+            method_options["variables"] = vars
+        # Sel (dimension selection)
+        if vars := asset.get("sel"):
+            method_options["sel"] = vars
+        # Bands
+        if bands := asset.get("bands"):
+            stac_bands = (
+                metadata.extra_fields.get("bands")
+                or metadata.extra_fields.get("eo:bands")  # V1.0
+            )
+            if not stac_bands:
+                raise ValueError(
+                    "Asset does not have 'bands' metadata, unable to use 'bands' option"
+                )
+            # For Zarr bands = variable
+            media_type = (
+                metadata.media_type.split(";")[0].strip() if metadata.media_type else ""
+            )
+            zarr_media_types = [
+                "application/x-zarr",
+                "application/vnd.zarr",
+                "application/vnd+zarr",
+            ]
+            if media_type in zarr_media_types:
+                common_to_variable = {
+                    b.get("eo:common_name") or b.get("common_name") or b["name"]: b[
+                        "name"
+                    ]
+                    for b in stac_bands
+                }
+                method_options["variables"] = [
+                    common_to_variable.get(v, v) for v in bands
+                ]
+
+            # For COG bands = indexes
+            else:
+                # There is no standard for precedence between 'eo:common_name' and 'name'
+                # in STAC specification, so we will use 'eo:common_name' if it exists,
+                # otherwise fallback to 'name', and if not exist use the band index as last resource.
+                common_to_variable = {
+                    b.get("eo:common_name")
+                    or b.get("common_name")
+                    or b.get("name")
+                    or str(ix): ix
+                    for ix, b in enumerate(stac_bands, 1)
+                }
+                band_indexes: list[int] = []
+                for b in bands:
+                    if idx := common_to_variable.get(b):
+                        band_indexes.append(idx)
+                    else:
+                        raise ValueError(
+                            f"Band '{b}' not found in asset metadata, unable to use 'bands' option"
+                        )
+
+                    method_options["indexes"] = band_indexes
+
+        return reader_options, method_options
+
+
+@attr.s
+class EOPFSimpleSTACReader(SimpleSTACReader):
+    """Custom EOPF Simple STAC Reader, used in STACAPI Mosaic Backend."""
 
     reader: type[GeoZarrReader] = attr.ib(default=GeoZarrReader)
 
