@@ -89,7 +89,6 @@
         <div class='mb6 mx6'>
             <div id='group-shape' class='txt-s'></div> 
             <div id='chunk-shape' class='txt-s'></div> 
-            <div id='decimation' class='txt-s'></div> 
             <div id='zoom-level' class='txt-s'></div>
 
         </div>
@@ -461,7 +460,6 @@
         const metadata = scope.metadata[group][level]
         document.getElementById('group-shape').innerText = `Array shape: (${metadata.Width}, ${metadata.Height})`
         document.getElementById('chunk-shape').innerText = `Chunk shape: (${metadata.ChunkSize[0]}, ${metadata.ChunkSize[1]})`
-        document.getElementById('decimation').innerText = `Decimation: ${(metadata.Decimation).toFixed(1)}`
         document.getElementById('zoom-level').innerText = `Mercator zoom: ${metadata.MercatorZoom}`
 
         add_chunks_grid(group, metadata["Level"])
@@ -565,7 +563,7 @@
             const x = props.x
             const y = props.y
             const z = props.z
-            fetch(`{{ tile_endpoint }}?variables=${variable_name}`)
+            fetch(`{{ tile_endpoint }}.npy?variables=${variable_name}`)
                 .then(res => {
                     if (res.ok) return res.headers
                     throw new Error('Network response was not ok.');

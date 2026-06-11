@@ -12,8 +12,8 @@ from fastapi import Depends, Query
 from geojson_pydantic.features import Feature
 from morecantile.models import crs_axis_inverted
 from rasterio import windows
-from rasterio.crs import CRS
-from rasterio.warp import calculate_default_transform, transform_geom
+from rasterio.transform import array_bounds
+from rasterio.warp import Affine, calculate_default_transform, transform_geom
 from rio_tiler.constants import WGS84_CRS
 from rio_tiler.utils import CRS_to_urn
 from starlette.requests import Request
@@ -27,7 +27,13 @@ from titiler.core.utils import bounds_to_geometry, rio_crs_to_pyproj, tms_limits
 from titiler.extensions.wmts import wmtsExtension
 
 from .factory import TilerFactory
-from .reader import MissingVariables
+from .reader import (
+    MissingVariables,
+    _get_proj_crs,
+    _has_multiscales,
+    _has_proj,
+    _has_spatial,
+)
 
 jinja2_env = jinja2.Environment(
     autoescape=jinja2.select_autoescape(["html"]),
@@ -229,9 +235,8 @@ class EOPFChunkVizExtension(FactoryExtension):
             response_class=HTMLResponse,
             operation_id=f"{factory.operation_prefix}getChunkViewer",
         )
-        def chunk_viewer(
-            request: Request,
-            src_path=Depends(factory.path_dependency),
+        def chunk_viewer(  # noqa: C901
+            request: Request, src_path=Depends(factory.path_dependency)
         ):
             """Chunk Viewer."""
             with factory.reader(input=src_path) as src_dst:
@@ -251,90 +256,148 @@ class EOPFChunkVizExtension(FactoryExtension):
                 for group in groups:
                     # get MultiScale info
                     levels = []
-                    if multiscales := src_dst.datatree[group].attrs.get("multiscales"):
-                        raw_res = None
 
-                        scale = src_dst.datatree[group].attrs["multiscales"][
-                            "tile_matrix_set"
-                        ]["tileMatrices"][0]["id"]
-                        ds = src_dst.datatree[group][scale].to_dataset()
-                        crs = CRS.from_user_input(multiscales["tile_matrix_set"]["crs"])
-                        bounds = ds.rio.bounds()
-                        width = ds.rio.width
-                        height = ds.rio.height
+                    tree = src_dst.datatree[group]
 
-                        for mat in multiscales["tile_matrix_set"]["tileMatrices"]:
-                            raw_res = mat["cellSize"] if raw_res is None else raw_res
-                            decimation = mat["cellSize"] / raw_res
+                    attributes = tree.attrs
+                    conventions = attributes.get("zarr_conventions", [])
+                    if _has_spatial(conventions) and _has_proj(conventions):
+                        dataset_crs = _get_proj_crs(attributes)
+
+                        if _has_multiscales(conventions):
+                            layouts = attributes["multiscales"]["layout"]
+                            for layout in layouts:
+                                # The EOPF minispec requires spatial:shape and spatial:transform to be present on the layout object
+                                # https://github.com/EOPF-Explorer/data-model/blob/main/docs/geozarr-minispec.md#layoutobject-1
+                                dataset_shape = layout.get("spatial:shape")
+                                dataset_transform = layout.get("spatial:transform")
+                                if not dataset_transform or not dataset_shape:
+                                    continue
+
+                                tr = Affine(*dataset_transform)
+                                height, width = dataset_shape
+                                dataset_bbox = array_bounds(height, width, tr)
+
+                                dst_affine, _, _ = calculate_default_transform(
+                                    dataset_crs,
+                                    src_dst.tms.rasterio_crs,
+                                    width,
+                                    height,
+                                    *dataset_bbox,
+                                )
+                                resolution = max(abs(dst_affine[0]), abs(dst_affine[4]))
+                                zoom = src_dst.tms.zoom_for_res(resolution)
+
+                                # Get chunk size
+                                variable = next(
+                                    (
+                                        var
+                                        for var, data_array in tree[
+                                            layout["asset"]
+                                        ].data_vars.items()
+                                        if data_array.ndim > 0
+                                    ),
+                                    None,
+                                )
+                                if not variable:
+                                    continue
+
+                                da = tree[layout["asset"]][variable]
+                                y_chunk = height
+                                x_chunk = width
+                                if chunks := da.encoding.get("chunks"):
+                                    y_chunk = chunks[da.dims.index("y")]
+                                    x_chunk = chunks[da.dims.index("x")]
+
+                                levels.append(
+                                    {
+                                        "Level": layout["asset"],
+                                        "Width": width,
+                                        "Height": height,
+                                        "ChunkSize": (y_chunk, x_chunk),
+                                        "MercatorZoom": zoom,
+                                        "MercatorResolution": resolution,
+                                        "Variables": list(
+                                            {
+                                                var
+                                                for var, data_array in tree[
+                                                    layout["asset"]
+                                                ].data_vars.items()
+                                                if data_array.ndim > 0
+                                            }
+                                        ),
+                                    }
+                                )
+
+                        else:
+                            spatial_dims = attributes["spatial:dimensions"]
+                            dataset_bbox = attributes.get("spatial:bbox")
+                            dataset_transform = attributes.get("spatial:transform")
+
+                            # Get chunk size
+                            variable = next(
+                                (
+                                    var
+                                    for var, data_array in tree.data_vars.items()
+                                    if data_array.ndim > 0
+                                ),
+                                None,
+                            )
+                            if not variable:
+                                continue
+
+                            da = tree[variable]
+
+                            ydim = spatial_dims[0]
+                            xdim = spatial_dims[1]
+                            shape = da.shape
+                            dims = list(da.dims)
+                            dataset_shape = [
+                                shape[dims.index(ydim)],
+                                shape[dims.index(xdim)],
+                            ]
+                            if not dataset_transform:
+                                continue
+
+                            tr = Affine(*dataset_transform)
+                            height, width = dataset_shape
+                            dataset_bbox = array_bounds(height, width, tr)
 
                             dst_affine, _, _ = calculate_default_transform(
-                                crs,
+                                dataset_crs,
                                 src_dst.tms.rasterio_crs,
-                                math.ceil(width / decimation),
-                                math.ceil(height / decimation),
-                                *bounds,
+                                width,
+                                height,
+                                *dataset_bbox,
                             )
                             resolution = max(abs(dst_affine[0]), abs(dst_affine[4]))
                             zoom = src_dst.tms.zoom_for_res(resolution)
 
+                            y_chunk = height
+                            x_chunk = width
+                            if chunks := da.encoding.get("chunks"):
+                                y_chunk = chunks[da.dims.index("y")]
+                                x_chunk = chunks[da.dims.index("x")]
+
                             levels.append(
                                 {
-                                    "Level": mat["id"],
-                                    "Width": math.ceil(width / decimation),
-                                    "Height": math.ceil(height / decimation),
-                                    "ChunkSize": (mat["tileWidth"], mat["tileHeight"]),
-                                    "Decimation": decimation,
+                                    "Level": "NA",
+                                    "Width": width,
+                                    "Height": height,
+                                    "ChunkSize": (y_chunk, x_chunk),
                                     "MercatorZoom": zoom,
                                     "MercatorResolution": resolution,
                                     "Variables": list(
                                         {
                                             var
-                                            for var, data_array in ds.data_vars.items()
+                                            for var, data_array in tree.data_vars.items()
                                             if data_array.ndim > 0
                                         }
                                     ),
                                 }
                             )
 
-                    else:
-                        ds = src_dst.datatree[group].to_dataset()
-                        preferred_chunks = ds.encoding.get("preferred_chunks", {})
-                        if {"x", "y"}.intersection(preferred_chunks):
-                            chunkxsize = preferred_chunks["x"]
-                            chunkysize = preferred_chunks["y"]
-                        else:
-                            chunkxsize = ds.rio.width
-                            chunkysize = ds.rio.height
-
-                        dst_affine, _, _ = calculate_default_transform(
-                            ds.rio.crs,
-                            src_dst.tms.rasterio_crs,
-                            ds.rio.width,
-                            ds.rio.height,
-                            *ds.rio.bounds(),
-                        )
-                        resolution = max(abs(dst_affine[0]), abs(dst_affine[4]))
-                        zoom = src_dst.tms.zoom_for_res(resolution)
-
-                        levels.append(
-                            {
-                                "Level": "0",
-                                "Width": ds.rio.width,
-                                "Height": ds.rio.height,
-                                "ChunkSize": (chunkxsize, chunkysize),
-                                "Decimation": 1,
-                                "MercatorZoom": zoom,
-                                "MercatorResolution": resolution,
-                                "Variables": list(
-                                    {
-                                        var
-                                        for var, data_array in ds.data_vars.items()
-                                        if data_array.ndim > 0
-                                    }
-                                ),
-                            }
-                        )
-                    metadata[group] = levels
+                        metadata[group] = levels
 
             return self.templates.TemplateResponse(
                 request,
@@ -362,55 +425,93 @@ class EOPFChunkVizExtension(FactoryExtension):
         )
         def chunk_grid(
             group: Annotated[str, Query(description="Group")],
-            level: Annotated[str, Query(description="Multiscale Level (matrix ID)")],
+            level: Annotated[str, Query(description="Multiscale Level")],
             src_path=Depends(factory.path_dependency),
         ):
             """return geojson."""
             with factory.reader(input=src_path) as src_dst:
-                if multiscales := src_dst.datatree[group].attrs.get("multiscales"):
-                    # Find matrix by id
-                    matrix = next(
+                tree = src_dst.datatree[group]
+                attributes = tree.attrs
+
+                dataset_crs = _get_proj_crs(attributes)
+
+                if _has_multiscales(attributes.get("zarr_conventions", [])):
+                    layouts = attributes["multiscales"]["layout"]
+
+                    layout = next(
+                        (m for m in layouts if m["asset"] == level),
+                        None,
+                    )
+                    if layout is None:
+                        raise ValueError(
+                            f"Level '{level}' not found in multiscale layouts"
+                        )
+
+                    height, width = layout.get("spatial:shape")
+                    dataset_transform = layout.get("spatial:transform")
+
+                    variable = next(
                         (
-                            m
-                            for m in multiscales["tile_matrix_set"]["tileMatrices"]
-                            if m["id"] == level
+                            var
+                            for var, data_array in tree[level].data_vars.items()
+                            if data_array.ndim > 0
                         ),
                         None,
                     )
-                    if matrix is None:
-                        raise ValueError(
-                            f"Level '{level}' not found in multiscale matrices"
-                        )
 
-                    ds = src_dst.datatree[group][level].to_dataset()
-                    blockysize = matrix["tileHeight"]
-                    blockxsize = matrix["tileWidth"]
-                    crs = CRS.from_user_input(multiscales["tile_matrix_set"]["crs"])
+                    da = tree[level][variable]
+                    y_chunk = height
+                    x_chunk = width
+                    if chunks := da.encoding.get("chunks"):
+                        y_chunk = chunks[da.dims.index("y")]
+                        x_chunk = chunks[da.dims.index("x")]
 
                 else:
-                    ds = src_dst.datatree[group].to_dataset()
-                    chunksizes = (
-                        ds.chunksizes
-                        if ds.chunksizes
-                        else (ds.rio.height, ds.rio.width)
-                    )
-                    blockysize = chunksizes[0]
-                    blockxsize = chunksizes[1]
-                    crs = ds.rio.crs or WGS84_CRS
+                    spatial_dims = attributes["spatial:dimensions"]
+                    dataset_transform = attributes.get("spatial:transform")
 
-                transform = ds.rio.transform()
-                # try:
+                    variable = next(
+                        (
+                            var
+                            for var, data_array in tree.data_vars.items()
+                            if data_array.ndim > 0
+                        ),
+                        None,
+                    )
+
+                    da = tree[variable]
+
+                    ydim = spatial_dims[0]
+                    xdim = spatial_dims[1]
+                    shape = da.shape
+                    dims = list(da.dims)
+                    height, width = shape[dims.index(ydim)], shape[dims.index(xdim)]
+                    y_chunk = height
+                    x_chunk = width
+                    if chunks := da.encoding.get("chunks"):
+                        y_chunk = chunks[dims.index("y")]
+                        x_chunk = chunks[dims.index("x")]
+
+                if not dataset_transform:
+                    raise ValueError("spatial:transform attribute is required")
+
+                transform = Affine(*dataset_transform)
+
                 feats = []
                 winds = (
                     windows.Window(col_off=col_off, row_off=row_off, width=w, height=h)
-                    for row_off, h in _dims(ds.rio.height, blockysize)
-                    for col_off, w in _dims(ds.rio.width, blockxsize)
+                    for row_off, h in _dims(height, y_chunk)
+                    for col_off, w in _dims(width, x_chunk)
                 )
                 for window in winds:
                     fc = bbox_to_feature(windows.bounds(window, transform))
                     for feat in fc.get("features", []):
-                        if crs != WGS84_CRS:
-                            geom = transform_geom(crs, WGS84_CRS, feat["geometry"])
+                        if dataset_crs != WGS84_CRS:
+                            geom = transform_geom(
+                                dataset_crs,
+                                WGS84_CRS,
+                                feat["geometry"],
+                            )
                         else:
                             geom = feat["geometry"]
 
