@@ -7,9 +7,11 @@ import math
 import os
 import pickle
 import re
+import threading
+import time
 import warnings
 from collections.abc import Callable
-from functools import cache, cached_property, lru_cache
+from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -33,6 +35,7 @@ from rio_tiler.types import BBox
 from rio_tiler.utils import _get_width_height, _missing_size
 from zarr.storage import ObjectStore
 
+from titiler.core.errors import BadRequestError
 from titiler.xarray.io import _parse_dsl
 
 from .cache import RedisCache
@@ -70,60 +73,102 @@ class MissingVariables(RioTilerError):
     """Missing Variables."""
 
 
-@cache
-def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
-    """Open Xarray dataset
+# Bound the in-process datatree memo. Unbounded caching + version-keying would
+# leak one datatree per append forever; LRU evicts the stale old versions first.
+DATASET_CACHE_MAXSIZE = 64
 
-    Args:
-        src_path (str): dataset path.
+# Throttle the store-version probe: src_path -> (monotonic_timestamp, version).
+_version_cache: dict[str, tuple[float, str | None]] = {}
+_version_cache_lock = threading.Lock()
 
-    Returns:
-        xarray.DataTree
 
+def _normalize_path(src_path: str) -> str:
+    """Resolve a scheme-less path to a `file://` URL; leave URLs untouched."""
+    if not urlparse(src_path).scheme:
+        return "file://" + str(Path(src_path).resolve())
+    return src_path
+
+
+@lru_cache(maxsize=DATASET_CACHE_MAXSIZE)
+def _get_store(src_path: str) -> Any:
+    """Build (and memoize) the obstore store for a dataset path.
+
+    Memoized so the S3/`AWS_PROFILE` branch does not rebuild the credential
+    provider / store on every request (the version probe runs per render).
     """
     parsed = urlparse(src_path)
-    if not parsed.scheme:
-        src_path = str(Path(src_path).resolve())
-        src_path = "file://" + src_path
+    aws_profile = os.environ.get("AWS_PROFILE")
+    if aws_profile and parsed.scheme == "s3" and HAS_BOTO3_PROVIDER:
+        from obstore.store import S3Store
 
-    def _open_dataset(src_path: str) -> xarray.DataTree:
-        # Check if AWS_PROFILE is set and we're dealing with an S3 URL
-        aws_profile = os.environ.get("AWS_PROFILE")
-        if aws_profile and parsed.scheme == "s3" and HAS_BOTO3_PROVIDER:
-            # Use Boto3CredentialProvider for AWS profile support
-            from obstore.store import S3Store
-
-            # Extract bucket and key from S3 URL
-            bucket = parsed.netloc
-            key = parsed.path.lstrip("/")
-
-            store = S3Store(
-                bucket,
-                credential_provider=Boto3CredentialProvider(),
-                region=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
-                endpoint=os.environ.get("AWS_ENDPOINT_URL", None),
-                virtual_hosted_style_request=False,
-                prefix=key,
-            )
-
-            # Create the zarr store with the configured S3 store
-            zarr_store = ObjectStore(store=store, read_only=True)
-        else:
-            # Use the default obstore.store.from_url method
-            store = obstore.store.from_url(src_path)
-            zarr_store = ObjectStore(store=store, read_only=True)
-
-        return xarray.open_datatree(
-            zarr_store,
-            decode_times=True,
-            decode_coords="all",
-            create_default_indexes=False,
-            # By default xarray will try to load the consolidated metadata
-            # consolidated=True,
-            # See https://github.com/pydata/xarray/issues/11361
-            # use_zarr_fill_value_as_mask=True,
-            engine="zarr",
+        return S3Store(
+            parsed.netloc,
+            credential_provider=Boto3CredentialProvider(),
+            region=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
+            endpoint=os.environ.get("AWS_ENDPOINT_URL", None),
+            virtual_hosted_style_request=False,
+            prefix=parsed.path.lstrip("/"),
         )
+
+    return obstore.store.from_url(src_path)
+
+
+def _store_version(src_path: str) -> str | None:
+    """Token that changes when the store's consolidated metadata changes.
+
+    HEADs the root `zarr.json` (zarr v3 consolidated metadata) and returns its
+    ETag, falling back to `last_modified`. Returns None (and logs) on any
+    failure so a render never fails because the probe did.
+    """
+    try:
+        meta = obstore.head(_get_store(src_path), "zarr.json")
+        if etag := meta.get("e_tag"):
+            return etag
+        last_modified = meta.get("last_modified")
+        return last_modified.isoformat() if last_modified else None
+    except Exception as exc:  # noqa: BLE001 - never fail a render on a probe error
+        logger.warning(f"Cache - could not probe store version for {src_path}: {exc}")
+        return None
+
+
+def _store_version_cached(src_path: str) -> str | None:
+    """`_store_version` throttled to one HEAD per `version_probe_ttl` per path."""
+    ttl = cache_settings().version_probe_ttl
+    now = time.monotonic()
+    with _version_cache_lock:
+        cached = _version_cache.get(src_path)
+        if cached is not None and now - cached[0] < ttl:
+            return cached[1]
+
+    # HEAD outside the lock to avoid serializing requests on network I/O.
+    version = _store_version(src_path)
+    with _version_cache_lock:
+        _version_cache[src_path] = (now, version)
+    return version
+
+
+def _open_from_store(src_path: str) -> xarray.DataTree:
+    """Open the datatree from the store (no caching)."""
+    zarr_store = ObjectStore(store=_get_store(src_path), read_only=True)
+    return xarray.open_datatree(
+        zarr_store,
+        decode_times=True,
+        decode_coords="all",
+        create_default_indexes=False,
+        # By default xarray will try to load the consolidated metadata
+        # consolidated=True,
+        # See https://github.com/pydata/xarray/issues/11361
+        # use_zarr_fill_value_as_mask=True,
+        engine="zarr",
+    )
+
+
+@lru_cache(maxsize=DATASET_CACHE_MAXSIZE)
+def _open_dataset_cached(
+    src_path: str, version: str | None, **kwargs: Any
+) -> xarray.DataTree:
+    """Open a datatree, cached in-process and in Redis under a version-aware key."""
+    cache_key = f"{src_path}#{version}" if version else src_path
 
     settings = cache_settings()
     if settings.enable and settings.redis and settings.redis.host:
@@ -134,28 +179,56 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
         )
         cache_client = redis.Redis(connection_pool=pool)
 
-        dt = None
         try:
-            if data_bytes := cache_client.get(src_path):
-                logger.info(f"Cache - found dataset in Cache {src_path}")
-                dt = pickle.loads(data_bytes)
+            if data_bytes := cache_client.get(cache_key):
+                logger.info(f"Cache - found dataset in Cache {cache_key}")
+                return pickle.loads(data_bytes)
         except redis.RedisError as e:
             # A cache outage must never break dataset opening.
-            logger.warning(f"Cache - failed to read dataset from Cache {src_path}: {e}")
+            logger.warning(
+                f"Cache - failed to read dataset from Cache {cache_key}: {e}"
+            )
 
-        if dt is None:
-            dt = _open_dataset(src_path)
-            try:
-                logger.info(f"Cache - adding dataset in Cache {src_path}")
-                cache_client.set(src_path, pickle.dumps(dt), ex=settings.metadata_ttl)
-            except redis.RedisError as e:
-                logger.warning(
-                    f"Cache - failed to write dataset to Cache {src_path}: {e}"
-                )
-    else:
-        dt = _open_dataset(src_path)
+        dt = _open_from_store(src_path)
+        try:
+            logger.info(f"Cache - adding dataset in Cache {cache_key}")
+            cache_client.set(cache_key, pickle.dumps(dt), ex=settings.metadata_ttl)
+        except redis.RedisError as e:
+            logger.warning(f"Cache - failed to write dataset to Cache {cache_key}: {e}")
+        return dt
 
-    return dt
+    return _open_from_store(src_path)
+
+
+def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
+    """Open Xarray dataset, keyed on the store's current version token.
+
+    An append rewrites the store's root `zarr.json`, changing its version token,
+    which produces a new cache key (in-process and in Redis) and a fresh read —
+    so the newest slice becomes visible without admin cache invalidation.
+
+    Args:
+        src_path (str): dataset path.
+
+    Returns:
+        xarray.DataTree
+
+    """
+    src_path = _normalize_path(src_path)
+    version = _store_version_cached(src_path)
+    return _open_dataset_cached(src_path, version, **kwargs)
+
+
+def _clear_open_dataset_caches() -> None:
+    """Clear every datatree-related memo (datatree, store, version probe)."""
+    _open_dataset_cached.cache_clear()
+    _get_store.cache_clear()
+    with _version_cache_lock:
+        _version_cache.clear()
+
+
+# Preserve the public `open_dataset.cache_clear()` contract used by benchmarks.
+open_dataset.cache_clear = _clear_open_dataset_caches  # type: ignore[attr-defined]
 
 
 def get_multiscale_level(
@@ -857,7 +930,15 @@ class GeoZarrReader(BaseReader):
             # TODO: add more casting
             # cast string to dtype of the dimension
             if da[dimension].dtype != "O":
-                values = [da[dimension].dtype.type(v) for v in values]
+                try:
+                    values = [da[dimension].dtype.type(v) for v in values]
+                except (ValueError, TypeError) as exc:
+                    # e.g. a datetime `sel` against a stale int64 axis:
+                    # degrade to 4xx instead of escaping as a 500.
+                    raise BadRequestError(
+                        f"Cannot select {dimension}={values!r} on a "
+                        f"{da[dimension].dtype} axis"
+                    ) from exc
 
             da = da.sel(
                 {dimension: values[0] if len(values) < 2 else values},

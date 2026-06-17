@@ -22,6 +22,16 @@ def geozarr_benchmark():
         shutil.rmtree(geozarr_path)
 
 
+@pytest.fixture
+def geozarr_3d_benchmark():
+    """GeoZarr dataset path with a time dimension (for `sel` benchmarks)."""
+    geozarr_path = os.path.join(os.path.dirname(__file__), "geozarr_3d.zarr")
+    create_geozarr_fixture(geozarr_path, version="v1", with_time=True)
+    yield geozarr_path
+    if os.path.exists(geozarr_path):
+        shutil.rmtree(geozarr_path)
+
+
 @pytest.mark.benchmark(min_rounds=50)
 @patch("titiler.eopf.reader.cache_settings")
 def test_open(cache_settings, geozarr_benchmark, benchmark):
@@ -37,6 +47,29 @@ def test_open(cache_settings, geozarr_benchmark, benchmark):
             pass
 
     _ = benchmark(_open)
+
+
+@pytest.mark.benchmark(min_rounds=50)
+@patch("titiler.eopf.reader.cache_settings")
+def test_open_cached(cache_settings, geozarr_benchmark, benchmark):
+    """Benchmark warm open_dataset: version-probe memo + in-process datatree memo hit.
+
+    This is the hot path most requests take; it would regress visibly if the
+    version-probe throttle were removed (a HEAD on every call).
+    """
+    cache_settings.side_effect = lambda: EOPFCacheSettings(enable=False)
+
+    benchmark.name = "GeoZarrReader-Open-Cached"
+    benchmark.fullname = "GeoZarrReader-Open-Cached"
+
+    open_dataset.cache_clear()
+    open_dataset(geozarr_benchmark)  # warm every memo once
+
+    def _open_cached():
+        with GeoZarrReader(geozarr_benchmark):
+            pass
+
+    _ = benchmark(_open_cached)
 
 
 @pytest.mark.benchmark(min_rounds=50)
@@ -100,6 +133,29 @@ def test_tile(cache_settings, geozarr_benchmark, benchmark):
                     "/measurements/reflectance:b03",
                     "/measurements/reflectance:b02",
                 ],
+            )
+
+    _ = benchmark(_tile)
+
+
+@pytest.mark.benchmark(min_rounds=50)
+@patch("titiler.eopf.reader.cache_settings")
+def test_tile_sel(cache_settings, geozarr_3d_benchmark, benchmark):
+    """Benchmark a tile read with a datetime `sel` (guards the sel-cast path)."""
+    cache_settings.side_effect = lambda: EOPFCacheSettings(enable=False)
+
+    benchmark.name = "GeoZarrReader-Tile-Sel"
+    benchmark.fullname = "GeoZarrReader-Tile-Sel"
+
+    def _tile():
+        open_dataset.cache_clear()
+        with GeoZarrReader(geozarr_3d_benchmark) as src:
+            return src.tile(
+                554,
+                395,
+                10,
+                variables=["/measurements/reflectance:b02"],
+                sel=["time=2022-01-02T00:00:00.000000000"],
             )
 
     _ = benchmark(_tile)
