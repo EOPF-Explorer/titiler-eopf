@@ -19,5 +19,11 @@ jobs:
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
         with:
+          # Use a PAT (not the default GITHUB_TOKEN) so that the release
+          # created here emits a `release: published` event. The default
+          # GITHUB_TOKEN deliberately does NOT trigger downstream workflows,
+          # which would otherwise prevent docker-helm.yml from building the
+          # version-tagged image.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: "release-please-config.json"
           manifest-file: ".release-please-manifest.json"
