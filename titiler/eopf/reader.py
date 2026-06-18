@@ -167,36 +167,34 @@ def _open_dataset_cached(
     src_path: str, version: str | None, **kwargs: Any
 ) -> xarray.DataTree:
     """Open a datatree, cached in-process and in Redis under a version-aware key."""
-    cache_key = f"{src_path}#{version}" if version else src_path
-
     settings = cache_settings()
-    if settings.enable and settings.redis and settings.redis.host:
-        pool = RedisCache.get_instance(
+    if not (settings.enable and settings.redis and settings.redis.host):
+        return _open_from_store(src_path)
+
+    cache_key = f"{src_path}#{version}" if version else src_path
+    cache_client = redis.Redis(
+        connection_pool=RedisCache.get_instance(
             settings.redis.host,
             settings.redis.port,
             settings.redis.password,
         )
-        cache_client = redis.Redis(connection_pool=pool)
+    )
 
-        try:
-            if data_bytes := cache_client.get(cache_key):
-                logger.info(f"Cache - found dataset in Cache {cache_key}")
-                return pickle.loads(data_bytes)
-        except redis.RedisError as e:
-            # A cache outage must never break dataset opening.
-            logger.warning(
-                f"Cache - failed to read dataset from Cache {cache_key}: {e}"
-            )
+    try:
+        if data_bytes := cache_client.get(cache_key):
+            logger.info(f"Cache - found dataset in Cache {cache_key}")
+            return pickle.loads(data_bytes)
+    except redis.RedisError as e:
+        # A cache outage must never break dataset opening.
+        logger.warning(f"Cache - failed to read dataset from Cache {cache_key}: {e}")
 
-        dt = _open_from_store(src_path)
-        try:
-            logger.info(f"Cache - adding dataset in Cache {cache_key}")
-            cache_client.set(cache_key, pickle.dumps(dt), ex=settings.metadata_ttl)
-        except redis.RedisError as e:
-            logger.warning(f"Cache - failed to write dataset to Cache {cache_key}: {e}")
-        return dt
-
-    return _open_from_store(src_path)
+    dt = _open_from_store(src_path)
+    try:
+        logger.info(f"Cache - adding dataset in Cache {cache_key}")
+        cache_client.set(cache_key, pickle.dumps(dt), ex=settings.metadata_ttl)
+    except redis.RedisError as e:
+        logger.warning(f"Cache - failed to write dataset to Cache {cache_key}: {e}")
+    return dt
 
 
 def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
