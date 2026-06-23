@@ -5,6 +5,7 @@ import pytest
 import xarray
 from rio_tiler.errors import ExpressionMixingWarning
 
+from titiler.core.errors import BadRequestError
 from titiler.eopf.reader import GeoZarrReader, MissingVariables
 
 
@@ -639,7 +640,6 @@ def test_sel_datetime_happy_path(geozarr_3d_dataset):
 
 def test_sel_on_int64_axis_raises_bad_request(geozarr_3d_dataset):
     """A datetime `sel` against a (stale) int64 time axis degrades to 4xx, not 500."""
-    from titiler.core.errors import BadRequestError
 
     def _cast_time_to_int64(ds: xarray.Dataset) -> xarray.Dataset:
         if "time" in ds.coords:
