@@ -21,7 +21,6 @@ cache:
   ttl:
     default: 1800  # 30 minutes
     tiles: 3600    # 1 hour
-    datasets: 900  # 15 minutes
   
   namespace: "staging-cache"
   exclude_params:

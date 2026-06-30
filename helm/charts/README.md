@@ -48,7 +48,6 @@ See [CACHE_CONFIG.md](CACHE_CONFIG.md) for detailed configuration guide.
 | `cache.backend` | Cache backend: `redis`, `s3`, or `s3-redis` | `redis` |
 | `cache.ttl.default` | Default TTL in seconds | `3600` |
 | `cache.ttl.tiles` | Tile cache TTL in seconds | `3600` |
-| `cache.ttl.datasets` | Dataset cache TTL in seconds | `1800` |
 | `cache.namespace` | Cache key namespace | `titiler-eopf` |
 
 ### Redis Cache Configuration
