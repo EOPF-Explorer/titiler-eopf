@@ -31,8 +31,7 @@ cache:
   # Cache settings for production
   ttl:
     default: 7200  # 2 hours
-    tiles: 14400   # 4 hours  
-    datasets: 3600 # 1 hour
+    tiles: 14400   # 4 hours
   
   namespace: "prod-cache"
   

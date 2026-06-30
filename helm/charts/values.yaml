@@ -86,7 +86,6 @@ cache:
   ttl:
     default: 3600  # 1 hour
     tiles: 3600
-    datasets: 1800  # 30 minutes
 
   # Cache namespace and key generation
   namespace: "titiler-eopf"

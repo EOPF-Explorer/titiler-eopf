@@ -66,15 +66,19 @@ class DataStoreSettings(BaseSettings):
 
 
 class CacheSettings(BaseSettings):
-    """Legacy Redis Cache Settings - replaced by TiTiler Cache Extension.
+    """Redis settings for the reader dataset cache.
 
-    This class maintains backward compatibility with existing EOPF cache settings
-    while providing access to the new comprehensive cache system.
+    Shares the ``TITILER_EOPF_CACHE_REDIS_`` env prefix (host/port/password/db)
+    with the titiler.cache extension's ``CacheRedisSettings`` so the reader's
+    DataTree cache and the response/tile cache always target the same Redis
+    server and database. Enabled independently via
+    ``TITILER_EOPF_CACHE_REDIS_ENABLE``.
     """
 
     host: str | None = None
     port: int = 6379
     password: SecretStr | None = None
+    db: int = 0
     enable: bool = False
 
     model_config = SettingsConfigDict(
