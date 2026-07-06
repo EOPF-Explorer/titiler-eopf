@@ -25,6 +25,13 @@ def _redis_keys(client) -> set[str]:
     return {k.decode() for k in client.keys()}
 
 
+def _assert_bare_src_path_key(redis_client, dataset_path: str) -> None:
+    """Assert the dataset was cached under the bare (un-versioned) src_path key."""
+    keys = _redis_keys(redis_client)
+    assert reader_mod._normalize_path(dataset_path) in keys
+    assert not any("#" in k for k in keys)
+
+
 @pytest.fixture(autouse=True)
 def reset_caches():
     """Reset every memo around each test (redis disabled by default env)."""
@@ -93,10 +100,7 @@ def test_version_probe_failure_falls_back_to_src_path_key(
     dt = open_dataset(geozarr_dataset)
 
     assert dt is not None
-    norm = reader_mod._normalize_path(geozarr_dataset)
-    keys = _redis_keys(redis_client)
-    assert norm in keys
-    assert not any("#" in k for k in keys)
+    _assert_bare_src_path_key(redis_client, geozarr_dataset)
 
 
 # --- Opt-out: version_probe_ttl=0 -> plain TTL behavior ---------------------
@@ -120,10 +124,7 @@ def test_probe_disabled_skips_head_and_uses_plain_key(
     open_dataset(geozarr_dataset)  # same TTL bucket -> served by the in-process memo
 
     assert opens[0] == 1
-    norm = reader_mod._normalize_path(geozarr_dataset)
-    keys = _redis_keys(redis_client)
-    assert norm in keys
-    assert not any("#" in k for k in keys)
+    _assert_bare_src_path_key(redis_client, geozarr_dataset)
 
 
 def test_probe_disabled_memo_expires_after_metadata_ttl(

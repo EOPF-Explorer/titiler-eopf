@@ -146,6 +146,21 @@ def _store_version_cached(src_path: str) -> str | None:
     return version
 
 
+def _cache_token(src_path: str) -> tuple[str | None, int | None]:
+    """Derive the `(version, lru_salt)` pair that keys the datatree caches.
+
+    Probe enabled: `(store version, None)` — an append rolls both the
+    in-process and Redis keys. Probe disabled (`version_probe_ttl <= 0`):
+    `(None, metadata_ttl-wide time bucket)` — plain TTL mode; the bucket
+    salts only the in-process memo so it expires on the `metadata_ttl`
+    cadence, matching the Redis entry's own TTL.
+    """
+    settings = cache_settings()
+    if settings.version_probe_ttl <= 0:
+        return None, int(time.monotonic() // max(settings.metadata_ttl, 1))
+    return _store_version_cached(src_path), None
+
+
 def _open_from_store(src_path: str) -> xarray.DataTree:
     """Open the datatree from the store (no caching)."""
     zarr_store = ObjectStore(store=_get_store(src_path), read_only=True)
@@ -223,14 +238,8 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
 
     """
     src_path = _normalize_path(src_path)
-    settings = cache_settings()
-
-    if settings.version_probe_ttl <= 0:
-        bucket = int(time.monotonic() // max(settings.metadata_ttl, 1))
-        return _open_dataset_cached(src_path, None, _ttl_bucket=bucket, **kwargs)
-
-    version = _store_version_cached(src_path)
-    return _open_dataset_cached(src_path, version, **kwargs)
+    version, ttl_bucket = _cache_token(src_path)
+    return _open_dataset_cached(src_path, version, _ttl_bucket=ttl_bucket, **kwargs)
 
 
 def _clear_open_dataset_caches() -> None:
