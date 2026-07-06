@@ -91,7 +91,7 @@ cache:
   # Store-version probe (stale-on-append protection): TTL in seconds between
   # HEAD probes of a store's root zarr.json. Set to 0 to disable probing and
   # fall back to plain TTL caching (datasets expire after ttl.datasets).
-  versionProbeTtl: 5
+  versionProbeTtl: 60
 
   # Cache namespace and key generation
   namespace: "titiler-eopf"
