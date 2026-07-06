@@ -82,6 +82,8 @@ class EOPFCacheSettings(BaseCacheSettings):
     metadata_ttl: int = 300  # 5 minutes for metadata (incl. cached datatrees)
     # TTL (seconds) for the store-version probe; bounds both the staleness window
     # after an append and the per-request HEAD rate (see GeoZarrReader caching).
+    # Set to 0 to opt out of version probing entirely: no HEAD requests are made
+    # and cached datatrees simply expire after `metadata_ttl` (plain TTL mode).
     version_probe_ttl: int = 5
 
     # Parameter exclusion for cache keys

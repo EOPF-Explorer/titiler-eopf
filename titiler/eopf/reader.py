@@ -164,9 +164,15 @@ def _open_from_store(src_path: str) -> xarray.DataTree:
 
 @lru_cache(maxsize=DATASET_CACHE_MAXSIZE)
 def _open_dataset_cached(
-    src_path: str, version: str | None, **kwargs: Any
+    src_path: str, version: str | None, _ttl_bucket: int | None = None, **kwargs: Any
 ) -> xarray.DataTree:
-    """Open a datatree, cached in-process and in Redis under a version-aware key."""
+    """Open a datatree, cached in-process and in Redis under a version-aware key.
+
+    `_ttl_bucket` only participates in the lru_cache key: when version probing
+    is disabled it rolls over every `metadata_ttl` seconds so the in-process
+    memo expires. It is process-local (monotonic-based) and must never leak
+    into the Redis key, which is shared across replicas.
+    """
     settings = cache_settings()
     if not (settings.enable and settings.redis and settings.redis.host):
         return _open_from_store(src_path)
@@ -204,6 +210,11 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
     which produces a new cache key (in-process and in Redis) and a fresh read —
     so the newest slice becomes visible without admin cache invalidation.
 
+    Setting `version_probe_ttl=0` opts out of version probing entirely: no HEAD
+    requests are made and caching degrades to plain TTL behavior — the Redis
+    entry expires after `metadata_ttl` and the in-process memo is keyed on a
+    `metadata_ttl`-wide time bucket so it expires on the same cadence.
+
     Args:
         src_path (str): dataset path.
 
@@ -212,6 +223,12 @@ def open_dataset(src_path: str, **kwargs: Any) -> xarray.DataTree:
 
     """
     src_path = _normalize_path(src_path)
+    settings = cache_settings()
+
+    if settings.version_probe_ttl <= 0:
+        bucket = int(time.monotonic() // max(settings.metadata_ttl, 1))
+        return _open_dataset_cached(src_path, None, _ttl_bucket=bucket, **kwargs)
+
     version = _store_version_cached(src_path)
     return _open_dataset_cached(src_path, version, **kwargs)
 

@@ -99,6 +99,53 @@ def test_version_probe_failure_falls_back_to_src_path_key(
     assert not any("#" in k for k in keys)
 
 
+# --- Opt-out: version_probe_ttl=0 -> plain TTL behavior ---------------------
+
+
+def test_probe_disabled_skips_head_and_uses_plain_key(
+    geozarr_dataset, redis_client, monkeypatch
+):
+    """version_probe_ttl=0 never probes the store and caches under the bare src_path key."""
+    monkeypatch.setenv("TITILER_EOPF_CACHE_VERSION_PROBE_TTL", "0")
+    cache_settings.cache_clear()
+
+    def boom(src_path):
+        raise AssertionError("version probe must not run when version_probe_ttl=0")
+
+    monkeypatch.setattr(reader_mod, "_store_version", boom)
+    monkeypatch.setattr(reader_mod, "_store_version_cached", boom)
+    opens = _count_opens(monkeypatch)
+
+    open_dataset(geozarr_dataset)
+    open_dataset(geozarr_dataset)  # same TTL bucket -> served by the in-process memo
+
+    assert opens[0] == 1
+    norm = reader_mod._normalize_path(geozarr_dataset)
+    keys = _redis_keys(redis_client)
+    assert norm in keys
+    assert not any("#" in k for k in keys)
+
+
+def test_probe_disabled_memo_expires_after_metadata_ttl(
+    geozarr_dataset, redis_client, monkeypatch
+):
+    """With probing disabled, the in-process memo expires on `metadata_ttl` boundaries."""
+    monkeypatch.setenv("TITILER_EOPF_CACHE_VERSION_PROBE_TTL", "0")
+    monkeypatch.setenv("TITILER_EOPF_CACHE_METADATA_TTL", "300")
+    cache_settings.cache_clear()
+    opens = _count_opens(monkeypatch)
+
+    clock = [1000.0]
+    monkeypatch.setattr(reader_mod.time, "monotonic", lambda: clock[0])
+
+    open_dataset(geozarr_dataset)  # read + cache (bucket N)
+    clock[0] += 301  # roll into bucket N+1
+    redis_client.flushall()  # simulate the Redis entry expiring on the same TTL
+    open_dataset(geozarr_dataset)
+
+    assert opens[0] == 2
+
+
 def test_store_version_returns_none_on_head_failure(monkeypatch):
     """A failed HEAD never raises; it degrades to None (so the cache falls back)."""
 
