@@ -33,6 +33,7 @@ from rio_tiler.types import BBox
 from rio_tiler.utils import _get_width_height, _missing_size
 from zarr.storage import ObjectStore
 
+from titiler.core.errors import BadRequestError
 from titiler.xarray.io import _parse_dsl
 
 from .cache import RedisCache
@@ -857,7 +858,15 @@ class GeoZarrReader(BaseReader):
             # TODO: add more casting
             # cast string to dtype of the dimension
             if da[dimension].dtype != "O":
-                values = [da[dimension].dtype.type(v) for v in values]
+                try:
+                    values = [da[dimension].dtype.type(v) for v in values]
+                except (ValueError, TypeError) as exc:
+                    # e.g. a datetime `sel` against a stale int64 axis:
+                    # degrade to 4xx instead of escaping as a 500.
+                    raise BadRequestError(
+                        f"Cannot select {dimension}={values!r} on a "
+                        f"{da[dimension].dtype} axis"
+                    ) from exc
 
             da = da.sel(
                 {dimension: values[0] if len(values) < 2 else values},
