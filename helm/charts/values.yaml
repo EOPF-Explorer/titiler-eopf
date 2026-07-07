@@ -86,6 +86,12 @@ cache:
   ttl:
     default: 3600  # 1 hour
     tiles: 3600
+    datasets: 1800  # 30 minutes (feeds cache metadata_ttl for cached datatrees)
+
+  # Store-version probe (stale-on-append protection): TTL in seconds between
+  # HEAD probes of a store's root zarr.json. Set to 0 to disable probing and
+  # fall back to plain TTL caching (datasets expire after ttl.datasets).
+  versionProbeTtl: 60
 
   # Cache namespace and key generation
   namespace: "titiler-eopf"

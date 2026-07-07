@@ -5,6 +5,7 @@ import pytest
 import xarray
 from rio_tiler.errors import ExpressionMixingWarning
 
+from titiler.core.errors import BadRequestError
 from titiler.eopf.reader import GeoZarrReader, MissingVariables
 
 
@@ -624,3 +625,34 @@ def test_scale_offset(geozarr_so):
         assert img.array.shape == (2, 64, 128)
         assert img.array.dtype == numpy.float32
         assert img.array.mask[0, 0, 0]
+
+
+def test_sel_datetime_happy_path(geozarr_3d_dataset):
+    """A datetime64 time axis selects by an ISO datetime string (regression)."""
+    with GeoZarrReader(geozarr_3d_dataset) as src:
+        da = src._get_variable(
+            "/measurements/reflectance",
+            "b02",
+            sel=["time=2022-01-02T00:00:00.000000000"],
+        )
+        assert "time" not in da.dims
+
+
+def test_sel_on_int64_axis_raises_bad_request(geozarr_3d_dataset):
+    """A datetime `sel` against a (stale) int64 time axis degrades to 4xx, not 500."""
+
+    def _cast_time_to_int64(ds: xarray.Dataset) -> xarray.Dataset:
+        if "time" in ds.coords:
+            return ds.assign_coords(time=ds["time"].astype("int64"))
+        return ds
+
+    src = GeoZarrReader(geozarr_3d_dataset)
+    # Simulate a legacy/stale store whose `time` axis is int64, not datetime64.
+    src.datatree = src.datatree.map_over_datasets(_cast_time_to_int64)
+
+    with pytest.raises(BadRequestError):
+        src._get_variable(
+            "/measurements/reflectance",
+            "b02",
+            sel=["time=2022-01-02T00:00:00.000000000"],
+        )

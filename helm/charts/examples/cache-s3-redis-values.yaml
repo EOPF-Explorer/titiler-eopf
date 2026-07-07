@@ -32,7 +32,8 @@ cache:
   ttl:
     default: 7200  # 2 hours
     tiles: 14400   # 4 hours
-  
+    datasets: 3600 # 1 hour
+
   namespace: "prod-cache"
   
   # Admin API
