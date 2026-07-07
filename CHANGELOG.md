@@ -11,6 +11,19 @@
 
 **Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.8.0...v0.9.0
 
+## 0.10.0 (2026-07-07)
+
+## What's Changed
+* chore(deps): bump the all group with 3 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/109
+* fix: chunck viewer by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/116
+* chore(deps): bump the all group across 1 directory with 9 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/129
+* fix: graceful 400 on datetime sel against a stale int64 axis by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/123
+* fix: version-aware datatree cache (stale-on-append) by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/122
+* fix(cache): align Redis settings and fix Helm env-var wiring for cache TTLs by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/128
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.9.1...v0.10.0
+
 ## 0.9.1 (2026-06-09)
 
 ## What's Changed
