@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783417307935,
+  "lastUpdate": 1783423951939,
   "repoUrl": "https://github.com/EOPF-Explorer/titiler-eopf",
   "entries": {
     "titiler-eopf Benchmarks": [
@@ -1040,6 +1040,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.03285975641493271",
             "extra": "mean: 355.96601888000095 msec\nrounds: 50"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "10154151+lhoupert@users.noreply.github.com",
+            "name": "Loïc Houpert",
+            "username": "lhoupert"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "488c19c343306e749e38995edd061f08c4e38f38",
+          "message": "Merge pull request #128 from EOPF-Explorer/fix/align-cache-redis-settings-and-ttl-wiring\n\nfix(cache): align Redis settings and fix Helm env-var wiring for cache TTLs",
+          "timestamp": "2026-07-07T12:29:22+01:00",
+          "tree_id": "d400497c0f6efeedd2680249ecd75229247cd0d3",
+          "url": "https://github.com/EOPF-Explorer/titiler-eopf/commit/488c19c343306e749e38995edd061f08c4e38f38"
+        },
+        "date": 1783423951647,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "GeoZarrReader-Open",
+            "value": 48.87453194082589,
+            "unit": "iter/sec",
+            "range": "stddev: 0.014482599525536861",
+            "extra": "mean: 20.460554000000144 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Info",
+            "value": 53.296557234961675,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0006450342017351338",
+            "extra": "mean: 18.76293801851832 msec\nrounds: 54"
+          },
+          {
+            "name": "GeoZarrReader-Preview",
+            "value": 2.5239157295897066,
+            "unit": "iter/sec",
+            "range": "stddev: 0.02135594641918956",
+            "extra": "mean: 396.2097419799996 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Tile",
+            "value": 2.314912957264387,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04290159286194135",
+            "extra": "mean: 431.98168504000023 msec\nrounds: 50"
           }
         ]
       }
