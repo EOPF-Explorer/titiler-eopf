@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 from pydantic_settings import SettingsConfigDict
 
-from titiler.eopf.settings import DataStoreSettings
+from titiler.eopf.settings import DataStoreSettings, EOPFCacheSettings
 
 
 class IsolatedDataStoreSettings(DataStoreSettings):
@@ -54,3 +54,33 @@ def test_datastore_settings_error(params, monkeypatch):
     monkeypatch.delenv("TITILER_EOPF_STORE_PATH", raising=False)
     with pytest.raises(ValidationError):
         IsolatedDataStoreSettings(**params)
+
+
+class IsolatedEOPFCacheSettings(EOPFCacheSettings):
+    """EOPFCacheSettings without .env loading."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="TITILER_EOPF_CACHE_", env_file=None, extra="ignore"
+    )
+
+
+def test_eopf_cache_resolves_redis_db(monkeypatch):
+    """EOPFCacheSettings resolves the Redis db from TITILER_EOPF_CACHE_REDIS_DB.
+
+    The reader dataset cache and the response/tile cache both connect through
+    ``EOPFCacheSettings.redis``, so a configured ``db`` must propagate to that
+    shared ``CacheRedisSettings`` — otherwise the two caches would target
+    different Redis databases.
+    """
+    monkeypatch.setenv("TITILER_EOPF_CACHE_ENABLE", "true")
+    monkeypatch.setenv("TITILER_EOPF_CACHE_BACKEND", "redis")
+    monkeypatch.setenv("TITILER_EOPF_CACHE_REDIS_HOST", "redis.example")
+    monkeypatch.setenv("TITILER_EOPF_CACHE_REDIS_PORT", "6380")
+    monkeypatch.setenv("TITILER_EOPF_CACHE_REDIS_DB", "3")
+
+    settings = IsolatedEOPFCacheSettings()
+
+    assert settings.redis is not None
+    assert settings.redis.host == "redis.example"
+    assert settings.redis.port == 6380
+    assert settings.redis.db == 3

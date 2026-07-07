@@ -18,7 +18,7 @@ class RedisCache:
 
     @classmethod
     def get_instance(
-        cls, host: str, port: int, password: SecretStr | None
+        cls, host: str, port: int, password: SecretStr | None, db: int = 0
     ) -> redis.ConnectionPool:
         """Get the redis connection pool."""
         assert redis, "Redis package needs to be installed to use Redis Cache"
@@ -27,7 +27,7 @@ class RedisCache:
                 host=host,
                 port=port,
                 password=password.get_secret_value() if password else None,
-                db=0,
+                db=db,
                 # Use RESP3 to stay aligned with the async cache backend
                 # (and to work with the fakeredis server used in tests).
                 protocol=3,

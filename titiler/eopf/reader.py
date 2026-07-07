@@ -199,6 +199,7 @@ def _open_dataset_cached(
             settings.redis.host,
             settings.redis.port,
             settings.redis.password,
+            settings.redis.db,
         )
     )
 
