@@ -79,7 +79,14 @@ class EOPFCacheSettings(BaseCacheSettings):
     namespace: str = "titiler-eopf"
     default_ttl: int = 3600  # 1 hour default TTL
     tile_ttl: int = 86400  # 24 hours for tiles
-    metadata_ttl: int = 300  # 5 minutes for metadata
+    metadata_ttl: int = 300  # 5 minutes for metadata (incl. cached datatrees)
+    # TTL (seconds) for the store-version probe; bounds both the staleness window
+    # after an append and the per-process HEAD rate (see GeoZarrReader caching).
+    # 60s keeps HEAD traffic negligible while bounding post-append staleness to
+    # a minute — plenty for stores that append on a cadence of days.
+    # Set to 0 to opt out of version probing entirely: no HEAD requests are made
+    # and cached datatrees simply expire after `metadata_ttl` (plain TTL mode).
+    version_probe_ttl: int = 60
 
     # Parameter exclusion for cache keys
     exclude_params: list[str] = ["format", "callback", "buffer"]
