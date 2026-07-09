@@ -203,3 +203,45 @@ def test_dataset_3d(app, geozarr_3d):
     assert info["name"] == "b02"
     assert "time" not in info["dimensions"]
     assert info["count"] == 1
+
+
+def test_viewer(app, geozarr):
+    """Test /viewer endpoint, with and without render presets in the query string."""
+    collection, item = geozarr
+    response = app.get(f"/collections/{collection}/items/{item}/viewer")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    # the template pre-selects tile parameters found in the page query string
+    assert "applyPresetFromQuery" in response.text
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/viewer",
+        params={
+            "variables": [
+                "/measurements/reflectance:b04",
+                "/measurements/reflectance:b03",
+                "/measurements/reflectance:b02",
+            ],
+            "rescale": "0,1",
+            "color_formula": "gamma rgb 1.3, sigmoidal rgb 6 0.1, saturation 1.2",
+            "bidx": 1,
+        },
+    )
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+
+    response = app.get("/api")
+    assert response.status_code == 200
+    parameters = {
+        param["name"]
+        for param in response.json()["paths"][
+            "/collections/{collection_id}/items/{item_id}/viewer"
+        ]["get"]["parameters"]
+    }
+    assert {
+        "variables",
+        "bidx",
+        "rescale",
+        "color_formula",
+        "colormap_name",
+    } <= parameters

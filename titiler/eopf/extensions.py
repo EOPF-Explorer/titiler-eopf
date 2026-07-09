@@ -121,8 +121,34 @@ class EOPFViewerExtension(FactoryExtension):
             response_class=HTMLResponse,
             operation_id=f"{factory.operation_prefix}getViewer",
         )
-        def html_viewer(request: Request):
-            """Viewer."""
+        def html_viewer(
+            request: Request,
+            variables: Annotated[
+                list[str] | None,
+                Query(description="Variables to pre-select and render on load."),
+            ] = None,
+            bidx: Annotated[
+                list[int] | None,
+                Query(description="Band indexes to pre-select."),
+            ] = None,
+            rescale: Annotated[
+                str | None,
+                Query(description="comma (',') delimited Min,Max range to pre-fill."),
+            ] = None,
+            color_formula: Annotated[
+                str | None,
+                Query(description="rio-color formula to pre-fill."),
+            ] = None,
+            colormap_name: Annotated[
+                str | None,
+                Query(description="Colormap name to pre-select."),
+            ] = None,
+        ):
+            """Viewer.
+
+            Rendering options passed in the query string are pre-selected in the
+            page and rendered on load; they are parsed client-side by the template.
+            """
             return self.templates.TemplateResponse(
                 request,
                 name="viewer.html",
