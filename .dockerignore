@@ -1,0 +1,17 @@
+# Deny everything, then allow back exactly what the build needs.
+#
+# An allowlist rather than a denylist because the build context is otherwise
+# ~700 MB of things the image must never see (.git 145 MB, .venv 501 MB, plus
+# caches and notebooks), and because a denylist grows a hole every time someone
+# adds a directory.
+#
+# CAREFUL: pyproject.toml declares `readme = "README.md"` and
+# `license = {file = "LICENSE"}`, so hatchling reads both at build time. Dropping
+# either from this allowlist does not fail as a missing COPY — it fails deeper,
+# inside `pip install .`.
+*
+
+!titiler
+!pyproject.toml
+!README.md
+!LICENSE
