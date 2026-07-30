@@ -17,8 +17,19 @@ permissions:
 
 jobs:
   docker:
-    
+
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # Clone repo and supply Docker build context.
+      packages: write # Push the image to ghcr.io.
+      actions: write # Persist Docker layer cache for docker/build-push-action (type=gha).
+      security-events: write # Upload Trivy SARIF to the GitHub Security tab.
+
+    env:
+      # Local-only tag: the scan must not depend on the order of the tags that
+      # docker/metadata-action emits, and this tag is never pushed.
+      SCAN_IMAGE: titiler-eopf:scan
+
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -56,7 +67,53 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
-      - name: Build and push Docker image
+      # Build locally first so Trivy can scan the exact image before it is
+      # published. The push step below rebuilds from the same GHA layer cache,
+      # so it is a cache hit rather than a second full build.
+      - name: Build Docker image (local, for scanning)
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+          tags: ${{ env.SCAN_IMAGE }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan image with Trivy (SARIF CRITICAL/HIGH, incl. unfixed)
+        id: trivy-sarif-critical-high
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.SCAN_IMAGE }}
+          format: sarif
+          output: trivy-results-critical-high.sarif
+          exit-code: '0'
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+
+      - name: Fail on fixable CRITICAL vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.SCAN_IMAGE }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL
+
+      - name: Warn on fixable HIGH vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.SCAN_IMAGE }}
+          format: table
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: HIGH
+
+      - name: Push Docker image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
@@ -64,6 +121,15 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+
+      # Fork PRs get a read-only GITHUB_TOKEN, so the upload would fail there.
+      - name: Upload Trivy SARIF (CRITICAL/HIGH) to GitHub Security tab
+        if: steps.trivy-sarif-critical-high.outcome == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4.36.3
+        with:
+          sarif_file: trivy-results-critical-high.sarif
+          category: trivy-critical-high
 
   helm:
     runs-on: ubuntu-latest
