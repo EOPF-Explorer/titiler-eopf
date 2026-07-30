@@ -13,12 +13,7 @@ updates:
         patterns:
         - "*"
 
-  # Not optional. The Dockerfile pins cgr.dev/chainguard/wolfi-base by digest
-  # because ":latest" is the only free Chainguard tag — so the digest IS the
-  # version, and this entry is the only thing that moves it. Without it the base
-  # image quietly ages while every build stays green: no error, no warning, just
-  # an increasingly stale rootfs that Trivy will eventually start complaining
-  # about. Deleting this entry silently disables base-image updates.
+  # Moves the digest-pinned Wolfi base in the Dockerfile; nothing else does.
   - package-ecosystem: "docker"
     directory: "/"
     schedule:

@@ -95,31 +95,16 @@ docker-compose up --build api
 #### About the image
 
 The image is built on [Chainguard Wolfi](https://github.com/wolfi-dev), pinned by
-digest:
+digest (`:latest` is the only free Chainguard tag, so the digest is the version
+pin). GDAL and PROJ come from the `rasterio` and `pyproj` manylinux wheels rather
+than system packages, so `osgeo` is intentionally absent.
 
-```dockerfile
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:...
-```
+The image runs as **root on port 80** — the Helm chart renders
+`securityContext: {}` and passes `--port 80`, so adding a `USER` directive would
+crashloop the deployments.
 
-`:latest` is the only free Chainguard tag, so **the digest is the version pin** —
-without it the base would float. It is kept current by Dependabot's `docker`
-ecosystem in `.github/dependabot.yml`; remove that entry and the base ages
-silently while every build stays green.
-
-Two consequences worth knowing before changing the Dockerfile:
-
-- **apk package versions are deliberately unpinned.** Wolfi rolls forward and
-  garbage-collects old versions, so an `=<version>` pin breaks the build within
-  days. The guardrails are the version-scoped package *names* (`python-3.12`)
-  plus the digest above.
-- **The image runs as root and binds port 80**, because the Helm chart renders
-  `securityContext: {}` and passes `--port 80`, and a non-root uid cannot bind
-  below 1024 without `NET_BIND_SERVICE`. Adding a `USER` directive would
-  crashloop the deployments; it needs a coordinated chart and HelmRelease change.
-
-GDAL and PROJ come from the `rasterio` and `pyproj` manylinux wheels, not from
-system packages, so `osgeo` is intentionally absent. `docker/smoke-test.sh`
-asserts all of the above — see CONTRIBUTING.md.
+The Dockerfile comments explain the rest (why apk versions are unpinned, why
+`libstdc++` is explicit); `docker/smoke-test.sh` asserts it — see CONTRIBUTING.md.
 
 ## OpenEO API Deployment
 

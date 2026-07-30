@@ -4,21 +4,14 @@
 #
 #   ./docker/smoke-test.sh <image-ref>
 #
-# This is not a unit test suite: it checks the things a caller of the image
-# relies on, none of which a green `docker build` proves. Each item below is
-# derived from something that is true of production today — helm/charts/,
-# docker-compose.yml, and the three HelmReleases in platform-deploy that run
-# this image (titiler-eopf @ 40 replicas, titiler-eopf-test, and
-# titiler-openeo @ 20-50 replicas on an upstream chart).
+# Checks what a green `docker build` does not: what callers of the image rely on.
+# The expectations come from helm/charts/, docker-compose.yml, and the
+# HelmReleases in platform-deploy that run this image (deliberately written down
+# here rather than read from the chart — a contract test that derives its
+# expectations from the thing under test asserts nothing).
 #
-# Two properties matter more than the individual checks:
-#
-#   1. It runs green against the image we ship TODAY. That is what makes it
-#      usable as a base-image migration gate: if it only passed on the new
-#      image it would be a description of the new image, not a contract.
-#   2. Every `docker run` passes --platform, because the published image is
-#      amd64-only and an unqualified run on an arm64 laptop silently tests a
-#      different image than the one that reaches the cluster.
+# Every `docker run` passes --platform: the published image is amd64-only, so an
+# unqualified run on an arm64 laptop tests a different image than ships.
 #
 # Env:
 #   SMOKE_PLATFORM   platform to test (default linux/amd64)
@@ -43,7 +36,6 @@ done
 # ---------------------------------------------------------------- scaffolding
 
 PASS=0
-FAIL=0
 FAILED_NAMES=()
 CONTAINERS=()
 WORKDIR="$(mktemp -d)"
@@ -56,8 +48,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-indent() { printf '%s\n' "$1" | sed 's/^/        /'; }
-
 # run_check <name> <function>  — the function's exit status is the verdict, and
 # its combined output is shown only on failure.
 run_check() {
@@ -66,10 +56,11 @@ run_check() {
     PASS=$((PASS + 1))
     printf 'ok:   %s\n' "$name"
   else
-    FAIL=$((FAIL + 1))
     FAILED_NAMES+=("$name")
     printf 'FAIL: %s\n' "$name"
-    [[ -n "$out" ]] && indent "$out"
+    if [[ -n "$out" ]]; then
+      printf '%s\n' "$out" | sed 's/^/        /'
+    fi
   fi
 }
 
@@ -80,8 +71,8 @@ drun() { docker run --rm --platform "$PLATFORM" "$@"; }
 pyrun() { docker run --rm -i --platform "$PLATFORM" "$@" --entrypoint python "$IMAGE" -; }
 
 # start_server <label> [docker-opts...] -- [cmd...]
-# Publishes container port 80 on an ephemeral loopback port and echoes that
-# port. The caller polls it with the host's curl, i.e. as a real client would.
+# Publishes container port 80 on an ephemeral loopback port and echoes the
+# container name. The caller polls it with the host's curl, as a real client would.
 start_server() {
   local label="$1"; shift
   local name="smoke-${label}-$$"
@@ -91,16 +82,14 @@ start_server() {
   echo "$name"
 }
 
-published_port() {
-  docker port "$1" 80/tcp | head -n1 | sed 's/.*://'
-}
-
-# wait_http <container> <url> — polls until the URL answers 2xx/3xx, giving up
-# early if the container has already died (so a broken image fails fast rather
-# than burning the whole timeout).
+# wait_http <container> <path> — polls the container's published port until
+# <path> answers 2xx/3xx, giving up early if the container has already died so a
+# broken image fails fast instead of burning the whole timeout.
 wait_http() {
-  local name="$1" url="$2" i
-  for ((i = 0; i < HTTP_TIMEOUT; i++)); do
+  local name="$1" path="$2" url deadline
+  url="http://127.0.0.1:$(docker port "$name" 80/tcp | head -n1 | sed 's/.*://')${path}"
+  deadline=$((SECONDS + HTTP_TIMEOUT))
+  while ((SECONDS < deadline)); do
     if [[ "$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null)" != "true" ]]; then
       echo "container $name exited before serving $url; logs:"
       docker logs "$name" 2>&1 | tail -n 30
@@ -120,8 +109,8 @@ wait_http() {
 # them without these raises ValidationError. That is true of the current image
 # too — it is app behaviour, not image behaviour, so the contract test supplies
 # the env rather than treating it as a failure.
-#   titiler/eopf/dependencies.py:17  -> DataStoreSettings()
-#   titiler/eopf/openeo/main.py:29   -> BackendSettings()
+#   titiler/eopf/dependencies.py  -> DataStoreSettings()
+#   titiler/eopf/openeo/main.py   -> BackendSettings()
 RASTER_ENV=(-e TITILER_EOPF_STORE_URL=s3://smoke-test-bucket/smoke-test-path)
 OPENEO_ENV=(
   -e TITILER_OPENEO_STAC_API_URL=https://api.explorer.eopf.copernicus.eu/stac
@@ -168,19 +157,16 @@ SERVICES_MOUNT=(-v "$WORKDIR/services:/services:ro")
 
 # ---------------------------------------------------------------- the checks
 
-# C1 — Kubernetes runs `command: ["uvicorn"]`, i.e. a binary, not a module.
-# A venv without PATH wiring, or a `pip install --user`, breaks production on
-# rollout while every build and unit test stays green. This is the single
-# highest-consequence check in the file.
+# C1 — Kubernetes runs `command: ["uvicorn"]`, i.e. a binary, not a module. A
+# venv without PATH wiring breaks production on rollout while every build and
+# unit test stays green. Running it as the entrypoint proves PATH resolution.
 check_c1_uvicorn_on_path() {
   drun --entrypoint uvicorn "$IMAGE" --version
-  drun --entrypoint sh "$IMAGE" -c 'command -v uvicorn'
 }
 
 # C1b — the image's own CMD uses gunicorn with the uvicorn worker class.
 check_c1b_gunicorn_and_worker() {
   drun --entrypoint gunicorn "$IMAGE" --version
-  drun --entrypoint sh "$IMAGE" -c 'command -v gunicorn'
   pyrun <<'PY'
 import uvicorn.workers  # noqa: F401  the class named in the CMD
 import uvicorn_worker   # noqa: F401  the maintained replacement package
@@ -197,8 +183,8 @@ assert any(getattr(r, "path", None) == "/_mgmt/ping" for r in app.routes), "no /
 PY
 }
 
-# C3 — the module the titiler-openeo release passes to uvicorn: a production
-# path on 20-50 replicas, and the only consumer of the `openeo` extra.
+# C3 — the module the titiler-openeo release passes to uvicorn, and the only
+# consumer of the `openeo` extra.
 check_c3_openeo_app_importable() {
   pyrun "${OPENEO_ENV[@]}" "${SERVICES_MOUNT[@]}" <<'PY'
 from fastapi import FastAPI
@@ -211,10 +197,9 @@ PY
 # ${MODULE_NAME} etc., so a distroless base would break the bare `docker run`
 # path even though Kubernetes (which overrides command/args) would not notice.
 check_c4_shell_present() {
-  drun --entrypoint sh "$IMAGE" -c 'test -x /bin/sh && echo /bin/sh ok'
-  # ...and the shell-form CMD actually resolves, rather than expanding to
-  # empty strings. The single quotes are deliberate: these must be expanded by
-  # the container's shell against the image's ENV, not by our shell.
+  # Runs *via* /bin/sh, so reaching the test at all proves the shell exists.
+  # Single quotes are deliberate: these must be expanded by the container's
+  # shell against the image's ENV, not by ours.
   # shellcheck disable=SC2016
   drun --entrypoint sh "$IMAGE" -c 'test -n "${MODULE_NAME}" && test -n "${VARIABLE_NAME}" && test "${PORT}" = 80'
 }
@@ -222,15 +207,13 @@ check_c4_shell_present() {
 # C4b — the default CMD end to end: shell expansion + gunicorn + uvicorn
 # worker + binding :80 as uid 0. This is the `docker run <image>` contract.
 check_c4b_default_cmd_serves() {
-  local name port
+  local name
   name="$(start_server cmd "${RASTER_ENV[@]}" "$IMAGE")"
-  port="$(published_port "$name")"
-  wait_http "$name" "http://127.0.0.1:${port}/_mgmt/ping"
+  wait_http "$name" /_mgmt/ping
 }
 
-# C5 — production renders securityContext:{} and binds --port 80, so uid 0 is
-# load-bearing: a non-root uid cannot bind <1024 without NET_BIND_SERVICE.
-# Adding a USER directive would crashloop two of the three releases.
+# C5 — the chart renders securityContext:{} and binds --port 80, so uid 0 is
+# load-bearing: non-root cannot bind <1024 without NET_BIND_SERVICE.
 check_c5_runs_as_root() {
   local uid
   uid="$(drun --entrypoint id "$IMAGE" -u)"
@@ -242,8 +225,8 @@ check_c6_tmp_writable() {
   drun --entrypoint sh "$IMAGE" -c 'echo probe > /tmp/.smoke && test -s /tmp/.smoke && rm /tmp/.smoke'
 }
 
-# C7 — ~20 GDAL_*/VSI_*/CPL_* env vars are set by all three releases. Assert
-# they reach the *vendored* GDAL inside the rasterio wheel. The raw env var is
+# C7 — the releases set GDAL_*/VSI_*/CPL_* env vars. Assert they reach the
+# *vendored* GDAL inside the rasterio wheel. The raw env var is
 # not observable without a remote dataset, so read it back through
 # rasterio.Env(), which is the layer that actually consumes it.
 check_c7_gdal_config_honoured() {
@@ -261,11 +244,10 @@ PY
 # C8 — the liveness/readiness probe of both titiler-eopf releases, reached the
 # way Kubernetes reaches it: `command: uvicorn`, args from values.yaml, :80.
 check_c8_raster_probe_on_80() {
-  local name port
+  local name
   name="$(start_server raster "${RASTER_ENV[@]}" --entrypoint uvicorn "$IMAGE" \
     titiler.eopf.main:app --host 0.0.0.0 --port 80 --workers 1)"
-  port="$(published_port "$name")"
-  wait_http "$name" "http://127.0.0.1:${port}/_mgmt/ping"
+  wait_http "$name" /_mgmt/ping
 }
 
 # C8b — the openeo release probes /api, NOT /_mgmt/ping: that route exists only
@@ -274,28 +256,21 @@ check_c8_raster_probe_on_80() {
 # --forwarded-allow-ips, --timeout-keep-alive), so a log config that fails to
 # parse shows up here rather than as a pod that never becomes Ready.
 check_c8b_openeo_probe_on_80() {
-  local name port
+  local name
   name="$(start_server openeo "${OPENEO_ENV[@]}" "${SERVICES_MOUNT[@]}" "${CONFIG_MOUNT[@]}" \
     --entrypoint uvicorn "$IMAGE" \
     titiler.eopf.openeo.main:app --host 0.0.0.0 --port 80 --workers 1 \
     --proxy-headers --forwarded-allow-ips '*' \
     --log-config /config/log_config.yaml --timeout-keep-alive 600)"
-  port="$(published_port "$name")"
-  wait_http "$name" "http://127.0.0.1:${port}/api"
+  wait_http "$name" /api
 }
 
 # C9 — the /config read-only mount is a live dependency of the openeo release.
-# Assert it is readable, genuinely read-only, and that the log config parses
-# through the same logging.config.dictConfig path uvicorn uses for a .yaml.
+# Only the mount semantics are checked here; C8b already parses the same file for
+# real by handing it to `uvicorn --log-config`.
 check_c9_config_mount_readable() {
   pyrun "${CONFIG_MOUNT[@]}" <<'PY'
-import logging.config
-import yaml
-
-with open("/config/log_config.yaml") as f:
-    cfg = yaml.safe_load(f)
-assert cfg["version"] == 1, cfg
-logging.config.dictConfig(cfg)
+assert open("/config/log_config.yaml").read(), "/config/log_config.yaml unreadable or empty"
 
 try:
     open("/config/.smoke-write", "w").close()
@@ -409,28 +384,34 @@ PY
 echo "smoke-testing $IMAGE (platform $PLATFORM)"
 echo
 
-run_check "C1   uvicorn is an executable on PATH"              check_c1_uvicorn_on_path
-run_check "C1b  gunicorn on PATH, uvicorn worker importable"   check_c1b_gunicorn_and_worker
-run_check "C2   titiler.eopf.main:app imports, has /_mgmt/ping" check_c2_raster_app_importable
-run_check "C3   titiler.eopf.openeo.main:app imports"          check_c3_openeo_app_importable
-run_check "C4   /bin/sh present and CMD vars expand"           check_c4_shell_present
-run_check "C4b  default shell-form CMD serves /_mgmt/ping"     check_c4b_default_cmd_serves
-run_check "C5   runs as uid 0"                                 check_c5_runs_as_root
-run_check "C6   /tmp is writable"                              check_c6_tmp_writable
-run_check "C7   GDAL_* env reaches the vendored GDAL"          check_c7_gdal_config_honoured
-run_check "C8   uvicorn serves /_mgmt/ping on :80"             check_c8_raster_probe_on_80
-run_check "C8b  openeo serves /api on :80 with --log-config"    check_c8b_openeo_probe_on_80
-run_check "C9   /config mount readable, read-only, parses"      check_c9_config_mount_readable
-run_check "C10  osgeo is ABSENT"                               check_c10_osgeo_absent
-run_check "C11  psycopg2 + sqlalchemy + duckdb work"           check_c11_openeo_extras
-run_check "NAT  pyproj 4326->3857 numerically correct"         check_native_pyproj_transform
-run_check "NAT  rasterio GTiff write/read roundtrip"           check_native_rasterio_gtiff_roundtrip
-run_check "NAT  zarr write/open roundtrip, obstore imports"    check_native_zarr_roundtrip
-run_check "NAT  cryptography backend + orjson"                 check_native_crypto_and_orjson
+CHECKS=(
+  "C1   uvicorn is an executable on PATH|check_c1_uvicorn_on_path"
+  "C1b  gunicorn on PATH, uvicorn worker importable|check_c1b_gunicorn_and_worker"
+  "C2   titiler.eopf.main:app imports, has /_mgmt/ping|check_c2_raster_app_importable"
+  "C3   titiler.eopf.openeo.main:app imports|check_c3_openeo_app_importable"
+  "C4   /bin/sh present and CMD vars expand|check_c4_shell_present"
+  "C4b  default shell-form CMD serves /_mgmt/ping|check_c4b_default_cmd_serves"
+  "C5   runs as uid 0|check_c5_runs_as_root"
+  "C6   /tmp is writable|check_c6_tmp_writable"
+  "C7   GDAL_* env reaches the vendored GDAL|check_c7_gdal_config_honoured"
+  "C8   uvicorn serves /_mgmt/ping on :80|check_c8_raster_probe_on_80"
+  "C8b  openeo serves /api on :80 with --log-config|check_c8b_openeo_probe_on_80"
+  "C9   /config mount is readable and read-only|check_c9_config_mount_readable"
+  "C10  osgeo is ABSENT|check_c10_osgeo_absent"
+  "C11  psycopg2 + sqlalchemy + duckdb work|check_c11_openeo_extras"
+  "NAT  pyproj 4326->3857 numerically correct|check_native_pyproj_transform"
+  "NAT  rasterio GTiff write/read roundtrip|check_native_rasterio_gtiff_roundtrip"
+  "NAT  zarr write/open roundtrip, obstore imports|check_native_zarr_roundtrip"
+  "NAT  cryptography backend + orjson|check_native_crypto_and_orjson"
+)
+
+for entry in "${CHECKS[@]}"; do
+  run_check "${entry%%|*}" "${entry##*|}"
+done
 
 echo
-echo "passed: $PASS   failed: $FAIL"
-if ((FAIL)); then
+echo "passed: $PASS   failed: ${#FAILED_NAMES[@]}"
+if ((${#FAILED_NAMES[@]})); then
   echo "failing checks:"
   printf '  - %s\n' "${FAILED_NAMES[@]}"
   exit 1
