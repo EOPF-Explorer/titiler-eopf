@@ -62,11 +62,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
-      # Build once, into the local daemon. Nothing is published until Trivy has
-      # cleared this exact image: the push step below uploads these very tags,
-      # it does not rebuild. The Dockerfile pins no versions (floating
-      # python:3.12, apt upgrade, pip --upgrade), so a rebuild could resolve
-      # different packages than the ones that were scanned.
+      # Build once, into the local daemon. Nothing is published until Trivy and
+      # the smoke test have cleared this exact image: the push step below uploads
+      # these very tags, it does not rebuild.
       - name: Build Docker image
         id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
@@ -79,6 +77,15 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # The nightly run exists to catch upstream drift, and with a
+          # digest-pinned base plus `cache-to: mode=max` it would otherwise be a
+          # pure cache hit: an identical image, and a Trivy scan re-reporting
+          # yesterday's answer. Forcing a cold build makes it re-resolve apk
+          # packages from Wolfi and Python packages from PyPI, which is the only
+          # thing here that can actually change overnight.
+          # `pull: true` would be redundant — the FROM line is pinned by digest,
+          # so there is nothing newer to pull.
+          no-cache: ${{ github.event_name == 'schedule' }}
 
       # Scanned by image ID rather than by tag: every tag above points at this
       # ID, and it does not depend on the order metadata-action emits tags in.
@@ -112,6 +119,23 @@ jobs:
           ignore-unfixed: true
           vuln-type: os,library
           severity: HIGH
+
+      # Sits between the Trivy gates and the push, so an image that fails its
+      # runtime contract can never reach ghcr.io. What this catches that a build
+      # cannot: `uvicorn` no longer resolving as a bare executable on PATH (all
+      # three HelmReleases run `command: ["uvicorn"]`), a non-root uid that
+      # cannot bind :80, a missing /bin/sh for the shell-form CMD, and the
+      # vendored GDAL/PROJ .so files inside the manylinux wheels failing to load.
+      # Every one of those fails only at runtime, on rollout.
+      #
+      # By image ID rather than by tag, for the same reason the Trivy steps do:
+      # every tag points at this ID, and it does not depend on the order
+      # metadata-action emits tags in. Passed through env: so there is no inline
+      # ${{ }} interpolation in a run: block.
+      - name: Smoke-test the image runtime contract
+        env:
+          IMAGE_REF: ${{ steps.build.outputs.imageid }}
+        run: ./docker/smoke-test.sh "$IMAGE_REF"
 
       - name: Push Docker image
         env:
@@ -172,14 +196,25 @@ jobs:
         if: steps.list-changed.outputs.changed == 'true'
         run: ct lint --chart-dirs helm --target-branch ${{ github.event.repository.default_branch }}
 
+      # Everything from here down used to be gated on `list-changed`, which meant
+      # a PR that changed only the Dockerfile installed nothing and went green
+      # having tested the image not at all. (Doubly so: `ct install` on its own
+      # only installs *changed* charts.) The install path is now unconditional,
+      # because the thing most likely to break the chart is a new image, not a
+      # new chart. `ci/default-values.yaml` overrides only repository and tag, so
+      # the real defaults are exercised — securityContext:{} (root), :80,
+      # command: uvicorn, and both probes on /_mgmt/ping.
+      #
+      # `Check Version` and `ct lint` stay gated: they compare the chart version
+      # against the Python package version, which is only meaningful when the
+      # chart actually changed.
       - name: Authenticate with GitHub Packages
-        if: steps.list-changed.outputs.changed == 'true'
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: downcase REPO
         run: |
           echo "REPO=${GITHUB_REPOSITORY,,}" >>${GITHUB_ENV}
@@ -188,33 +223,67 @@ jobs:
         id: vars
         run: echo "sha_tag=sha-$(git rev-parse --short HEAD)" >>${GITHUB_ENV}
 
+      # `sha_tag` matches metadata-action's `type=sha` because both derive from
+      # GITHUB_SHA: on a pull_request that is the refs/pull/N/merge commit, which
+      # is also what actions/checkout leaves at HEAD. Verified against run
+      # 30533390729, where the tag was sha-dfd608a and dfd608a is the merge
+      # commit, not the branch tip.
       - name: Pull Docker image
-        if: steps.list-changed.outputs.changed == 'true'
         run: |
           docker pull ghcr.io/${{ env.REPO }}:${{ env.sha_tag }}
           docker tag ghcr.io/${{ env.REPO }}:${{ env.sha_tag }} titiler-eopf:ci
 
       - name: Create kind cluster
         uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
-        if: steps.list-changed.outputs.changed == 'true'
 
       - name: Load container image in kind cluster
         run: kind load docker-image titiler-eopf:ci --name chart-testing
-        if: steps.list-changed.outputs.changed == 'true'
 
       - name: Create Namespace
-        if: steps.list-changed.outputs.changed == 'true'
         run: |
           kubectl create namespace titiler-eopf
 
+      # Empty on fork PRs, where these secrets are not exposed. That is fine:
+      # nothing the install exercises reads S3, the secret just has to exist so
+      # the pod's envFrom can resolve.
+      #
+      # Passed via env: rather than inline ${{ }}. This step used to run only on
+      # chart PRs; now that it runs on every PR, interpolating a secret straight
+      # into a shell command is worth not doing — a value containing shell
+      # metacharacters would be executed rather than passed.
       - name: Create Secret
-        if: steps.list-changed.outputs.changed == 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
-          kubectl create secret generic titiler-eopf-secret -n titiler-eopf --from-literal=AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} --from-literal=AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          kubectl create secret generic titiler-eopf-secret -n titiler-eopf \
+            --from-literal=AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+            --from-literal=AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
 
+      # --all, not the default change detection: this PR changes no chart, and
+      # without it `ct install` would find nothing to install and exit 0.
+      #
+      # --skip-clean-up so the failure dump below has something to look at. ct
+      # otherwise deletes the release on its way out, which would leave the next
+      # step describing an empty namespace. The runner is ephemeral, so leaving
+      # the release behind on success costs nothing.
       - name: Run chart-testing (install)
-        if: steps.list-changed.outputs.changed == 'true'
-        run: ct install --chart-dirs helm --namespace titiler-eopf
+        run: ct install --chart-dirs helm --namespace titiler-eopf --all --skip-clean-up
+
+      # Deployment events and pod logs, so a probe timeout is diagnosable rather
+      # than just a red X. A failure here points at the image contract first:
+      # `uvicorn` not on PATH, or a uid that cannot bind :80. No label selector —
+      # ct picks its own release name, so anything narrower risks matching
+      # nothing and reporting silence as health.
+      - name: Dump cluster state on failure
+        if: failure()
+        run: |
+          kubectl get pods,events -n titiler-eopf -o wide || true
+          kubectl describe pods -n titiler-eopf || true
+          for pod in $(kubectl get pods -n titiler-eopf -o name || true); do
+            echo "===== logs: $pod"
+            kubectl logs -n titiler-eopf "$pod" --all-containers --tail=100 || true
+          done
 
       # delete the pull request docker image to free up space
       - name: Delete Docker image
