@@ -48,3 +48,35 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
 
 Drop `--ignore-unfixed` to also see vulnerabilities with no upstream fix yet;
 those are reported to the GitHub Security tab but never block a build.
+
+**image runtime contract**
+
+The image is consumed as an API, not just as a build artefact: the HelmReleases
+that run it override the entrypoint with `command: ["uvicorn"]`, run as uid 0,
+bind port 80, mount `/config` read-only, and set ~20 `GDAL_*`/`VSI_*`/`CPL_*`
+environment variables. A successful `docker build` proves none of that.
+`docker/smoke-test.sh` does, and CI runs it between the Trivy gates and the push:
+
+```bash
+docker build --platform linux/amd64 -t titiler-eopf:dev .
+./docker/smoke-test.sh titiler-eopf:dev
+```
+
+It prints one `ok:`/`FAIL:` line per check and exits non-zero if any fail. To see
+what a failure looks like without breaking anything, point it at a base image:
+
+```bash
+./docker/smoke-test.sh python:3.12   # exits 1; no uvicorn, no titiler, no GDAL
+```
+
+Two things to know before editing it:
+
+- Every `docker run` inside passes `--platform linux/amd64`. The published image
+  is amd64-only, so on an Apple-silicon machine an unqualified run would build
+  and test arm64 — a different image than the one that reaches the cluster.
+  Expect it to be slow locally: those runs are QEMU-emulated. `SMOKE_TIMEOUT`
+  (default 180s) raises the per-container HTTP wait if that is not enough.
+- **If a change to the Dockerfile requires editing this script, the runtime
+  contract changed.** That is not a reason to reach for the script — it is
+  something to say out loud in the pull request, because a caller somewhere
+  relies on whatever the check was asserting.

@@ -87,6 +87,40 @@ docker-compose up --build api
 
 <img width="800" src="docs/img/openapi.png" />
 
+> Note: `api` and `api-openeo` cannot run at the same time. `api-openeo` extends
+> `api`, and Compose *merges* the `ports` list rather than replacing it, so
+> `api-openeo` publishes both 8081 and 8000 and the two collide. Start them one
+> at a time (`docker compose up api`, then `docker compose up api-openeo`).
+
+#### About the image
+
+The image is built on [Chainguard Wolfi](https://github.com/wolfi-dev), pinned by
+digest:
+
+```dockerfile
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:...
+```
+
+`:latest` is the only free Chainguard tag, so **the digest is the version pin** —
+without it the base would float. It is kept current by Dependabot's `docker`
+ecosystem in `.github/dependabot.yml`; remove that entry and the base ages
+silently while every build stays green.
+
+Two consequences worth knowing before changing the Dockerfile:
+
+- **apk package versions are deliberately unpinned.** Wolfi rolls forward and
+  garbage-collects old versions, so an `=<version>` pin breaks the build within
+  days. The guardrails are the version-scoped package *names* (`python-3.12`)
+  plus the digest above.
+- **The image runs as root and binds port 80**, because the Helm chart renders
+  `securityContext: {}` and passes `--port 80`, and a non-root uid cannot bind
+  below 1024 without `NET_BIND_SERVICE`. Adding a `USER` directive would
+  crashloop the deployments; it needs a coordinated chart and HelmRelease change.
+
+GDAL and PROJ come from the `rasterio` and `pyproj` manylinux wheels, not from
+system packages, so `osgeo` is intentionally absent. `docker/smoke-test.sh`
+asserts all of the above — see CONTRIBUTING.md.
+
 ## OpenEO API Deployment
 
 This repository includes a second application that deploys an OpenEO API (`titiler.eopf.openeo.main:app`). The same Docker image built by the CI pipeline can be used to deploy either the TiTiler EOPF application or the OpenEO API by configuring the `MODULE_NAME` environment variable.
