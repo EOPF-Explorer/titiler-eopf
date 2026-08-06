@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784680283251,
+  "lastUpdate": 1786009428471,
   "repoUrl": "https://github.com/EOPF-Explorer/titiler-eopf",
   "entries": {
     "titiler-eopf Benchmarks": [
@@ -1196,6 +1196,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.03374838914325312",
             "extra": "mean: 395.4870550800024 msec\nrounds: 50"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "vincent.sarago@gmail.com",
+            "name": "Vincent Sarago",
+            "username": "vincentsarago"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "641ff4cdc8425cc31fd86206c3515b375e1b9412",
+          "message": "Merge pull request #137 from EOPF-Explorer/dependabot/github_actions/all-cebc850d27\n\nchore(deps): bump the all group across 1 directory with 5 updates",
+          "timestamp": "2026-08-06T11:40:44+02:00",
+          "tree_id": "58009bc3fc33db2a29ad77f8dd0d7fa16edb9955",
+          "url": "https://github.com/EOPF-Explorer/titiler-eopf/commit/641ff4cdc8425cc31fd86206c3515b375e1b9412"
+        },
+        "date": 1786009427840,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "GeoZarrReader-Open",
+            "value": 53.859581719342444,
+            "unit": "iter/sec",
+            "range": "stddev: 0.009826339286583864",
+            "extra": "mean: 18.566798479997715 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Info",
+            "value": 56.63061427843246,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00037097535538460093",
+            "extra": "mean: 17.65829335848907 msec\nrounds: 53"
+          },
+          {
+            "name": "GeoZarrReader-Preview",
+            "value": 2.5800083817980464,
+            "unit": "iter/sec",
+            "range": "stddev: 0.018447305017106203",
+            "extra": "mean: 387.59564002000843 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Tile",
+            "value": 2.563244712347344,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03135145931597537",
+            "extra": "mean: 390.13052292000225 msec\nrounds: 50"
           }
         ]
       }
