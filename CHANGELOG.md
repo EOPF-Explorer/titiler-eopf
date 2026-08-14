@@ -11,6 +11,17 @@
 
 **Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.8.0...v0.9.0
 
+## 0.10.1 (2026-08-14)
+
+## What's Changed
+* chore(deps): bump astral-sh/setup-uv from 8.3.0 to 8.3.2 in the all group by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/133
+* ci: scan the Docker image with Trivy before publishing it by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/136
+* chore(deps): bump the all group across 1 directory with 5 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/137
+* fix: select correct overview when tilesize=None in endpoint by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/140
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.10.0...v0.10.1
+
 ## 0.10.0 (2026-07-07)
 
 ## What's Changed
