@@ -13,7 +13,8 @@ updates:
         patterns:
         - "*"
 
-  # Moves the digest-pinned Wolfi base in the Dockerfile; nothing else does.
+  # Moves the digest-pinned images in the Dockerfile (the Wolfi base and the
+  # uv stage); nothing else does.
   - package-ecosystem: "docker"
     directory: "/"
     schedule:

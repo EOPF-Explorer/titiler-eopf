@@ -1,39 +1,89 @@
 # Wolfi's apk repo is fully open — no Chainguard subscription needed. ":latest"
 # is the only free tag, so the digest below is the version pin; Dependabot's
-# "docker" ecosystem (.github/dependabot.yml) is the only thing that moves it.
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:003627df3c1e1bba0c4116afcddb314aca9594ee2328c7e876a8081a6c988b2e
+# "docker" ecosystem (.github/dependabot.yml) is the only thing that moves it
+# (and the uv pin below).
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:003627df3c1e1bba0c4116afcddb314aca9594ee2328c7e876a8081a6c988b2e AS base
 
 # Declared AFTER "FROM" on purpose: an ARG before the first FROM is in scope for
 # FROM only, so the RUN below would expand it to "" and run `apk add python-`.
 ARG PYTHON_VERSION=3.12
 
-# Versions deliberately unpinned: Wolfi rolls forward and garbage-collects old
-# versions, so an "=<version>" pin breaks the build within days (hadolint would
-# need --ignore DL3018). The guardrails are the version-scoped names plus the
-# digest above.
-#   libstdc++  NOT optional, and not obviously needed: the rasterio/pyproj/duckdb
-#              manylinux wheels list libstdc++.so.6 in DT_NEEDED and auditwheel
-#              does not vendor it. Nothing else here pulls it in deliberately —
-#              only mpdecimal, via python-3.12-base's `decimal` module.
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Install runtime dependencies. Versions deliberately unpinned: Wolfi rolls
+# forward and garbage-collects old versions, so an "=<version>" pin breaks the
+# build within days. The guardrails are the version-scoped names plus the
+# digest above. No pip: uv (below) installs everything.
+#   libstdc++  NOT optional: the rasterio/pyproj/duckdb manylinux wheels list
+#              libstdc++.so.6 in DT_NEEDED and auditwheel does not vendor it.
 #   bash, tzdata, curl  parity with the old Debian base: /bin/sh is busybox,
 #              Wolfi ships no /usr/share/zoneinfo, curl is for in-pod debugging.
 RUN apk add --no-cache \
-      python-${PYTHON_VERSION} py${PYTHON_VERSION}-pip \
+      python-${PYTHON_VERSION} \
       libstdc++ bash tzdata curl
 
-# Ahead of the COPY below so a code change does not reinstall these. No venv and
-# no PATH wiring needed: Wolfi's python ships no EXTERNALLY-MANAGED marker and
-# apk's pip puts console scripts in /usr/bin, so `uvicorn` resolves as a bare
-# binary — which is what the chart's `command: ["uvicorn"]` requires.
-RUN python -m pip install --no-cache-dir uvicorn uvicorn-worker gunicorn
+# uv, pinned to the version that wrote uv.lock. A named stage rather than a
+# direct COPY --from=<image> because Dependabot only parses FROM lines — it
+# ignores images in COPY (dependabot-core#5103) — and a digest pin nothing
+# moves would rot.
+FROM ghcr.io/astral-sh/uv:0.11.17@sha256:03bdc89bb9798628846e60c3a9ad19006c8c3c724ccd2985a33145c039a0577b AS uv
+
+# Build stage
+FROM base AS builder
+
+ARG PYTHON_VERSION
+
+# Set build labels
+LABEL stage=builder
+LABEL org.opencontainers.image.source="https://github.com/EOPF-Explorer/titiler-eopf"
+LABEL org.opencontainers.image.description="TiTiler application for EOPF datasets"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
+# Install uv
+COPY --from=uv /uv /uvx /usr/local/bin/
+
+# Configure uv-managed virtual environment
+#   UV_PYTHON: the apk python above, so the venv's interpreter symlinks resolve
+#     against the same path in the runtime stage
+#   UV_COMPILE_BYTECODE: .pyc at install time, as pip did, so cold starts
+#     don't pay the compile on first import
+ENV UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_PYTHON=python${PYTHON_VERSION} \
+    UV_COMPILE_BYTECODE=1 \
+    PATH="/opt/venv/bin:${PATH}"
+
+WORKDIR /tmp/app
+
+# Copy project metadata and install dependencies from the lockfile (--frozen:
+# uv.lock is authoritative, out-of-date fails the build). The `server` extra
+# carries uvicorn/gunicorn/uvicorn-worker — the chart and the CMD below need
+# them as locked deps, not ad-hoc installs.
+COPY pyproject.toml uv.lock README.md LICENSE ./
+RUN uv sync --frozen --no-dev --extra server --extra cache --extra openeo --no-install-project
+
+# Copy and install runtime source code to the builder image
+COPY titiler/ titiler/
+RUN uv pip install --no-deps .
+
+# Runtime stage
+FROM base
+
+# Set runtime labels
+LABEL org.opencontainers.image.source="https://github.com/EOPF-Explorer/titiler-eopf"
+LABEL org.opencontainers.image.description="TiTiler application for EOPF datasets"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
+# The chart execs `command: ["uvicorn"]` — a bare binary, resolved against the
+# image's PATH; smoke-test C1 asserts it.
+ENV PATH="/opt/venv/bin:${PATH}"
+
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /tmp
-
-COPY titiler/ titiler/
-COPY pyproject.toml README.md LICENSE ./
-
-RUN python -m pip install --no-cache-dir ".[cache,openeo]" \
- && rm -rf titiler/ pyproject.toml README.md LICENSE
 
 # No USER directive on purpose: the chart renders securityContext:{} and passes
 # --port 80, so uid 0 is load-bearing (non-root cannot bind <1024 without
