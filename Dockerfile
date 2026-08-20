@@ -85,11 +85,11 @@ COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /tmp
 
-# No USER directive on purpose: the chart renders securityContext:{} and passes
-# --port 80, so uid 0 is load-bearing (non-root cannot bind <1024 without
-# NET_BIND_SERVICE). Hardening needs a coordinated change across
-# helm/charts/values.yaml and platform-deploy
-# core/titiler-eopf/hr-titiler-eopf{,-test}.yaml.
+# Run as the wolfi-base nonroot user (uid 65532). On Kubernetes the chart sets 
+# the net.ipv4.ip_unprivileged_port_start sysctl per pod. 
+# Other deployments must allow unprivileged low ports the same way,
+# or override PORT to something >=1024.
+USER nonroot
 
 ###################################################
 # For compatibility (might be removed at one point)
