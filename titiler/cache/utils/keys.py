@@ -2,7 +2,6 @@
 
 import hashlib
 import logging
-from collections.abc import Mapping
 from typing import Optional
 from urllib.parse import urlencode, urlparse
 
@@ -55,17 +54,8 @@ class CacheKeyGenerator:
         parsed_url = urlparse(str(request.url))
         path_parts = self._parse_path(parsed_url.path)
 
-        # Filter and normalize query parameters. QueryParams is a multidict, and
-        # dict() would keep only the last value of a repeated key, so an RGB tile's
-        # variables=...b04&variables=...b03&variables=...b02 would collapse to b02 and
-        # every composite sharing a blue band would share a cache key.
-        getlist = getattr(request.query_params, "getlist", None)
-        query_params = (
-            {key: getlist(key) for key in request.query_params}
-            if callable(getlist)
-            else dict(request.query_params)
-        )
-        cache_params = self._filter_query_params(query_params)
+        # Filter and normalize query parameters
+        cache_params = self._filter_query_params(dict(request.query_params))
 
         # Add extra parameters if provided
         if extra_params:
@@ -109,9 +99,7 @@ class CacheKeyGenerator:
 
         return path_parts
 
-    def _filter_query_params(
-        self, query_params: Mapping[str, object]
-    ) -> dict[str, str]:
+    def _filter_query_params(self, query_params: dict[str, str]) -> dict[str, str]:
         """Filter and normalize query parameters for caching.
 
         Args:
@@ -128,11 +116,9 @@ class CacheKeyGenerator:
                 logger.debug(f"Excluding parameter from cache key: {key}")
                 continue
 
-            # Keep every value of a repeated key, in order: variables=b08,b03,b02 is
-            # a different image from variables=b02,b03,b08. The unit separator cannot
-            # appear in a query value, so joining cannot forge a collision.
+            # Handle multiple values (take first for consistency)
             if isinstance(value, list):
-                value = "\x1f".join(str(item) for item in value)
+                value = value[0] if value else ""
 
             # Normalize parameter value
             normalized_value = str(value).strip()

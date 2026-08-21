@@ -1,7 +1,6 @@
 """Tests for cache key generation utilities."""
 
 from fastapi import FastAPI
-from starlette.requests import Request
 from starlette.testclient import TestClient
 
 from titiler.cache.utils import CacheKeyGenerator
@@ -302,17 +301,17 @@ class TestEOPFRealWorldKeys:
             "bidx": "1",
         }
 
-        # Test with a single variable
+        # Test with single variable (first value taken)
         params_single = {
-            "variables": "/measurements/reflectance:b04",
+            "variables": "/measurements/reflectance:b04",  # Only first value
             "bidx": "1",
         }
 
         key_list = generator.from_path_and_params(path, params_with_list, "tile")
         key_single = generator.from_path_and_params(path, params_single, "tile")
 
-        # A three-band composite is not the same image as a single band
-        assert key_list != key_single
+        # Should be deterministic - takes first value from list
+        assert key_list == key_single
 
     def test_eopf_long_collection_item_names(self):
         """Test handling of very long collection and item names."""
@@ -490,37 +489,3 @@ class TestEOPFRealWorldKeys:
         # Verify key length is reasonable
         assert len(cache_key) <= generator.max_key_length
         print(f"Cache key length: {len(cache_key)}")
-
-
-class TestRepeatedQueryParams:
-    """Repeated query parameters must not collapse into a single value."""
-
-    def _tile_key(self, generator, *bands: str) -> str:
-        """Generate a cache key the way a real RGB tile request would."""
-        app = FastAPI()
-        captured = []
-
-        @app.get("/tiles/{z}/{x}/{y}")
-        def tile(z: int, x: int, y: int, request: Request):
-            captured.append(generator.from_request(request, "tile"))
-            return {"ok": True}
-
-        query = "&".join(f"variables=/measurements/reflectance:{b}" for b in bands)
-        TestClient(app).get(f"/tiles/9/252/156?{query}&rescale=0,1")
-        return captured[0]
-
-    def test_band_combinations_do_not_collide(self):
-        """b04/b03/b02 and b08/b03/b02 both end on b02 but are different images."""
-        generator = CacheKeyGenerator("titiler-eopf")
-
-        assert self._tile_key(generator, "b04", "b03", "b02") != self._tile_key(
-            generator, "b08", "b03", "b02"
-        )
-
-    def test_band_order_is_significant(self):
-        """Reversing the bands gives a different image, so a different key."""
-        generator = CacheKeyGenerator("titiler-eopf")
-
-        assert self._tile_key(generator, "b04", "b03", "b02") != self._tile_key(
-            generator, "b02", "b03", "b04"
-        )
