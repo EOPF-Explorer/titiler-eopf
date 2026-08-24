@@ -52,9 +52,10 @@ those are reported to the GitHub Security tab but never block a build.
 **image runtime contract**
 
 The image is consumed as an API, not just as a build artefact: the HelmReleases
-that run it override the entrypoint with `command: ["uvicorn"]`, run as uid 0,
-bind port 80, mount `/config` read-only, and set ~20 `GDAL_*`/`VSI_*`/`CPL_*`
-environment variables. A successful `docker build` proves none of that.
+that run it override the entrypoint with `command: ["uvicorn"]`, run as `nonroot`
+(uid 65532), bind port 80, mount `/config` read-only, and set ~20
+`GDAL_*`/`VSI_*`/`CPL_*` environment variables. A successful `docker build`
+proves none of that.
 `docker/smoke-test.sh` does, and CI runs it between the Trivy gates and the push:
 
 ```bash

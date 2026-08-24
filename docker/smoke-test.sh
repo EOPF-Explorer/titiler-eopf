@@ -205,19 +205,29 @@ check_c4_shell_present() {
 }
 
 # C4b — the default CMD end to end: shell expansion + gunicorn + uvicorn
-# worker + binding :80 as uid 0. This is the `docker run <image>` contract.
+# worker + binding :80 as nonroot. This is the `docker run <image>` contract.
+# Note it does NOT cover the Kubernetes path: Docker defaults
+# net.ipv4.ip_unprivileged_port_start to 0, so :80 binds here with no sysctl,
+# whereas containerd does not — that is what the chart's podSecurityContext is
+# for, and only a real rollout exercises it.
 check_c4b_default_cmd_serves() {
   local name
   name="$(start_server cmd "${RASTER_ENV[@]}" "$IMAGE")"
   wait_http "$name" /_mgmt/ping
 }
 
-# C5 — the chart renders securityContext:{} and binds --port 80, so uid 0 is
-# load-bearing: non-root cannot bind <1024 without NET_BIND_SERVICE.
-check_c5_runs_as_root() {
+# C5 — the image runs as wolfi-base's `nonroot` (uid 65532), not root. Binding
+# :80 as an unprivileged user needs the runtime to allow low ports: the chart
+# sets net.ipv4.ip_unprivileged_port_start=80 per pod, and Docker already
+# defaults it to 0 (which is why C4b and C8 bind :80 here without help).
+# The uid is pinned rather than merely asserted non-zero because the chart's
+# podSecurityContext and any runAsUser/PSA policy name that number — a base
+# image that renumbered `nonroot` would break the deployment while a bare
+# "not 0" check stayed green.
+check_c5_runs_as_nonroot() {
   local uid
   uid="$(drun --entrypoint id "$IMAGE" -u)"
-  [[ "$uid" == "0" ]] || { echo "expected uid 0, got '$uid'"; return 1; }
+  [[ "$uid" == "65532" ]] || { echo "expected uid 65532 (nonroot), got '$uid'"; return 1; }
 }
 
 # C6 — GDAL/VSI scratch space. CPL_TMPDIR=/tmp in compose, and WORKDIR is /tmp.
@@ -268,14 +278,25 @@ check_c8b_openeo_probe_on_80() {
 # C9 — the /config read-only mount is a live dependency of the openeo release.
 # Only the mount semantics are checked here; C8b already parses the same file for
 # real by handing it to `uvicorn --log-config`.
+# The write must be rejected with EROFS specifically. Now that the image runs
+# as nonroot, a plain `except OSError` would also swallow the EACCES you get
+# from a read-WRITE mount whose host directory belongs to another uid — which
+# is exactly the case on CI, where the runner owns the fixture. That would let
+# the check pass while proving nothing about :ro.
 check_c9_config_mount_readable() {
   pyrun "${CONFIG_MOUNT[@]}" <<'PY'
+import errno
+
 assert open("/config/log_config.yaml").read(), "/config/log_config.yaml unreadable or empty"
 
 try:
     open("/config/.smoke-write", "w").close()
-except OSError:
-    pass
+except OSError as exc:
+    if exc.errno != errno.EROFS:
+        raise AssertionError(
+            f"/config rejected the write with {errno.errorcode.get(exc.errno, exc.errno)}, "
+            "not EROFS; the mount is not read-only"
+        ) from exc
 else:
     raise AssertionError("/config was writable; the release mounts it read-only")
 PY
@@ -391,7 +412,7 @@ CHECKS=(
   "C3   titiler.eopf.openeo.main:app imports|check_c3_openeo_app_importable"
   "C4   /bin/sh present and CMD vars expand|check_c4_shell_present"
   "C4b  default shell-form CMD serves /_mgmt/ping|check_c4b_default_cmd_serves"
-  "C5   runs as uid 0|check_c5_runs_as_root"
+  "C5   runs as nonroot (uid 65532)|check_c5_runs_as_nonroot"
   "C6   /tmp is writable|check_c6_tmp_writable"
   "C7   GDAL_* env reaches the vendored GDAL|check_c7_gdal_config_honoured"
   "C8   uvicorn serves /_mgmt/ping on :80|check_c8_raster_probe_on_80"
