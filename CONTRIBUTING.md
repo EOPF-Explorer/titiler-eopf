@@ -29,3 +29,22 @@ uv run pre-commit install
 # If needed, you can run pre-commit script manually 
 uv run pre-commit run --all-files 
 ```
+
+**container image scanning**
+
+The `Docker and Helm` workflow scans the image with [Trivy](https://trivy.dev)
+before pushing it, and fails on any *fixable* `CRITICAL` vulnerability. To
+reproduce that gate locally:
+
+```bash
+docker build -t titiler-eopf:scan .
+
+# Same gate as CI: non-zero exit on a fixable CRITICAL
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  aquasec/trivy:0.69.3 image \
+  --ignore-unfixed --vuln-type os,library --severity CRITICAL --exit-code 1 \
+  titiler-eopf:scan
+```
+
+Drop `--ignore-unfixed` to also see vulnerabilities with no upstream fix yet;
+those are reported to the GitHub Security tab but never block a build.

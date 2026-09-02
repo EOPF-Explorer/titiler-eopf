@@ -1062,7 +1062,7 @@ class GeoZarrReader(BaseReader):
         *args: Any,
         variables: list[str] | None = None,
         expression: str | None = None,
-        tilesize: int = 256,
+        tilesize: int | None = None,
         sel: list[str] | None = None,
         **kwargs: Any,
     ) -> ImageData:
@@ -1087,6 +1087,8 @@ class GeoZarrReader(BaseReader):
                 "`variables` must be passed via `expression` or `variables` options."
             )
 
+        matrix = self.tms.matrix(tile_z)
+
         for gv in variables:
             group, variable = gv.split(":") if ":" in gv else ("/", gv)
             with GeoArrayReader(
@@ -1100,8 +1102,8 @@ class GeoZarrReader(BaseReader):
                         tile_bounds[2],
                         tile_bounds[3],
                     ),
-                    height=tilesize,
-                    width=tilesize,
+                    height=tilesize or matrix.tileHeight,
+                    width=tilesize or matrix.tileWidth,
                     dst_crs=dst_crs,
                 ),
                 tms=self.tms,
