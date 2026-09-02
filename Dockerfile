@@ -1,8 +1,11 @@
 # Wolfi's apk repo is fully open — no Chainguard subscription needed. ":latest"
 # is the only free tag, so the digest below is the version pin; Dependabot's
 # "docker" ecosystem (.github/dependabot.yml) is the only thing that moves it
-# (and the uv pin below).
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:003627df3c1e1bba0c4116afcddb314aca9594ee2328c7e876a8081a6c988b2e AS base
+# (and the uv pin below). Keep it fresh: the apk packages added below are
+# unpinned and built against Wolfi's *current* glibc, while this rootfs keeps
+# the glibc it shipped with (nothing here runs `apk upgrade`). A stale digest
+# fails docker/smoke-test.sh with "version `GLIBC_x.yy' not found".
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:7e62cecd3c5712dba6e52c5260afb8f9d7a23b9bbcdd26ad7508a811e74b766d AS base
 
 # Declared AFTER "FROM" on purpose: an ARG before the first FROM is in scope for
 # FROM only, so the RUN below would expand it to "" and run `apk add python-`.
