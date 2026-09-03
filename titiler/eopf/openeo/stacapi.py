@@ -1,5 +1,7 @@
 """Custom stacApiBackend for EOPF."""
 
+from typing import Optional
+
 from attrs import define
 from openeo_pg_parser_networkx.pg_schema import BoundingBox, TemporalInterval
 from pystac import Collection, Item
@@ -572,8 +574,21 @@ class LoadCollection(BaseLoadCollection):
     def load_collection(
         self,
         id: str,
-        spatial_extent: BoundingBox | None = None,
-        temporal_extent: TemporalInterval | None = None,
+        # NOTE: spatial_extent/temporal_extent stay `Optional[X]` (old-style),
+        # not `X | None`, deliberately. titiler.openeo's process-graph
+        # ParameterReference resolution (core._is_optional_type) only
+        # recognises `typing.Union` -- `typing.get_origin(X | None)` returns
+        # `types.UnionType`, a different object, so `X | None` silently skips
+        # the BoundingBox/TemporalInterval coercion and a raw dict/list from a
+        # UDP parameter default reaches this function unconverted (then fails
+        # deeper, e.g. `temporal_extent.start` on a plain list in
+        # LoadCollection._get_items). Confirmed this affects both parameters
+        # identically; upstream's own load_collection dodges it only because
+        # it happens to use `Optional[X]` already. See EOPF-Explorer/titiler-eopf
+        # migration notes and the upstream fix this should eventually make
+        # unnecessary.
+        spatial_extent: Optional[BoundingBox] = None,
+        temporal_extent: Optional[TemporalInterval] = None,
         bands: list[str] | None = None,
         properties: dict | None = None,
         # private arguments

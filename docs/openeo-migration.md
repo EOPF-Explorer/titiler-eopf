@@ -870,3 +870,32 @@ with the §1 finding that openEO test coverage is thin. `tests/test_band_names.p
 whose `item_assets` still reflects the pre-restructure single-`reflectance`-asset catalogue shape).
 
 Full suite: 114/114 (110 + 4 new).
+
+### 7.8 `spatial_extent`/`temporal_extent` must stay `Optional[X]`, not `X | None`
+
+Found while debugging a live notebook error: `AttributeError: 'list' object has no attribute 'start'`
+at `LoadCollection._get_items` (upstream, unmodified). Root cause is upstream, not this repo's copy —
+`titiler.openeo.processes.implementations.core._is_optional_type` detects "is this parameter optional"
+via `typing.get_origin(t) is typing.Union`, which is `False` for PEP 604 `X | None` syntax
+(`typing.get_origin(X | None)` returns `types.UnionType`, a different object). When that check misses,
+the `BoundingBox`/`TemporalInterval` coercion (`_resolve_special_parameter`) is skipped, and a raw
+dict/list — exactly what a UDP `Parameter`'s JSON `default` is, and exactly what the openEO Python
+client sends for `connection.load_collection(temporal_extent=some_parameter)` — reaches
+`load_collection` unconverted.
+
+Upstream's own `load_collection` dodges this by using old-style `Optional[X]`; this repo's copy used
+`X | None` (matching this repo's style everywhere else) and hit it. Confirmed via direct reproduction
+that **both** `spatial_extent` and `temporal_extent` are equally affected for a plain parameter-default
+resolution — `spatial_extent` only appears to work in XYZ tile rendering because `factory.py` injects
+an already-constructed `BoundingBox` object there (bypassing the coercion entirely), not because the
+coercion itself works.
+
+**Fixed**: `titiler/eopf/openeo/stacapi.py`'s `LoadCollection.load_collection` keeps
+`spatial_extent`/`temporal_extent` as `Optional[BoundingBox]`/`Optional[TemporalInterval]` (with a
+comment explaining why), rather than `X | None`. Regression test:
+`tests/test_load_collection_param_types.py` — confirmed it fails without the fix, passes with it.
+Full suite: 115/115.
+
+Worth an upstream PR on `_is_optional_type` (recognise `types.UnionType` alongside `typing.Union`) —
+not filed yet, since it affects only *custom* process implementations using modern union syntax and
+upstream's own code doesn't hit it. Same shape as the #378 fix from earlier in this migration.
