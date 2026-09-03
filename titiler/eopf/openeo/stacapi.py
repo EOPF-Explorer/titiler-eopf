@@ -74,23 +74,80 @@ def get_band_names(asset_name: str, asset) -> list[str]:
     return [f"{asset_name}|bands={band['name']}" for band in bands if band.get("name")]
 
 
-def get_all_band_names(collection: Collection) -> list[str]:
+def get_all_band_names(collection: Collection) -> list[str]:  # noqa: C901
     """Get all unique band references from collection item assets.
+
+    Some EOPF collections publish the same band several times over: once as
+    its own single-band, single-resolution asset (e.g. Sentinel-2's
+    ``B02_10m``, declaring one band named ``B02``), and again inside a
+    multi-band composite covering the same or another resolution (``SR_10m``,
+    ``SR_20m``, ``SR_60m``, and the true-colour ``TCI_10m``, none of which
+    carry a rendering role in this catalogue's metadata, so a naive per-asset
+    walk cannot tell them apart from real per-band data). Left unfiltered,
+    that means up to four different names for one physical band
+    (``B02_10m|bands=B02``, ``SR_10m|bands=B02``, ``SR_20m|bands=B02``,
+    ``SR_60m|bands=B02``) -- all reading the identical pixels at whatever
+    resolution their asset happens to be, which is confusing to advertise and
+    doubles as an easy way to end up mixing resolutions across a request
+    without noticing.
+
+    When a band name is available from a **single-band** asset, that is
+    always the preferred, and only advertised, source for it: a composite
+    asset's copy of the same band is dropped. A band that is *only* ever
+    published inside a composite (no single-band asset declares it) keeps
+    every composite that carries it -- dropping those would make the band
+    unreachable rather than just less redundantly named, which this function
+    must never do.
 
     Returns:
         List of band references in format 'asset_name|bands=band_name' if bands exist,
         or just asset names if no bands are defined for those assets
     """
-    all_band_names = set()
+    bare_names: set[str] = set()
+    # band display name -> asset names that publish it as their one declared band
+    single_band_sources: dict[str, set[str]] = {}
+    # band display name -> {asset_name: full "asset|bands=band" reference}
+    composite_candidates: dict[str, dict[str, str]] = {}
 
-    # First try to get from item_assets
     for asset_name, asset in collection.item_assets.items():
-        # Skip non-data assets
-        if not asset.roles or "data" not in asset.roles:
+        roles = asset.roles or []
+        # Skip non-data assets, and a "data" asset that is also flagged
+        # "metadata" -- the whole underlying store packaged as one asset
+        # (EOPF's `product`), which has no bands of its own to select.
+        if "data" not in roles or "metadata" in roles:
             continue
 
-        band_refs = get_band_names(asset_name, asset)
-        all_band_names.update(band_refs)
+        bands = extract_bands_from_asset(asset)
+        if not bands:
+            bare_names.add(asset_name)
+            continue
+
+        if len(bands) == 1:
+            band_name = bands[0].get("name")
+            if band_name:
+                single_band_sources.setdefault(band_name, set()).add(asset_name)
+                bare_names.add(f"{asset_name}|bands={band_name}")
+            continue
+
+        # A composite (2+ declared bands): hold each of its bands as a
+        # candidate rather than adding it directly, so the dedup pass below
+        # can drop it in favour of a single-band asset if one exists.
+        for band in bands:
+            band_name = band.get("name")
+            if band_name:
+                composite_candidates.setdefault(band_name, {})[asset_name] = (
+                    f"{asset_name}|bands={band_name}"
+                )
+
+    all_band_names = bare_names
+    for band_name, by_asset in composite_candidates.items():
+        if band_name in single_band_sources:
+            # A single-band asset already covers this band -- the composite's
+            # copy is pure redundancy, drop it.
+            continue
+        # No single-band alternative: keep every composite that carries this
+        # band, exactly as before this function started deduplicating.
+        all_band_names.update(by_asset.values())
 
     # If no bands found from item_assets, try to infer from summaries for EOPF collections
     if not all_band_names and collection.summaries and collection.summaries.bands:
