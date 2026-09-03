@@ -1,6 +1,5 @@
 """test titiler-eopf stac endpoints."""
 
-import json
 import os
 from unittest.mock import patch
 from urllib.parse import parse_qs
@@ -22,13 +21,13 @@ collection_json = os.path.join(os.path.dirname(__file__), "fixtures", "collectio
 
 def test_stac_reader(geozarr_stac):
     """test EOPFSimpleSTACReader."""
-    stac = json.loads(geozarr_stac)
+    item = geozarr_stac.to_dict(transform_hrefs=False)
     simple_item = {
-        "id": stac["id"],
-        "collection": stac["collection"],
-        "bbox": stac["bbox"],
-        "properties": stac["properties"],
-        "assets": stac["assets"],
+        "id": item["id"],
+        "collection": item["collection"],
+        "bbox": item["bbox"],
+        "properties": item["properties"],
+        "assets": item["assets"],
     }
     with EOPFSimpleSTACReader(simple_item) as src:
         assert src.assets == ["reflectance"]
@@ -62,13 +61,13 @@ def test_stac_reader(geozarr_stac):
 
 def test_stac_reader_3d(geozarr_3d_stac):
     """test EOPFSimpleSTACReader."""
-    stac = json.loads(geozarr_3d_stac)
+    item = geozarr_3d_stac.to_dict(transform_hrefs=False)
     simple_item = {
-        "id": stac["id"],
-        "collection": stac["collection"],
-        "bbox": stac["bbox"],
-        "properties": stac["properties"],
-        "assets": stac["assets"],
+        "id": item["id"],
+        "collection": item["collection"],
+        "bbox": item["bbox"],
+        "properties": item["properties"],
+        "assets": item["assets"],
     }
     with EOPFSimpleSTACReader(simple_item) as src:
         assert src.assets == ["reflectance"]
@@ -109,7 +108,7 @@ def test_stac_reader_3d(geozarr_3d_stac):
 @patch("titiler.eopf.stac.EOPFSTACAPIBackend.get_assets")
 def test_stacapi_backend(get_assets, geozarr_stac):
     """test EOPFSTACAPIBackend."""
-    item = json.loads(geozarr_stac)
+    item = geozarr_stac.to_dict(transform_hrefs=False)
     get_assets.return_value = [
         {
             "id": item["id"],
@@ -189,7 +188,7 @@ def test_stacapi_backend(get_assets, geozarr_stac):
 @patch("titiler.eopf.stac.EOPFSTACAPIBackend.get_assets")
 def test_stac_collection_mosaic(get_assets, _get_collection, app, geozarr_stac):
     """test STAC /collections/{collection_id} endpoints."""
-    item = json.loads(geozarr_stac)
+    item = geozarr_stac.to_dict(transform_hrefs=False)
     get_assets.return_value = [
         {
             "id": item["id"],

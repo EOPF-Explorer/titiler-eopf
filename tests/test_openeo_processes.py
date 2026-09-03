@@ -1,9 +1,7 @@
 """titiler-eopf openeo test processes"""
 
-import json
 import os
 
-import pystac
 from openeo_pg_parser_networkx.pg_schema import BoundingBox
 from rio_tiler.models import ImageData
 
@@ -86,7 +84,7 @@ def test_load_collection(geozarr_stac):
             self.url = url
 
         def get_items(self, *args, **kwargs):
-            return [pystac.Item.from_dict(json.loads(geozarr_stac))]
+            return [geozarr_stac]
 
     loaders = LoadCollection(FakeBackend("https://fake.api.io/stac"))
 

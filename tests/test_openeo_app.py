@@ -5,7 +5,7 @@ from collections.abc import Generator
 from typing import Any
 from unittest.mock import patch
 
-import httpx
+import httpx2 as httpx
 import pystac
 import pytest
 from starlette.testclient import TestClient

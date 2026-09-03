@@ -39,21 +39,9 @@ uv sync
 
 ## Configuration
 
-Tiler's endpoints are configured to take `collection_id` and `item_id` path parameter in form of `/collections/{collection_id}/items/{item_id}/...`.
+The `titiler-eopf` application is linked to a STAC API. Tiler's endpoints are configured to take `collection_id` and `item_id` path parameter in form of `/collections/{collection_id}/items/{item_id}/...` for individual item access, and `/collections/{collection_id}/...` for collection mosaics.
 
-The Fastapi application will then construct a dataset full URL based on a datastore base url. The datastore url is configurable use env variable (or hardcoded in a `.env` file).
-
-- `TITILER_EOPF_STORE_SCHEME`: Datastore scheme (e.g `s3`)
-- `TITILER_EOPF_STORE_HOST`: Datastore host (e.g `my-bucket`)
-- `TITILER_EOPF_STORE_PATH`: Datastore path (e.g `data`)
-
-or
-
-- `TITILER_EOPF_STORE_URL`: Datastore base url (e.g "s3://my-bucket/data/")
-
-e.g:
-
-`TITILER_EOPF_STORE_URL=s3://my-bucket/data/`
+The STAC API is configured with the `TITILER_EOPF_STAC_API_URL` (**required**) environment variable.
 
 ```
 # Get Dataset Info for `s3://my-bucket/data/sentinel-2/S2A_MSIL2A_20250704T094051_N0511_R036_T33SWB_20250704T115824.zarr` file
@@ -63,7 +51,6 @@ http://127.0.0.1:8000/collections/sentinel-2/items/S2A_MSIL2A_20250704T094051_N0
 ## Launch
 
 ```
-export TITILER_EOPF_STORE_URL=s3://my-bucket/data/ 
 uv run --extra server uvicorn titiler.eopf.main:app --host 127.0.0.1 --port 8080
 ```
 
@@ -73,12 +60,13 @@ uv run --extra server uvicorn titiler.eopf.main:app --host 127.0.0.1 --port 8080
 git clone https://github.com/EOPF-Explorer/titiler-eopf.git
 cd titiler-eopf
 
+export TITILER_EOPF_STAC_API_URL=https://api.explorer.eopf.copernicus.eu/stac
+
+# AWS credentials are required to access assets stored in S3.
 export AWS_ACCESS_KEY_ID=12345678910
 export AWS_SECRET_ACCESS_KEY=a_super_secret_key
 export AWS_DEFAULT_REGION=somewhere
 export AWS_ENDPOINT_URL=https://custom_s3_endpoint.dev
-
-export TITILER_EOPF_STORE_URL=s3://my-bucket/data/
 
 docker-compose up --build api
 ```
@@ -152,12 +140,12 @@ env:
   PORT: 80
   WEB_CONCURRENCY: 1
   
+  # STAC Endpoint Configuration
+  TITILER_EOPF_STAC_API_URL: "https://api.explorer.eopf.copernicus.eu/stac/"
+
   # OpenEO Backend Configuration (Required)
   TITILER_OPENEO_STAC_API_URL: "https://api.explorer.eopf.copernicus.eu/stac/"
   TITILER_OPENEO_STORE_URL: "services/eopf-explorer.json"
-  
-  # Data Store Configuration
-  TITILER_EOPF_STORE_URL: "s3://your-bucket/data/"
   
   # AWS Configuration (if using S3)
   AWS_DEFAULT_REGION: "de"
@@ -222,7 +210,8 @@ For local development, you can run the OpenEO API using the configuration from `
 ```bash
 export TITILER_OPENEO_STAC_API_URL="https://your-stac-api-url.com"
 export TITILER_OPENEO_STORE_URL="services/eopf-explorer.json"
-export TITILER_EOPF_STORE_URL="s3://your-bucket/data/"
+export TITILER_EOPF_STAC_API_URL="https://api.explorer.eopf.copernicus.eu/stac/"
+
 export AWS_DEFAULT_REGION="your-region"
 export AWS_ENDPOINT_URL="https://your-s3-endpoint.com/"
 
@@ -235,7 +224,7 @@ The OpenEO API requires the following environment variables to be configured:
 
 - `TITILER_OPENEO_STAC_API_URL`: URL of the STAC API for collection discovery
 - `TITILER_OPENEO_STORE_URL`: Path to the services configuration file
-- `TITILER_EOPF_STORE_URL`: Base URL for the data store (supports s3://, file://, etc.)
+- `TITILER_EOPF_STAC_API_URL`: URL of the STAC API endpoint
 
 Additional environment variables for authentication, AWS configuration, and other settings can be found in the `.vscode/launch.json` file.
 

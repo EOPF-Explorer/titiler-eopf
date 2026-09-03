@@ -30,4 +30,4 @@ redis:
 # Application environment
 env:
   LOG_LEVEL: "INFO"
-  TITILER_EOPF_STORE_URL: "s3://dev-bucket/data/"
+  TITILER_EOPF_STAC_API_URL: "https://api.explorer.eopf.copernicus.eu/stac/"
