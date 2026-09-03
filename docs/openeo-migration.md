@@ -249,17 +249,13 @@ meet the requested bbox before opening them — and is a reasonable upstream pro
   upstream grew `reader` and `asset_parser` fields on `LoadCollection`
   ([#379](https://github.com/sentinel-hub/titiler-openeo/issues/379)), this method could be deleted
   outright.
-- **One of the three "real" differences is a no-op.** `_make_mosaic_task` passes
-  `allowed_exceptions=(TileOutsideBounds,)` to `mosaic_reader` — which is already rio-tiler 9.4.2's
-  default for that parameter. The accompanying `EmptyMosaicError` → `TileOutsideBounds` conversion is
-  real and worth keeping; the explicit tuple is not.
-- **Silent 100-item cap.** `LoadCollection.load_collection` calls `_get_items(…, limit=100)` and never
-  passes `max_items`. Upstream's `get_items` does `max_items = max_items or 100`, so wide temporal
-  extents get truncated — exactly the bug upstream fixed in #302 by passing
-  `max_items=processing_settings.max_items + 1`. Port that.
-- **Task metadata is missing `items`.** 0.17.0 attaches `"items": date_items` to each task so
-  `RasterStack.get_source_items()` can reach per-item STAC metadata. `_build_tasks` here does not, so
-  `sar_backscatter` and anything else needing source items cannot work on this backend.
+- ~~**One of the three "real" differences is a no-op.**~~ **Fixed in §7.9** — `_make_mosaic_task`'s
+  explicit `allowed_exceptions=(TileOutsideBounds,)` (rio-tiler's own default for that parameter) is
+  removed; the `EmptyMosaicError` → `TileOutsideBounds` conversion around it is kept.
+- ~~**Silent 100-item cap.**~~ **Fixed in §7.9** — `load_collection` now passes
+  `max_items=processing_settings.max_items + 1` to `_get_items`, matching upstream's own #302 fix.
+- ~~**Task metadata is missing `items`.**~~ **Fixed in §7.9** — `_build_tasks` now attaches
+  `"items": date_items` to each task, matching upstream.
 - **Resolution estimation is inert for EOPF, and this is a data gap, not a copy gap.**
   `load_collection` calls `_estimate_output_dimensions`, which reaches `_get_assets_resolutions` →
   `_get_asset_resolution`. That function needs, in order: asset-level `proj:transform`, asset-level
@@ -287,16 +283,12 @@ meet the requested bbox before opening them — and is a reasonable upstream pro
   `proj:transform`/`proj:shape` from the pipeline (the standard answer), or add a `gsd` fallback
   upstream, gated on the resolved CRS being projected. Filed as
   [titiler-openeo#381](https://github.com/sentinel-hub/titiler-openeo/issues/381).
-- **The whole product store is advertised as a band.** `get_all_band_names` filters `item_assets` on
-  `"data" in roles` alone. Sentinel-2 L2A has an asset `product` — `application/vnd+zarr`, roles
-  `["data", "metadata"]`, "The full Zarr store of the EOPF product" — which passes that filter and, having
-  no `bands` metadata, is emitted as the bare band name `product`. It is 1 of the 44 names `main` would
-  publish. Selecting it resolves to `GeoZarrReader` over the entire store with no `variables`, which
-  raises `MissingVariables` — a `RioTilerError`, so it is neither swallowed nor mapped to a 4xx and
-  surfaces as a 500. Upstream 0.17.0 added a related guard (`_ARCHIVE_MEDIA_TYPES`, for CDSE's zipped
-  S1 `Product`) but it keys on media type and would not catch this one, which is a genuine Zarr
-  container. Exclude container assets explicitly — the `metadata` role alongside `data` is the available
-  signal.
+- ~~**The whole product store is advertised as a band.**~~ **Fixed in §7.7** —
+  `get_all_band_names` now excludes any asset flagged both `data` and `metadata` (EOPF's `product`,
+  "The full Zarr store of the EOPF product"), which used to pass the `"data" in roles` filter and,
+  having no `bands` metadata, get emitted as the bare band name `product` — selecting it resolved to
+  `GeoZarrReader` over the entire store with no `variables`, a 500. Same commit also deduplicated the
+  composite-asset band aliases (`SR_10m`/`SR_20m`/`SR_60m`/`TCI_10m`).
 - **`_fix_collection` drops `_add_band_summaries()`.** The override calls `_normalize_summaries` and
   `replace_bands_in_summaries_dict` only, so the new upstream derivation of `summaries.bands` from
   `item_assets` never runs.
@@ -333,14 +325,12 @@ meet the requested bbox before opening them — and is a reasonable upstream pro
   time.
 - **0.18.0 will widen the gap again.** PR #371 adds a `signer` parameter to upstream's `_reader`, which
   this copy will have to absorb by hand. That is the concrete cost of not having `reader_cls`.
-- **`OpenEOReader` arrives for free — but `_get_reader` drops derived bands.** `STACReader` overrides
-  only `_get_reader`, `_get_options` and `part`; it never redefines the `reader` attribute, so after the
-  bump `self.reader` *is* `OpenEOReader` (GCP warping, 204–2042 m of geolocation error at 81–86°N
-  avoided) with no work. What the override does break is the other half: upstream's `_get_reader` first
-  checks `self._derived_bands` and returns that band's own reader, and the EOPF version never consults
-  it — so a band-source-derived band (SAR noise/calibration LUTs, S2 view/sun angles) would be read with
-  `OpenEOReader` instead of its `NoiseBandReader`/`CalibrationBandReader`. The fix is one line:
-  `return super()._get_reader(asset_info)` in place of `return self.reader`.
+- ~~**`OpenEOReader` arrives for free — but `_get_reader` drops derived bands.**~~ **Fixed in §7.9** —
+  `STACReader._get_reader`'s non-Zarr branch now delegates to `super()._get_reader(asset_info)` instead
+  of returning `self.reader` directly, so upstream's `_derived_bands` check (band-source-derived reads:
+  SAR noise/calibration LUTs, S2 view/sun angles) runs again. `OpenEOReader` (GCP warping) itself was
+  already inherited for free — `STACReader` never redefined the `reader` attribute — only this one
+  fallthrough line was the gap.
 - **`STACReader.part` is a hand-copied version** of `rio_tiler.io.MultiBaseReader.part` (141L vs 81L),
   not of anything in titiler-openeo — upstream's `SimpleSTACReader` does not override `part` at all.
   Diffed against rio-tiler 9.4.2, **nothing was dropped**: `_update_statistics`, the metadata merge,
@@ -570,11 +560,11 @@ Scope: titiler-eopf · the real work
 Two things at once, and the order matters. **First narrow the copies** per the §3.0 verdicts — delete
 `load_collection.json`, delegate `_get_options`'s
 non-Zarr branch to `super()`, strip `part` down to its two guards, extract the shared Zarr band helper.
-**Then apply the fixes** — `max_items`, task `items` metadata, `_add_band_summaries`, the band-dimension
-shape, mask inheritance in `_reader`, `_get_reader`'s derived-band fallthrough, the asset-href rewrite, plus health
-endpoints in `main.py` — plus the
-band-notation cleanup: migrate the 11 stale references in `services/eopf-explorer.json` and fix the five
-docstrings that still document `asset|band`.
+**Then apply the remaining fixes** — `_add_band_summaries`, the band-dimension shape, mask inheritance
+in `_reader`, the asset-href rewrite, plus health endpoints in `main.py` — plus the band-notation
+cleanup: migrate the 11 stale references in `services/eopf-explorer.json` and fix the five docstrings
+that still document `asset|band`. (`max_items`, task `items` metadata, and `_get_reader`'s derived-band
+fallthrough are done — §7.9.)
 
 Narrowing first is what makes the fixes small: `max_items` and the missing `items` metadata are one-line
 changes against upstream's `load_collection`, and only became hand-ports because a 189-line function had
@@ -899,3 +889,29 @@ Full suite: 115/115.
 Worth an upstream PR on `_is_optional_type` (recognise `types.UnionType` alongside `typing.Union`) —
 not filed yet, since it affects only *custom* process implementations using modern union syntax and
 upstream's own code doesn't hit it. Same shape as the #378 fix from earlier in this migration.
+
+### 7.9 Four small, fully-diagnosed §3.1/§3.2 fixes
+
+All one-line-to-few-line, no new research needed — each had already been traced to a precise root
+cause earlier in this doc. Landed together since none touch the same code:
+
+- **`max_items` silent cap** (§3.1) — `load_collection` now passes
+  `max_items=processing_settings.max_items + 1` to `_get_items`, matching upstream's own #302 fix.
+  Verified: `processing_settings.max_items + 1` computes to `21` (default `max_items=20`).
+- **Task `items` metadata** (§3.1) — `_build_tasks` now attaches `"items": date_items` to each task,
+  so `RasterStack.get_source_items()` can reach per-item STAC metadata (needed for
+  `sar_backscatter` and similar).
+- **`_get_reader`'s derived-band fallthrough** (§3.2) — non-Zarr assets now go through
+  `super()._get_reader(asset_info)` instead of `self.reader` directly, restoring upstream's
+  `_derived_bands` check. Caught a stale test fixture in the process:
+  `tests/test_io.py::test_get_reader_zarr_detection` built an `asset_info` dict with no `"name"` key,
+  which upstream's `_get_reader` requires (`asset_info["name"]`, not `.get(...)`) — real `AssetInfo`
+  objects always carry one (`_get_asset_info` always sets it), so the test fixture was unrealistic, not
+  the fix wrong. Fixed the fixture.
+- **`part()`'s no-op `allowed_exceptions`** (§3.1, "one of the three real differences is a no-op") —
+  removed the explicit `allowed_exceptions=(TileOutsideBounds,)` from `_make_mosaic_task`'s
+  `mosaic_kwargs`. Verified directly: `inspect.signature(mosaic_reader).parameters["allowed_exceptions"].default`
+  is already `(TileOutsideBounds,)` on the installed rio-tiler. The `EmptyMosaicError` →
+  `TileOutsideBounds` conversion around it is real and stays.
+
+Full suite: 115/115.
