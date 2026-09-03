@@ -15,7 +15,7 @@ cache:
     default: 3600
     tiles: 3600
     datasets: 1800
-  
+
   namespace: "dev-cache"
   
   # Admin API

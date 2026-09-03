@@ -89,13 +89,16 @@ The chart automatically generates the following environment variables based on c
 ### Cache Control
 - `TITILER_EOPF_CACHE_ENABLE`: "true" when cache is enabled
 - `TITILER_EOPF_CACHE_BACKEND`: Backend type (redis/s3/s3-redis)  
-- `TITILER_EOPF_CACHE_TTL_DEFAULT`: Default TTL in seconds
+- `TITILER_EOPF_CACHE_DEFAULT_TTL`: Default TTL in seconds
+- `TITILER_EOPF_CACHE_TILE_TTL`: Tile cache TTL in seconds
+- `TITILER_EOPF_CACHE_METADATA_TTL`: TTL for cached datatrees (from `cache.ttl.datasets`)
+- `TITILER_EOPF_CACHE_VERSION_PROBE_TTL`: Store-version probe throttle (0 disables probing)
 - `TITILER_EOPF_CACHE_NAMESPACE`: Cache key namespace
 
 ### Redis Configuration
 - `TITILER_EOPF_CACHE_REDIS_HOST`: Redis hostname
 - `TITILER_EOPF_CACHE_REDIS_PORT`: Redis port
-- `TITILER_EOPF_CACHE_REDIS_DATABASE`: Redis database number
+- `TITILER_EOPF_CACHE_REDIS_DB`: Redis database number
 - `TITILER_EOPF_CACHE_REDIS_PASSWORD`: Redis password (from secret)
 
 ### S3 Configuration  
