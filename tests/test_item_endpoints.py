@@ -23,6 +23,31 @@ def test_info(get_stac_item, app, geozarr_stac):
     assert response.headers["content-type"] == "application/json"
     assert response.json() == ["reflectance"]
 
+    # missing assets query param
+    response = app.get(
+        f"/collections/{collection}/items/{item}/info",
+    )
+    assert response.status_code == 422
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/info",
+        params={"assets": ":all:"},
+    )
+    assert response.status_code == 200
+    infos = response.json()
+    assert list(infos) == [
+        "reflectance_root_b02",
+        "reflectance_root_b03",
+        "reflectance_root_b04",
+        "reflectance_root_b05",
+        "reflectance_root_b06",
+        "reflectance_root_b07",
+        "reflectance_root_b08",
+        "reflectance_root_b11",
+        "reflectance_root_b12",
+        "reflectance_root_b8a",
+    ]
+
     response = app.get(
         f"/collections/{collection}/items/{item}/info",
         params={"assets": "reflectance"},

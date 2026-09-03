@@ -75,6 +75,10 @@ def _parse_asset(values: list[str]) -> list[AssetType]:
     Raises:
         ValueError: If an option is missing a ``key=value`` pair or uses an unknown key.
     """
+    # special case for ":all:" to avoid parsing it as an asset name
+    if values == [":all:"]:
+        return values
+
     assets: list[AssetType] = []
     for v in values:
         # asset with options
