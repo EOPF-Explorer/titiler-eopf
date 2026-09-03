@@ -1,6 +1,6 @@
 """Custom stacApiBackend for EOPF."""
 
-from attrs import define, field
+from attrs import define
 from openeo_pg_parser_networkx.pg_schema import BoundingBox, TemporalInterval
 from pystac import Collection, Item
 from pystac.extensions import datacube as dc
@@ -481,9 +481,17 @@ class LoadCollection(BaseLoadCollection):
 
     This class inherits from the base LoadCollection and uses our custom
     _reader that supports both COG and Zarr assets.
-    """
 
-    stac_api: stacApiBackend = field()
+    NOTE: `stac_api` is inherited from `BaseLoadCollection` rather than
+    redeclared here. Upstream 0.18.0 added `signer_key: Optional[str] =
+    field(default=None)` to the base class; attrs orders an overridden field
+    at the *subclass's* declaration position, so redeclaring `stac_api` here
+    (mandatory, no default) put it after `signer_key` (has a default) and
+    attrs refused to build the class ("No mandatory attributes allowed after
+    an attribute with a default value"). EOPF's `stacApiBackend` subclasses
+    the upstream one, so passing an instance of it still satisfies the
+    inherited (upstream-typed) `stac_api` field.
+    """
 
     def _validate_limits(
         self, items: list[Item], width: int | None, height: int | None
