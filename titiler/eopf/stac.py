@@ -172,8 +172,16 @@ class EOPFSTACAPIReader(STACAPIReader):
 
         """
         infos = super().info(assets=assets, **kwargs)
+
+        def _key_to_var(v: str) -> str:
+            if ":" in v:
+                group, var = v.split(":")
+                group = "root" if group == "/" else group
+                return f"{group}_{var}"
+            return v
+
         return {
-            f"{asset_name}_{key}": value
+            f"{asset_name.rstrip("|")}_{_key_to_var(key)}": value
             for asset_name, info in infos.items()
             for key, value in info.items()
         }

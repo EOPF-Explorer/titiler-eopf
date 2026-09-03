@@ -1,4 +1,4 @@
-"""Test titiler.eopf.main.app."""
+"""Test titiler.eopf /external endpoints."""
 
 from urllib.parse import parse_qs
 
@@ -7,23 +7,22 @@ from owslib.wmts import WebMapTileService
 from .conftest import parse_img
 
 
-def test_dataset(app, geozarr):
+def test_dataset(app, geozarr_dataset):
     """Test /datasets routes."""
-    collection, item = geozarr
-    response = app.get(f"/collections/{collection}/items/{item}/dataset")
+    response = app.get("/external/dataset", params={"url": f"file://{geozarr_dataset}"})
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
 
-    response = app.get(f"/collections/{collection}/items/{item}/dataset")
-    assert response.status_code == 200
-    assert "text/html" in response.headers["content-type"]
-
-    response = app.get(f"/collections/{collection}/items/{item}/dataset/groups")
+    response = app.get(
+        "/external/dataset/groups", params={"url": f"file://{geozarr_dataset}"}
+    )
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
     assert response.json() == ["/measurements/reflectance"]
 
-    response = app.get(f"/collections/{collection}/items/{item}/dataset/keys")
+    response = app.get(
+        "/external/dataset/keys", params={"url": f"file://{geozarr_dataset}"}
+    )
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
     assert response.json() == [
@@ -39,37 +38,31 @@ def test_dataset(app, geozarr):
         "/measurements/reflectance:b8a",
     ]
 
-    response = app.get(f"/collections/{collection}/items/{item}/dataset/dict")
+    response = app.get(
+        "/external/dataset/dict", params={"url": f"file://{geozarr_dataset}"}
+    )
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
-    if item == "geozarr_v0":
-        assert set(response.json()) == {
-            ".",
-            "measurements",
-            "measurements/reflectance",
-            "measurements/reflectance/0",
-            "measurements/reflectance/1",
-            "measurements/reflectance/2",
-            "measurements/reflectance/3",
-        }
-    else:
-        assert set(response.json()) == {
-            ".",
-            "measurements",
-            "measurements/reflectance",
-            "measurements/reflectance/r10m",
-            "measurements/reflectance/r20m",
-            "measurements/reflectance/r60m",
-            "measurements/reflectance/r120m",
-        }
+    assert set(response.json()) == {
+        ".",
+        "measurements",
+        "measurements/reflectance",
+        "measurements/reflectance/r10m",
+        "measurements/reflectance/r20m",
+        "measurements/reflectance/r60m",
+        "measurements/reflectance/r120m",
+    }
 
 
-def test_preview(app, geozarr):
+def test_preview(app, geozarr_dataset):
     """Test preview routes."""
-    collection, item = geozarr
+
     response = app.get(
-        f"/collections/{collection}/items/{item}/preview.png",
-        params={"variables": "/measurements/reflectance:b02"},
+        "/external/preview.png",
+        params={
+            "url": f"file://{geozarr_dataset}",
+            "variables": "/measurements/reflectance:b02",
+        },
     )
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/png"
@@ -78,18 +71,9 @@ def test_preview(app, geozarr):
     assert profile["dtype"] == "uint8"
 
     response = app.get(
-        f"/collections/{collection}/items/{item}/preview.png",
-        params={"variables": "/measurements/reflectance:b02"},
-    )
-    assert response.status_code == 200
-    assert response.headers["content-type"] == "image/png"
-    profile = parse_img(response.content)
-    assert profile["count"] == 2
-    assert profile["dtype"] == "uint8"
-
-    response = app.get(
-        f"/collections/{collection}/items/{item}/preview.png",
+        "/external/preview.png",
         params=(
+            ("url", f"file://{geozarr_dataset}"),
             ("variables", "/measurements/reflectance:b04"),
             ("variables", "/measurements/reflectance:b03"),
             ("variables", "/measurements/reflectance:b02"),
@@ -103,17 +87,19 @@ def test_preview(app, geozarr):
     assert profile["dtype"] == "uint8"
 
 
-def test_wmts(app, geozarr, geozarr_dataset):
+def test_wmts(app, geozarr_dataset):
     """Test wmts routes."""
-    collection, item = geozarr
     response = app.get(
-        f"/collections/{collection}/items/{item}/WMTSCapabilities.xml",
-        params={"variables": "/measurements/reflectance:b02"},
+        "/external/WMTSCapabilities.xml",
+        params={
+            "url": f"file://{geozarr_dataset}",
+            "variables": "/measurements/reflectance:b02",
+        },
     )
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/xml"
 
-    wmts = WebMapTileService(url="/wmts", xml=response.text.encode())
+    wmts = WebMapTileService(url="/external/wmts", xml=response.text.encode())
     layers = list(wmts.contents)
     assert len(layers) > 1
 
@@ -127,15 +113,18 @@ def test_wmts(app, geozarr, geozarr_dataset):
     assert query["variables"] == ["/measurements/reflectance:b02"]
 
 
-def test_dataset_3d(app, geozarr_3d):
+def test_dataset_3d(app, geozarr_3d_dataset):
     """Test /datasets routes."""
-    collection, item = geozarr_3d
-    response = app.get(f"/collections/{collection}/items/{item}/dataset/groups")
+    response = app.get(
+        "/external/dataset/groups", params={"url": f"file://{geozarr_3d_dataset}"}
+    )
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
     assert response.json() == ["/measurements/reflectance"]
 
-    response = app.get(f"/collections/{collection}/items/{item}/dataset/keys")
+    response = app.get(
+        "/external/dataset/keys", params={"url": f"file://{geozarr_3d_dataset}"}
+    )
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
     assert response.json() == [
@@ -151,7 +140,7 @@ def test_dataset_3d(app, geozarr_3d):
         "/measurements/reflectance:b8a",
     ]
 
-    response = app.get(f"/collections/{collection}/items/{item}/info")
+    response = app.get("/external/info", params={"url": f"file://{geozarr_3d_dataset}"})
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
     assert list(response.json()) == [
@@ -175,8 +164,11 @@ def test_dataset_3d(app, geozarr_3d):
     assert info["count"] == 2
 
     response = app.get(
-        f"/collections/{collection}/items/{item}/info",
-        params={"variables": "/measurements/reflectance:b02"},
+        "/external/info",
+        params={
+            "url": f"file://{geozarr_3d_dataset}",
+            "variables": "/measurements/reflectance:b02",
+        },
     )
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
@@ -185,8 +177,9 @@ def test_dataset_3d(app, geozarr_3d):
     ]
 
     response = app.get(
-        f"/collections/{collection}/items/{item}/info",
+        "/external/info",
         params={
+            "url": f"file://{geozarr_3d_dataset}",
             "variables": "/measurements/reflectance:b02",
             "sel": "time=nearest::2022-01-03T00:00:00.000000000",
         },

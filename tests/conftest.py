@@ -1,11 +1,13 @@
 """titiler.eopf tests configuration."""
 
+import json
 import os
 import shutil
 from threading import Thread
 from typing import Any, Generator
 
 import jinja2
+import pystac
 import pytest
 from fakeredis import TcpFakeServer
 from rasterio.io import MemoryFile
@@ -36,7 +38,7 @@ def redis_host() -> Generator[str, Any, Any]:
     params=["v1"],
     scope="session",
 )
-def geozarr(request):
+def geozarr(request) -> Generator[tuple[str, str], Any, Any]:
     """Create GeoZarr fixture."""
     version = request.param
     collection_dir = os.path.join(FIXTURES_DIRECTORY, "eopf")
@@ -48,14 +50,14 @@ def geozarr(request):
 
 
 @pytest.fixture
-def geozarr_dataset(geozarr):
+def geozarr_dataset(geozarr) -> str:
     """GeoZarr dataset path."""
     collection, item = geozarr
     return os.path.join(FIXTURES_DIRECTORY, collection, f"{item}.zarr")
 
 
 @pytest.fixture
-def geozarr_so():
+def geozarr_so() -> Generator[str, Any, Any]:
     """Create GeoZarr with scale offset."""
     collection_dir = os.path.join(FIXTURES_DIRECTORY, "eopf_so")
     geozarr = os.path.join(collection_dir, "geozarr.zarr")
@@ -66,7 +68,7 @@ def geozarr_so():
 
 
 @pytest.fixture
-def geozarr_stac(geozarr_dataset):
+def geozarr_stac(geozarr_dataset) -> pystac.Item:
     """Create GeoZARR STAC Item."""
     env = jinja2.Environment(
         loader=jinja2.ChoiceLoader(
@@ -76,11 +78,12 @@ def geozarr_stac(geozarr_dataset):
         )
     )
     template = env.get_template("item.json")
-    return template.render(store_url=f"file://{geozarr_dataset}")
+    rendered = template.render(store_url=f"file://{geozarr_dataset}")
+    return pystac.Item.from_dict(json.loads(rendered))
 
 
 @pytest.fixture
-def geozarr_3d():
+def geozarr_3d() -> Generator[tuple[str, str], Any, Any]:
     """Create GeoZarr v1 with time dimension fixture."""
     collection_dir = os.path.join(FIXTURES_DIRECTORY, "eopf3d")
     geozarr = os.path.join(collection_dir, "geozarr_with_time.zarr")
@@ -91,14 +94,14 @@ def geozarr_3d():
 
 
 @pytest.fixture
-def geozarr_3d_dataset(geozarr_3d):
+def geozarr_3d_dataset(geozarr_3d) -> str:
     """GeoZarr dataset path."""
     collection, item = geozarr_3d
     return os.path.join(FIXTURES_DIRECTORY, collection, f"{item}.zarr")
 
 
 @pytest.fixture
-def geozarr_3d_stac(geozarr_3d_dataset):
+def geozarr_3d_stac(geozarr_3d_dataset) -> pystac.Item:
     """Create GeoZARR STAC Item."""
     env = jinja2.Environment(
         loader=jinja2.ChoiceLoader(
@@ -108,7 +111,8 @@ def geozarr_3d_stac(geozarr_3d_dataset):
         )
     )
     template = env.get_template("item.json")
-    return template.render(store_url=f"file://{geozarr_3d_dataset}")
+    rendered = template.render(store_url=f"file://{geozarr_3d_dataset}")
+    return pystac.Item.from_dict(json.loads(rendered))
 
 
 @pytest.fixture(autouse=True)
@@ -135,6 +139,8 @@ def set_env(redis_host, monkeypatch) -> Generator[TestClient, Any, Any]:
 
     # STAC API
     monkeypatch.setenv("TITILER_EOPF_STAC_API_URL", "https://fake.api.io/stac")
+
+    monkeypatch.setenv("TITILER_EOPF_API_ENABLE_EXTERNAL_DATASET_ENDPOINTS", "TRUE")
 
 
 @pytest.fixture
