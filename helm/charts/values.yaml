@@ -181,7 +181,12 @@ affinity: {}
 
 securityContext: {}
 
-podSecurityContext: {}
+# The image runs as an unprivileged user (uid 65532) but uvicorn binds port
+# 80, so mark ports >=80 as unprivileged in the pod's network namespace.
+podSecurityContext:
+  sysctls:
+    - name: net.ipv4.ip_unprivileged_port_start
+      value: "80"
 
 # Redis deployment (legacy - use cache.redis for new deployments)
 redis:

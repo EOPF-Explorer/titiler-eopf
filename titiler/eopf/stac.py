@@ -6,6 +6,7 @@ from typing import Annotated, Any, cast
 
 import attr
 import pystac
+import zarr
 from fastapi import Query
 from pydantic import AfterValidator
 from rio_tiler.errors import InvalidAssetName
@@ -175,7 +176,19 @@ class EOPFSTACAPIReader(STACAPIReader):
             dict: Multiple assets info in form of {"asset1": rio_tile.models.Info}.
 
         """
-        infos = super().info(assets=assets, **kwargs)
+
+        # Some STAC assets (e.g. AOT/SCL/WVP) point at a single Zarr Array rather
+        # than a Group, and `GeoZarrReader` opens every asset as a `DataTree`.
+        # Opening an Array path as a DataTree raises `ContainsArrayError` (xarray
+        # tries `zarr.open_group`/`open_consolidated` on a path that is actually
+        # an Array). Since `.info()` fans out over *all* assets, allow that
+        # exception so those non-group assets are skipped instead of failing
+        # the whole request.
+        allowed_exceptions = kwargs.pop("allowed_exceptions", ())
+        allowed_exceptions += (zarr.errors.ContainsArrayError,)
+        infos = super().info(
+            assets=assets, **kwargs, allowed_exceptions=allowed_exceptions
+        )
 
         def _key_to_var(v: str) -> str:
             if ":" in v:

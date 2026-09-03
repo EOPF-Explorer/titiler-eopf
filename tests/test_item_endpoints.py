@@ -85,6 +85,27 @@ def test_info(get_stac_item, app, geozarr_stac):
 
 
 @patch("titiler.stacapi.dependencies.get_stac_item")
+def test_tiljeson(get_stac_item, app, geozarr_stac):
+    """Test /tilejson routes."""
+    collection = geozarr_stac.collection_id
+    item = geozarr_stac.id
+
+    get_stac_item.return_value = geozarr_stac
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/WebMercatorQuad/tilejson.json",
+    )
+    assert response.status_code == 422
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/WebMercatorQuad/tilejson.json",
+        params={"assets": "reflectance|bands=b02,b03,b04", "rescale": "0,1"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+
+
+@patch("titiler.stacapi.dependencies.get_stac_item")
 def test_preview(get_stac_item, app, geozarr_stac):
     """Test preview routes."""
     collection = geozarr_stac.collection_id

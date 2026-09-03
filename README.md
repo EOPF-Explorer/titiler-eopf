@@ -86,6 +86,25 @@ docker-compose up --build api
 
 <img width="800" src="docs/img/openapi.png" />
 
+> Note: `api` and `api-openeo` cannot run at the same time. `api-openeo` extends
+> `api`, and Compose *merges* the `ports` list rather than replacing it, so
+> `api-openeo` publishes both 8081 and 8000 and the two collide. Start them one
+> at a time (`docker compose up api`, then `docker compose up api-openeo`).
+
+#### About the image
+
+The image is built on [Chainguard Wolfi](https://github.com/wolfi-dev), pinned by
+digest (`:latest` is the only free Chainguard tag, so the digest is the version
+pin). GDAL and PROJ come from the `rasterio` and `pyproj` manylinux wheels rather
+than system packages, so `osgeo` is intentionally absent.
+
+The image runs as **root on port 80** — the Helm chart renders
+`securityContext: {}` and passes `--port 80`, so adding a `USER` directive would
+crashloop the deployments.
+
+The Dockerfile comments explain the rest (why apk versions are unpinned, why
+`libstdc++` is explicit); `docker/smoke-test.sh` asserts it — see CONTRIBUTING.md.
+
 ## OpenEO API Deployment
 
 This repository includes a second application that deploys an OpenEO API (`titiler.eopf.openeo.main:app`). The same Docker image built by the CI pipeline can be used to deploy either the TiTiler EOPF application or the OpenEO API by configuring the `MODULE_NAME` environment variable.

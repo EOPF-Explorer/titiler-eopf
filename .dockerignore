@@ -1,0 +1,12 @@
+# Allowlist, not a denylist: the context is otherwise ~700 MB (.git, .venv,
+# caches) and a denylist grows a hole with every new directory.
+#
+# CAREFUL: pyproject.toml declares readme = "README.md" and license = {file =
+# "LICENSE"} — dropping either fails inside `pip install .`, not as a missing COPY.
+*
+
+!titiler
+!pyproject.toml
+!uv.lock
+!README.md
+!LICENSE
