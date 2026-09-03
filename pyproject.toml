@@ -42,7 +42,6 @@ openeo = [
     "sqlalchemy>=2.0.0",
     "psycopg2-binary",
     "cryptography",
-    "httpx",
 ]
 cache = [
     "redis",
@@ -59,7 +58,6 @@ dev = [
     "pytest",
     "pytest-cov",
     "pytest-asyncio",
-    "httpx",
     "fakeredis",
     "duckdb",
     "sqlalchemy>=2.0.0",
