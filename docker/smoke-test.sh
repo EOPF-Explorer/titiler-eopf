@@ -111,7 +111,7 @@ wait_http() {
 # the env rather than treating it as a failure.
 #   titiler/eopf/dependencies.py  -> DataStoreSettings()
 #   titiler/eopf/openeo/main.py   -> BackendSettings()
-RASTER_ENV=(-e TITILER_API_STAC_API_URL=https://api.explorer.eopf.copernicus.eu/stac)
+RASTER_ENV=(-e TITILER_EOPF_STAC_API_URL=https://api.explorer.eopf.copernicus.eu/stac)
 OPENEO_ENV=(
   -e TITILER_OPENEO_STAC_API_URL=https://api.explorer.eopf.copernicus.eu/stac
   -e TITILER_OPENEO_STORE_URL=/services/store.json
