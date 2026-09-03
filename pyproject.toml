@@ -38,6 +38,7 @@ dependencies = [
 [project.optional-dependencies]
 openeo = [
     "titiler-openeo>=0.18,<0.19",
+    "openeo",
     "duckdb",
     "sqlalchemy>=2.0.0",
     "psycopg2-binary",
@@ -86,6 +87,18 @@ Documentation = "https://github.com/EOPF-Explorer/titiler-eopf"
 Issues = "https://github.com/EOPF-Explorer/titiler-eopf/issues"
 Source = "https://github.com/EOPF-Explorer/titiler-eopf"
 Changelog = "https://github.com/EOPF-Explorer/titiler-eopf/CHANGELOG.md"
+
+[tool.uv]
+# The `openeo` client package (notebook/exploratory use only, see the
+# `openeo` extra) caps `pystac<1.12`. That cap breaks this app's own
+# `get_all_band_names` (titiler/eopf/openeo/stacapi.py), which relies on
+# `pystac.Collection.item_assets` being populated from a collection whose
+# `stac_extensions` does not declare the item-assets extension -- pystac
+# only did that unconditionally as of 1.12+. Overriding the cap here keeps
+# `openeo` installable without dragging pystac back below what the rest of
+# this app needs; verified `openeo`'s own STAC handling still works against
+# pystac 1.14.3.
+override-dependencies = ["pystac>=1.12"]
 
 [build-system]
 requires = ["hatchling"]
