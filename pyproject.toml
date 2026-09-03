@@ -16,7 +16,7 @@ keywords = [
 classifiers = [
     "Intended Audience :: Information Technology",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: GIS",
@@ -50,6 +50,8 @@ cache = [
 ]
 server = [
     "uvicorn[standard]",
+    "uvicorn-worker",
+    "gunicorn",
 ]
 
 [dependency-groups]

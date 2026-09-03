@@ -1,4 +1,4 @@
-# Set update schedule for GitHub Actions
+# Set update schedule for GitHub Actions and the Dockerfile base image
 
 version: 2
 updates:
@@ -12,3 +12,10 @@ updates:
       all:
         patterns:
         - "*"
+
+  # Moves the digest-pinned images in the Dockerfile (the Wolfi base and the
+  # uv stage); nothing else does.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"

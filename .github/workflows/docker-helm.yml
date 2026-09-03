@@ -62,11 +62,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
-      # Build once, into the local daemon. Nothing is published until Trivy has
-      # cleared this exact image: the push step below uploads these very tags,
-      # it does not rebuild. The Dockerfile pins no versions (floating
-      # python:3.12, apt upgrade, pip --upgrade), so a rebuild could resolve
-      # different packages than the ones that were scanned.
+      # Build once, into the local daemon. Nothing is published until Trivy and
+      # the smoke test have cleared this exact image: the push step below uploads
+      # these very tags, it does not rebuild.
       - name: Build Docker image
         id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
@@ -79,6 +77,12 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # The nightly exists to catch upstream drift, but with a digest-pinned
+          # base and cache mode=max it would be a pure cache hit, so Trivy would
+          # re-report yesterday's answer. A cold build re-resolves apk and PyPI,
+          # the only things that can change overnight. (`pull:` would be
+          # redundant — the FROM line is pinned by digest.)
+          no-cache: ${{ github.event_name == 'schedule' }}
 
       # Scanned by image ID rather than by tag: every tag above points at this
       # ID, and it does not depend on the order metadata-action emits tags in.
@@ -113,6 +117,14 @@ jobs:
           vuln-type: os,library
           severity: HIGH
 
+      # Gates the push: an image that fails its runtime contract never reaches
+      # ghcr.io. See docker/smoke-test.sh for what it asserts. By image ID, as
+      # the Trivy steps above; via env: so nothing is interpolated into run:.
+      - name: Smoke-test the image runtime contract
+        env:
+          IMAGE_REF: ${{ steps.build.outputs.imageid }}
+        run: ./docker/smoke-test.sh "$IMAGE_REF"
+
       - name: Push Docker image
         env:
           META_TAGS: ${{ steps.meta.outputs.tags }}
@@ -123,6 +135,21 @@ jobs:
             echo "Pushing $tag"
             docker push "$tag"
           done
+
+      # Insurance against registry-level removal, the one failure the digest pin
+      # does not cover: keep a copy of the exact pinned base under this org.
+      # imagetools copies the whole index registry-to-registry, so the mirror
+      # preserves the digest — recovery is a one-line FROM flip to
+      # ghcr.io/<org>/wolfi-base:<sha256-...>. Reads the ref from the Dockerfile
+      # so a Dependabot bump re-mirrors on merge with no edit here. Skipped on
+      # PRs: fork PRs get a read-only GITHUB_TOKEN.
+      - name: Mirror the pinned base image
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          base="$(sed -n 's/^FROM \(cgr\.dev\/chainguard\/wolfi-base[^ ]*\).*/\1/p' Dockerfile)"
+          digest="${base##*@}"
+          docker buildx imagetools create --tag "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/wolfi-base:${digest/:/-}" "$base"
 
       # Fork PRs get a read-only GITHUB_TOKEN, so the upload would fail there.
       - name: Upload Trivy SARIF (CRITICAL/HIGH) to GitHub Security tab
@@ -179,7 +206,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: downcase REPO
         run: |
           echo "REPO=${GITHUB_REPOSITORY,,}" >>${GITHUB_ENV}
@@ -188,33 +215,47 @@ jobs:
         id: vars
         run: echo "sha_tag=sha-$(git rev-parse --short HEAD)" >>${GITHUB_ENV}
 
+      # Matches metadata-action's type=sha: both derive from GITHUB_SHA, which on
+      # a pull_request is the refs/pull/N/merge commit checkout leaves at HEAD.
       - name: Pull Docker image
-        if: steps.list-changed.outputs.changed == 'true'
         run: |
           docker pull ghcr.io/${{ env.REPO }}:${{ env.sha_tag }}
           docker tag ghcr.io/${{ env.REPO }}:${{ env.sha_tag }} titiler-eopf:ci
 
       - name: Create kind cluster
         uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
-        if: steps.list-changed.outputs.changed == 'true'
 
       - name: Load container image in kind cluster
         run: kind load docker-image titiler-eopf:ci --name chart-testing
-        if: steps.list-changed.outputs.changed == 'true'
 
       - name: Create Namespace
-        if: steps.list-changed.outputs.changed == 'true'
         run: |
           kubectl create namespace titiler-eopf
 
+      # Empty on fork PRs, where secrets are not exposed. Fine: nothing the
+      # install exercises reads S3, the secret just has to exist so the pod's
+      # envFrom resolves. Via env: so a value containing shell metacharacters
+      # cannot be executed.
       - name: Create Secret
-        if: steps.list-changed.outputs.changed == 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
-          kubectl create secret generic titiler-eopf-secret -n titiler-eopf --from-literal=AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} --from-literal=AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          kubectl create secret generic titiler-eopf-secret -n titiler-eopf \
+            --from-literal=AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+            --from-literal=AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
 
+      # Unconditional, rather than gated on list-changed: a new image is likelier
+      # to break the chart than a new chart is, and the gate meant a
+      # Dockerfile-only PR installed nothing. Check Version and ct lint stay
+      # gated — they compare the chart version against the Python package
+      # version, which only means anything when the chart changed.
+      # --all because `ct install` on its own installs only *changed* charts.
+      # Do NOT add --skip-clean-up: it gates ct's own events/describe/logs dump
+      # (PrintEventsPodDetailsAndLogs sits inside the cleanup closure), which is
+      # release-scoped and includes init containers.
       - name: Run chart-testing (install)
-        if: steps.list-changed.outputs.changed == 'true'
-        run: ct install --chart-dirs helm --namespace titiler-eopf
+        run: ct install --chart-dirs helm --namespace titiler-eopf --all
 
       # delete the pull request docker image to free up space
       - name: Delete Docker image
