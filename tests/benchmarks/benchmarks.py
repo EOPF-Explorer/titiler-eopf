@@ -41,6 +41,29 @@ def test_open(cache_settings, geozarr_benchmark, benchmark):
 
 @pytest.mark.benchmark(min_rounds=50)
 @patch("titiler.eopf.reader.cache_settings")
+def test_open_cached(cache_settings, geozarr_benchmark, benchmark):
+    """Benchmark warm open_dataset: version-probe memo + in-process datatree memo hit.
+
+    This is the hot path most requests take; it would regress visibly if the
+    version-probe throttle were removed (a HEAD on every call).
+    """
+    cache_settings.side_effect = lambda: EOPFCacheSettings(enable=False)
+
+    benchmark.name = "GeoZarrReader-Open-Cached"
+    benchmark.fullname = "GeoZarrReader-Open-Cached"
+
+    open_dataset.cache_clear()
+    open_dataset(geozarr_benchmark)  # warm every memo once
+
+    def _open_cached():
+        with GeoZarrReader(geozarr_benchmark):
+            pass
+
+    _ = benchmark(_open_cached)
+
+
+@pytest.mark.benchmark(min_rounds=50)
+@patch("titiler.eopf.reader.cache_settings")
 def test_info(cache_settings, geozarr_benchmark, benchmark):
     """Benchmark GeoZarrReader.info method."""
     cache_settings.side_effect = lambda: EOPFCacheSettings(enable=False)
