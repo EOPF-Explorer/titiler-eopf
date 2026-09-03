@@ -212,7 +212,6 @@ items = MultiBaseTilerFactory(
     router_prefix="/collections/{collection_id}/items/{item_id}",
     add_viewer=True,
     extensions=[
-        # EOPFChunkVizExtension(),
         wmtsExtension(get_renders=_get_renders_item),  # type: ignore [attr-defined]
     ],
     templates=templates,
