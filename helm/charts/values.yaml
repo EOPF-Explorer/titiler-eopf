@@ -51,7 +51,7 @@ imagePullSecrets: []
 env:
   # Application Config
   LOG_LEVEL: "INFO"
-  TITILER_EOPF_STORE_URL: "s3://esa-zarr-sentinel-explorer-fra/tests-output/"
+  TITILER_EOPF_STAC_API_URL: "https://api.explorer.eopf.copernicus.eu/stac"
 
   # GDAL Config
   CPL_TMPDIR: /tmp

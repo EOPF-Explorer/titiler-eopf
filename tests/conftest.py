@@ -125,14 +125,6 @@ def set_env(redis_host, monkeypatch) -> Generator[TestClient, Any, Any]:
     monkeypatch.delenv("AWS_PROFILE", raising=False)
     monkeypatch.setenv("AWS_CONFIG_FILE", "/tmp/noconfigheere")
 
-    # Fake data store - override any .env file settings
-    monkeypatch.setenv("TITILER_EOPF_STORE_SCHEME", "file")
-    monkeypatch.setenv("TITILER_EOPF_STORE_HOST", os.path.dirname(__file__))
-    monkeypatch.setenv("TITILER_EOPF_STORE_PATH", "fixtures")
-    monkeypatch.setenv(
-        "TITILER_EOPF_STORE_URL", f"file://{os.path.dirname(__file__)}/fixtures"
-    )
-
     # Redis Cache
     monkeypatch.setenv("TITILER_EOPF_CACHE_HOST", redis_host)
     monkeypatch.setenv("TITILER_EOPF_CACHE_ENABLE", "TRUE")

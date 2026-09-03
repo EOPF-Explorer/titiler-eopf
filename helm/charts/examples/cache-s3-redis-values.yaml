@@ -44,7 +44,7 @@ cache:
 # Application environment
 env:
   LOG_LEVEL: "INFO"
-  TITILER_EOPF_STORE_URL: "s3://prod-bucket/data/"
+  TITILER_EOPF_STAC_API_URL: "https://api.explorer.eopf.copernicus.eu/stac/"
 
 # Production resource limits
 resources:

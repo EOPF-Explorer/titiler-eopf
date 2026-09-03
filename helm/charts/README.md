@@ -98,7 +98,7 @@ See [CACHE_CONFIG.md](CACHE_CONFIG.md) for detailed configuration guide.
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `env.LOG_LEVEL` | Application log level | `INFO` |
-| `env.TITILER_EOPF_STORE_URL` | EOPF store URL (can be any URL supported by xarray, fsspec, or obstore) | `s3://esa-zarr-sentinel-explorer-fra/tests-output/` |
+| `env.TITILER_EOPF_STAC_API_URL` | EOPF STAC API URL | `https://api.explorer.eopf.copernicus.eu/stac/` |
 
 ### AWS Configuration
 
