@@ -40,7 +40,12 @@ class STACReader(SimpleSTACReader):
             ]:
                 return GeoZarrReader
 
-        return self.reader
+        # Not Zarr: defer to upstream, which checks `_derived_bands` before
+        # falling back to `self.reader`. Returning `self.reader` directly (as
+        # this override used to) skipped that check, so a band-source-derived
+        # band (SAR noise/calibration LUTs, S2 view/sun angles) would be read
+        # with the plain OpenEOReader instead of its own resolved reader.
+        return super()._get_reader(asset_info)
 
     def _get_options(
         self,

@@ -117,12 +117,24 @@ class TestSTACReaderMethods:
             reader = STACReader(mock_item)
 
             # Test Zarr asset detection
-            asset_info = {"media_type": "application/x-zarr", "url": "test.zarr"}
+            asset_info = {
+                "name": "data",
+                "media_type": "application/x-zarr",
+                "url": "test.zarr",
+            }
             reader_class = reader._get_reader(asset_info)
             assert reader_class == GeoZarrReader
 
-            # Test non-Zarr asset
-            asset_info = {"media_type": "image/tiff", "url": "test.tif"}
+            # Test non-Zarr asset. `name` is required here: the non-Zarr path
+            # now falls through to upstream's own `_get_reader`, which looks
+            # up `asset_info["name"]` against `_derived_bands` before
+            # defaulting to `self.reader` -- matching what a real `AssetInfo`
+            # always carries (`_get_asset_info` always sets `name`).
+            asset_info = {
+                "name": "data",
+                "media_type": "image/tiff",
+                "url": "test.tif",
+            }
             reader_class = reader._get_reader(asset_info)
             assert reader_class != GeoZarrReader
 

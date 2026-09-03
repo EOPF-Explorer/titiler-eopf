@@ -465,7 +465,10 @@ def _make_mosaic_task(
             "height": int(height) if height else height,
             "buffer": float(tile_buffer) if tile_buffer is not None else tile_buffer,
             "pixel_selection": PixelSelectionMethod["first"].value(),
-            "allowed_exceptions": (TileOutsideBounds,),
+            # No explicit allowed_exceptions: mosaic_reader's own default is
+            # already (TileOutsideBounds,) (rio-tiler 9.4.2). The
+            # EmptyMosaicError -> TileOutsideBounds conversion below is the
+            # real content here.
         }
 
         try:
@@ -528,6 +531,14 @@ def _build_tasks(
                     "id": date,
                     "datetime": date_items[0].datetime if date_items else None,
                     "geometry": geometries if geometries else None,
+                    # The source items behind this date group's mosaic. Carried
+                    # so processes that need per-item STAC metadata (asset
+                    # hrefs, properties) can reach it -- notably
+                    # sar_backscatter, whose calibration LUTs and GCP geometry
+                    # are per source item. Retrieve via
+                    # RasterStack.get_source_items, never by reaching into task
+                    # metadata directly. Matches upstream's own load_collection.
+                    "items": date_items,
                 },
             )
         )
@@ -612,6 +623,12 @@ class LoadCollection(BaseLoadCollection):
             named_parameters: Named parameters for process graph evaluation
             target_crs: Target CRS for output. If None, uses native CRS from source images.
         """
+        # Retrieve up to one item beyond the configured processing limit so the
+        # guard below (_validate_limits) can detect genuine overflow. Without an
+        # explicit max_items, upstream's get_items silently caps at the first
+        # page (limit=100, newest-first), which drops whole months/years from
+        # wide temporal extents instead of raising ItemsLimitExceeded. Matches
+        # upstream's own load_collection (titiler-openeo#302).
         items = self._get_items(
             id,
             spatial_extent=spatial_extent,
@@ -619,6 +636,7 @@ class LoadCollection(BaseLoadCollection):
             properties=properties,
             named_parameters=named_parameters,
             limit=100,
+            max_items=processing_settings.max_items + 1,
         )
         if not items:
             raise NoDataAvailable("There is no data available for the given extents.")
