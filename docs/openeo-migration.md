@@ -839,3 +839,34 @@ this repo's `_reader` copy still has to override; nothing in 0.18.0 changed that
   this — the plan there still holds, and now additionally decides whether EOPF keeps generating its
   own `|bands=` vocabulary on top of the inherited read path, or leans on `_inner_bands` resolution
   instead.
+
+### 7.7 The vocabulary decision: dedupe, keep EOPF's notation — done
+
+Decided and implemented: `get_all_band_names` (`titiler/eopf/openeo/stacapi.py`) now prefers a band's
+single-band asset over a multi-band composite's copy of it, and only advertises the composite's copy
+when no single-band alternative exists at all — never dropping a band, only its redundant aliases.
+Also fixes the §3.1 `product` finding in the same pass (an asset flagged both `data` and `metadata` —
+the whole underlying store — is excluded, same category of fix: a container should not be advertised
+as a selectable band).
+
+Verified against every EOPF collection reachable from the public STAC API, not just Sentinel-2 L2A:
+
+| collection | before | after | lost |
+| --- | --- | --- | --- |
+| `sentinel-2-l2a` | 44 (incl. the `product` bug) | **15** | 0 |
+| `sentinel-2-l1c` | unmeasured pre-fix (same composite pattern) | **12** | 0 |
+| `sentinel-3-olci-l1-efr` | 21 | **21**, unchanged | 0 |
+| `sentinel-1-l1-grd` | 4 | **4**, unchanged | 0 |
+
+The OLCI case is the one that mattered most to get right: its `radianceData` asset has 21 bands and
+**no** single-band assets exist to dedupe against, so every one of its `radianceData|bands=OaNN`
+entries must survive untouched — confirmed it does. That is the property
+`test_composite_only_band_is_kept` (new, `tests/test_band_names.py`) asserts directly, alongside the
+dedup case, the `product` exclusion, and a mixed collection exercising both rules on the same call.
+
+No existing test referenced `get_all_band_names` or `get_band_names` before this change — consistent
+with the §1 finding that openEO test coverage is thin. `tests/test_band_names.py` is new, standalone
+(builds its own minimal `pystac.Collection` rather than depending on `tests/fixtures/collection.json`,
+whose `item_assets` still reflects the pre-restructure single-`reflectance`-asset catalogue shape).
+
+Full suite: 114/114 (110 + 4 new).
