@@ -213,7 +213,7 @@ lines and the copy is the whole function.
 | --- | --- | --- | --- |
 | `openeo/main.py` | 107 sig-lines, 79% verbatim upstream | EOPF backend + loaders, `load_nodes_ids`, description | **keep** — app entrypoint |
 | `_reader` | 57L vs 94L | **one line** — `STACReader` instead of `SimpleSTACReader` | **drop, or minimise** |
-| `STACReader.part` | 141L vs 81L | bbox pre-check, widened `allowed_exceptions`, OVH URL rewrite | **keep** — narrow the exceptions, propose the guard upstream |
+| `STACReader.part` | 141L vs 81L | bbox pre-check, widened `allowed_exceptions`, OVH URL rewrite | **done — §7.16** (exceptions narrowed, OVH rewrite deleted; bbox guard stays, propose upstream) |
 | `STACReader._get_options` | 73L vs 48L | Zarr `bands`→`variables` branch, `variables`/`sel` pass-through | **done — §7.11** |
 | `LoadCollection.load_collection` | 84L vs 189L | `_parse_asset(bands)` and the EOPF `_reader` — that is all | **narrow hard** |
 | `processes/data/load_collection.json` | — | nothing (verified: no Zarr/notation text) | **done — §7.14, dropped** |
@@ -305,14 +305,13 @@ meet the requested bbox before opening them — and is a reasonable upstream pro
 ### 3.2 `titiler/eopf/openeo/reader.py` — highest risk
 
 - **The module-level `_reader` is a stale copy** of upstream's (57L vs 94L), and **exactly one line is a
-  real override**: `STACReader(item)` where upstream has `SimpleSTACReader(item)`. Everything else the
-  copy does is lose something. There is no hook — upstream hardcodes the class — so the copy cannot be
-  removed until upstream accepts a `reader_cls` parameter (§3.0). Three losses:
-  - `_inherit_derived_band_masks` — needed for band-source/SAR bands. **Port it.**
-  - Item-id and datetime logging. Upstream logs the item being read at DEBUG and names it in the retry
-    warning and the final error; the copy's messages say only "RasterioIOError encountered". Across a
-    mosaic of many items that is the difference between a diagnosable failure and a wall of identical
-    lines. **Port it.**
+  real override**: `STACReader(item)` where upstream has `SimpleSTACReader(item)`. There is no hook —
+  upstream hardcodes the class — so the copy cannot be removed until upstream accepts a `reader_cls`
+  parameter (§3.0). Three losses, two now fixed:
+  - ~~`_inherit_derived_band_masks` — needed for band-source/SAR bands.~~ **Ported — §7.16.**
+  - ~~Item-id and datetime logging.~~ **Ported — §7.16.** Upstream logs the item being read at DEBUG and
+    names it in the retry warning and the final error; the copy's messages used to say only
+    "RasterioIOError encountered", indistinguishable across a mosaic of many items.
   - `_apply_scale_offset` — correctly omitted, but the reasoning is narrower than the code. The
     justification (the GeoZarr `ScaleOffset` codec already applied it) holds **only for Zarr assets**;
     for a COG asset carrying `raster:scale`, upstream would apply it and this copy would not. Checked
@@ -345,25 +344,13 @@ meet the requested bbox before opening them — and is a reasonable upstream pro
   `TileOutsideBounds` conversion, and the OVH URL rewrite below. The pre-check is generic and worth
   proposing upstream; until it is accepted, the copy has to stay, because the guard sits inside `part`'s
   inner `_reader` closure and cannot be added from a subclass.
-- **The `allowed_exceptions` tuple is too broad, and it swallows real errors.** `part` passes
-  `allowed_exceptions=(TileOutsideBounds, ValueError, IndexError)` to `multi_arrays`, one level below
-  `mosaic_reader`, which allows only `(TileOutsideBounds,)`. `rio_tiler.tasks.filter_tasks` discards an
-  allowed exception with nothing but `logger.info(err)`, so a genuine option error is dropped silently.
-  Traced end to end for a mistyped band name on a COG asset:
-
-  1. `_get_options` raises `ValueError: Band 'nope' not found in asset metadata`
-  2. `filter_tasks` swallows it — INFO log only — and drops the asset
-  3. with every asset dropped, `ImageData.create_from_list([])` raises
-     `ValueError: not enough values to unpack (expected 2, got 0)` (verified)
-  4. `part`'s outer handler turns that into `TileOutsideBounds("No valid data found…")`
-  5. `mosaic_reader` allows `TileOutsideBounds` → `EmptyMosaicError` → converted again in
-     `_make_mosaic_task`
-
-  The user gets a generic no-data failure; the sentence naming the bad band never leaves the log. On the
-  live backend this class of error already surfaces as HTTP 500. Narrow the tuple to
-  `(TileOutsideBounds,)` so option errors propagate, and keep the empty-list conversion, which is a
-  genuine rio-tiler wart. Note this compounds §3.5's Zarr passthrough: for a Zarr asset the typo does
-  not even raise — it becomes a bogus variable name.
+- ~~**The `allowed_exceptions` tuple is too broad, and it swallows real errors.**~~ **Fixed — §7.16.**
+  `part` passed `allowed_exceptions=(TileOutsideBounds, ValueError, IndexError)` to `multi_arrays`, one
+  level below `mosaic_reader`, which allows only `(TileOutsideBounds,)`. `rio_tiler.tasks.filter_tasks`
+  discards an allowed exception with nothing but `logger.info(err)`, so a genuine option error was
+  dropped silently — a mistyped band name on a COG asset degraded, through five layers of exception
+  conversion, into a generic no-data failure with the actually-useful error message never leaving the
+  log. Narrowed to `(TileOutsideBounds,)`, keeping the `EmptyMosaicError` conversion around it.
 - **`part` also forwards derived-band `reader_options`.** `_get_derived_asset_info` puts `fetcher`,
   `quantity`, `sibling_href` and the inverse-map cache into `reader_options`, and `part` splats them
   into the reader class returned by `_get_reader`. With the `_get_reader` bug above that class is
@@ -372,9 +359,12 @@ meet the requested bbox before opening them — and is a reasonable upstream pro
 - Two incidental improvements over rio-tiler worth keeping when re-syncing: `stacklevel=2` on both
   `warnings.warn` calls (rio-tiler omits it, so its warnings point at library frames), and
   `reader(input=uri, …)` as a keyword.
-- **Hard-coded OVH host rewrite.** The `https://esa-zarr-sentinel-explorer-fra… → s3://` substitution is
-  already marked `TODO` in the source. 0.17.0 added `_resolve_asset_href`, which honours STAC
-  `alternate` hrefs — the right home for this. Removing it is what lets `part` shrink to the two guards.
+- ~~**Hard-coded OVH host rewrite.**~~ **Removed — §7.16.** Verified against live data first: the
+  substitution already matched nothing on current hrefs (production's domain moved to
+  `s3.explorer.eopf.copernicus.eu`, not the hardcoded `esa-zarr-sentinel-explorer-fra.s3.de.io.cloud.ovh.net`),
+  and `alternate.s3.href` is populated and already resolved automatically by `_get_asset_info`
+  (inherited, unmodified — it calls `_resolve_asset_href` internally). Pure dead-code deletion, not a
+  behaviour change.
 - ~~**`STACReader._get_options` (73L vs 48L) is the one copy that is genuinely EOPF.**~~ **Narrowed
   in §7.11** — the non-Zarr branch (verbatim upstream logic) now delegates to
   `super()._get_options()`; only the genuinely EOPF-specific parts stay local:
@@ -1081,3 +1071,35 @@ own last line's comment already said so — `# Set the bands in summaries (thoug
 New tests: `tests/test_band_summaries.py` (4 tests — the two bug fixes, plus the two paths' existing
 fallback behaviour, confirmed to still work). Confirmed both bug-catching tests fail on the pre-fix code
 and pass after. Full suite: 123/123.
+
+### 7.16 `_reader`/`part` narrowed further: two ports, one narrowing, one deletion
+
+Four of §3.2's remaining items, landed together since they touch the same two functions:
+
+- **`_inherit_derived_band_masks` ported into `_reader`.** Restores upstream's mask-inheritance step
+  for band-source-derived bands (SAR noise/calibration LUTs, S2 view/sun angles) when `assets` is
+  requested. Verified as a safe no-op for EOPF's normal case first (`_inherit_derived_band_masks(img, {},
+  requested)` returns the identical object unchanged, confirmed by identity check) — EOPF's own STAC
+  data isn't in upstream's `BAND_SOURCES` registry, so `_derived_bands` is always empty here today; the
+  port is there for when that changes, not because it does anything yet.
+- **Item-id/datetime logging ported into `_reader`.** Matches upstream: item and datetime logged at
+  DEBUG on load, both DEBUG and the retry/failure WARNING/ERROR messages now name the item, instead of
+  a bare "RasterioIOError encountered" indistinguishable across a mosaic of many items.
+- **`part`'s `allowed_exceptions` narrowed** from `(TileOutsideBounds, ValueError, IndexError)` to
+  `(TileOutsideBounds,)`, matching `mosaic_reader`'s own default one level up — stops a genuine option
+  error (e.g. an unknown band name) from being silently swallowed and degrading into a generic
+  no-data failure five layers down.
+- **The hard-coded OVH host rewrite deleted.** Verified against live data before touching it, not
+  assumed: production's current hrefs use `s3.explorer.eopf.copernicus.eu`, a domain the hardcoded
+  string never matched in the first place, and `alternate.s3.href` is populated and already resolved
+  automatically by inherited, unmodified `_get_asset_info`. Confirmed pure dead-code deletion.
+
+New tests: `tests/test_io.py` — `test_part_allowed_exceptions_is_narrow`,
+`test_reader_calls_inherit_derived_band_masks_when_assets_requested`,
+`test_reader_skips_inherit_derived_band_masks_without_assets` (3 tests). All three confirmed to fail
+against the pre-change code (the first two by direct stash-and-rerun; the third's counterpart
+implicitly, since `_inherit_derived_band_masks` didn't exist to import). Full suite: 126/126.
+
+The bbox pre-check inside `part`'s inner `_reader` closure is the one thing left in §3.2 that cannot be
+removed without an upstream `reader_cls`/hook change (§3.0) — it lives inside a closure a subclass
+cannot reach independently.
