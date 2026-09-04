@@ -36,6 +36,48 @@ def openeo_app(monkeypatch) -> Generator[TestClient, Any, Any]:
         yield app
 
 
+def test_health_endpoints_registered(openeo_app):
+    """`/healthz` and `/readyz` (from `titiler.openeo.health`) must be wired
+    into the EOPF app, matching upstream's `create_app()` placement, and
+    excluded from the OpenAPI schema.
+
+    NOTE: this must run before `test_openeo_app`, which patches
+    `titiler.openeo.stacapi.Client` and (via its `/collections` call)
+    permanently warms `stac_client`'s lazily-cached `.client` property with
+    that mock -- `stac_client` is a module-level singleton shared by every
+    test in this file (the app is only imported once, cached in
+    `sys.modules`), so once cached, `/readyz`'s STAC check would spuriously
+    report healthy against the mock in every later test.
+    """
+    response = openeo_app.get("/healthz")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+    # The fixture points TITILER_OPENEO_STAC_API_URL at an unreachable host,
+    # so the STAC check must fail and readiness must report degraded/503
+    # rather than silently reporting healthy.
+    response = openeo_app.get("/readyz")
+    assert response.status_code == 503
+    body = response.json()
+    assert body["status"] == "degraded"
+    assert body["checks"]["stac_api"]["status"] == "error"
+
+    spec = openeo_app.get("/api").json()
+    assert "/healthz" not in spec["paths"]
+    assert "/readyz" not in spec["paths"]
+
+
+def test_load_collection_registered_once(openeo_app):
+    """Regression test for a stray chained assignment
+    (`process_registry["load_collection"] = process_registry["load_collection"]
+    = Process(...)`) that made the registration line confusing/redundant.
+    `load_collection` must still register exactly once."""
+    response = openeo_app.get("/processes")
+    assert response.status_code == 200
+    process_ids = [process["id"] for process in response.json()["processes"]]
+    assert process_ids.count("load_collection") == 1
+
+
 @patch("titiler.openeo.stacapi.Client")
 def test_openeo_app(client, openeo_app):
     """Test openeo endpoints."""
