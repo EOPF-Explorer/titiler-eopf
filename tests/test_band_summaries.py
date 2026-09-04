@@ -113,3 +113,47 @@ def test_qualified_band_not_in_original_summaries_falls_back_to_bare_name():
     _backend().replace_bands_in_summaries_dict(collection)
 
     assert collection["summaries"]["bands"] == [{"name": "B99_10m|bands=B99"}]
+
+
+def test_getzarrvariables_uses_band_name_not_bands_equals_prefix():
+    """`getzarrvariables`'s fallback description (used when a band has no
+    `description` of its own) must read the plain band name (`b04`), not the
+    `bands=` option prefix (`bands=b04`) -- same bug class, same root cause
+    (the `|bands=` notation change, 0.8.0) as `replace_bands_in_summaries_dict`
+    above, in a different function that also hand-split on `"|"`.
+    """
+    import pystac
+
+    from titiler.eopf.openeo.stacapi import stacApiBackend
+
+    collection = pystac.Collection.from_dict(
+        {
+            "type": "Collection",
+            "id": "test-collection",
+            "stac_version": "1.0.0",
+            "description": "test",
+            "license": "proprietary",
+            "extent": {
+                "spatial": {"bbox": [[-180, -90, 180, 90]]},
+                "temporal": {"interval": [[None, None]]},
+            },
+            "links": [],
+            "item_assets": {
+                "reflectance": {
+                    "type": "application/vnd+zarr",
+                    "roles": ["data"],
+                    # No "description" on the band -- forces the fallback
+                    # `f"{band_name} band from {asset_name}"` string.
+                    "bands": [{"name": "b04"}],
+                },
+            },
+        }
+    )
+
+    variables = stacApiBackend(url="https://stac.example.test").getzarrvariables(
+        collection
+    )
+
+    assert variables["reflectance|bands=b04"].properties["description"] == (
+        "b04 band from reflectance"
+    )
