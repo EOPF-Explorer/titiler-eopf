@@ -289,14 +289,18 @@ meet the requested bbox before opening them — and is a reasonable upstream pro
   having no `bands` metadata, get emitted as the bare band name `product` — selecting it resolved to
   `GeoZarrReader` over the entire store with no `variables`, a 500. Same commit also deduplicated the
   composite-asset band aliases (`SR_10m`/`SR_20m`/`SR_60m`/`TCI_10m`).
-- **`_fix_collection` drops `_add_band_summaries()`.** The override calls `_normalize_summaries` and
-  `replace_bands_in_summaries_dict` only, so the new upstream derivation of `summaries.bands` from
-  `item_assets` never runs.
-- **Band dimension shape differs.** This repo publishes a `bands` cube dimension whose values look like
-  `reflectance|bands=b04`; upstream 0.17.0 publishes a `spectral` dimension with sorted `item_assets`
-  keys. openEO Studio's band parser fix
-  ([openeo-studio#103](https://github.com/developmentseed/openeo-studio/pull/103)) targets the upstream
-  shape. Reconcile, or the Studio band picker stays wrong for EOPF collections.
+- ~~**`_fix_collection` drops `_add_band_summaries()`.**~~ **Turned out to be a non-issue, and the
+  real bug was elsewhere — §7.15.** Upstream's `_add_band_summaries()` early-returns if
+  `summaries.bands` is already populated, and EOPF's own `replace_bands_in_summaries_dict` always
+  populates it — so wiring the upstream helper in would just be a guaranteed no-op. Not worth adding.
+- ~~**Band dimension shape differs.**~~ **Was based on not having read `openeo-studio#103`'s actual
+  diff — corrected in §7.15.** [`openeo-studio#103`](https://github.com/developmentseed/openeo-studio/pull/103)
+  (still open, unmerged) checks `summaries.bands` *first*, and its own code comment names "the EOPF
+  explorer backend" as the shape it is written for — its test fixture literally uses
+  `reflectance|b02` as the example. The dimension *name* (`bands` vs `spectral`) does not matter to it
+  either: its `cube:dimensions` fallback matches on `type === "bands"`, not on a specific key, and
+  EOPF's dimension already has `type: "bands"`. No reconciliation needed here — but reading the PR's
+  actual test fixtures surfaced a real, unrelated bug in what EOPF puts in `summaries.bands`: see §7.15.
 
 ### 3.2 `titiler/eopf/openeo/reader.py` — highest risk
 
@@ -561,14 +565,15 @@ corrupts values if left at its new default.
 
 Scope: titiler-eopf · the real work
 
-Two things at once, and the order matters. **First narrow the copies** per the §3.0 verdicts — delete
-`load_collection.json`, strip `part` down to its two guards, extract the shared Zarr band helper.
-(`_get_options`'s non-Zarr delegation is done — §7.11.)
-**Then apply the remaining fixes** — `_add_band_summaries`, the band-dimension shape, mask inheritance
-in `_reader`, the asset-href rewrite, plus health endpoints in `main.py` — plus the band-notation
-cleanup: migrate the 11 stale references in `services/eopf-explorer.json` and fix the five docstrings
-that still document `asset|band`. (`max_items`, task `items` metadata, and `_get_reader`'s derived-band
-fallthrough are done — §7.9.)
+Two things at once, and the order matters. **First narrow the copies** per the §3.0 verdicts — strip
+`part` down to its two guards. (`load_collection.json` deletion is done — §7.14; `_get_options`'s
+non-Zarr delegation is done — §7.11; the shared Zarr band helper is extracted — §7.12.)
+**Then apply the remaining fixes** — mask inheritance in `_reader`, the asset-href rewrite, plus health
+endpoints in `main.py` — plus the band-notation cleanup: migrate the 11 stale references in
+`services/eopf-explorer.json` and fix the five docstrings that still document `asset|band`.
+(`max_items`, task `items` metadata, and `_get_reader`'s derived-band fallthrough are done — §7.9;
+`replace_bands_in_summaries_dict`'s two bugs are fixed — §7.15; `_add_band_summaries`/band-dimension
+shape turned out to need no work at all — §7.15.)
 
 Narrowing first is what makes the fixes small: `max_items` and the missing `items` metadata are one-line
 changes against upstream's `load_collection`, and only became hand-ports because a 189-line function had
@@ -616,8 +621,10 @@ and the narratives only read tiles anyway.
 ### developmentseed/openeo-studio
 
 - [PR #103](https://github.com/developmentseed/openeo-studio/pull/103) ("Fix STAC band parsing for cube
-  dimensions") is open and is *referenced by name* in upstream's 0.17.0 source as the reason
-  `_add_band_summaries` exists. Land it, or keep the workaround.
+  dimensions") is open, unmerged. Worth landing regardless of this migration — it already targets
+  EOPF's `summaries.bands` shape directly (§7.15), and EOPF's side of that contract is now actually
+  correct (two real bugs fixed there this migration; previously every qualified band's metadata was
+  silently dropped).
 - Emit `<asset>|bands=<band>`, not `<asset>|<band>`, wherever the Studio builds a band reference for an
   EOPF collection. The old form is rejected, not tolerated.
 - Update spec-driven form generation for `ndwi`: band *names*, not indices, plus `target_band`.
@@ -1036,3 +1043,41 @@ unchanged from §3.3's original finding). `load_zarr.json` in the same directory
 genuinely EOPF-only.
 
 Full suite: 119/119.
+
+### 7.15 Two real bugs in `replace_bands_in_summaries_dict`, found by actually reading `openeo-studio#103`
+
+Started this as "reconcile the band dimension shape for Studio compatibility" (§3.1's original framing).
+Reading `openeo-studio#103`'s actual diff — not just its title — showed that framing was wrong: the PR's
+`extractBandsFromSummaries` checks `summaries.bands` *first*, its own code comment names "the EOPF
+explorer backend" as the shape it targets, and its test fixture uses `reflectance|b02` as the literal
+example. No dimension-name reconciliation was ever needed.
+
+But verifying that claim — building the real `summaries.bands` output end to end
+(`add_data_cubes_if_missing` → `.to_dict()` → `_fix_collection`, not just calling `_fix_collection` on a
+raw dict, which skips the step that populates `cube:dimensions` and made an earlier check of mine
+silently test the wrong thing) — surfaced two real, independent bugs in
+`replace_bands_in_summaries_dict`:
+
+1. **The qualified-band branch never matched anything, for every band, on every collection.**
+   `cube_band_name.split("|", 1)` on `"B01_20m|bands=B01"` gives `band_name = "bands=B01"` — the
+   `bands=` notation change from §2.1 (0.8.0) was never propagated into this function. The lookup
+   against the original `summaries.bands` (named plain `"B01"`) never matched, so *every* qualified
+   band's description/`eo:common_name`/wavelength was silently dropped, replaced by a bare
+   `{"name": "B01_20m|bands=B01"}`. Fixed by parsing through `_parse_asset` (`titiler/eopf/stac.py`,
+   the single place that already owns this notation) instead of hand-splitting on `"|"` again.
+2. **The asset-only branch (bands with no `|`) read the wrong dict.** It looked up
+   `collection_dict["assets"]` — the collection-level assets (a thumbnail, nothing else) — never
+   `item_assets`, where a band's actual description (as `title`, occasionally `description`) lives. So
+   `AOT_10m`/`SCL_20m`/`WVP_10m` always fell through to the generic `"Data from X asset"` filler.
+
+Both verified against real data, both catalogue shapes: `stac.core.eopf.eodc.eu`'s per-band-plus-composite
+collection and production's older single-`reflectance`-asset one. Simulated Studio's own label/wavelength
+extraction against the fixed output — correct on both.
+
+**Also deleted `replace_bands_in_summaries`** (the non-dict, `pystac.Collection`-typed sibling of the
+function above) — same two bugs, but genuinely dead code: zero call sites anywhere in the repo, and its
+own last line's comment already said so — `# Set the bands in summaries (though this won't be used)`.
+
+New tests: `tests/test_band_summaries.py` (4 tests — the two bug fixes, plus the two paths' existing
+fallback behaviour, confirmed to still work). Confirmed both bug-catching tests fail on the pre-fix code
+and pass after. Full suite: 123/123.
