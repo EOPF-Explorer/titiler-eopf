@@ -237,7 +237,7 @@ class stacApiBackend(BaseBackend):
         """Get datacube variables from EOPF collection assets.
 
         Creates variables in the format expected by load_collection:
-        - Variables named as "asset|band" (e.g., "reflectance|b04")
+        - Variables named as "asset|bands=band" (e.g., "reflectance|bands=b04")
         - Each asset represents a Zarr group containing bands
         - Variables reference individual bands within assets
         """
@@ -264,12 +264,18 @@ class stacApiBackend(BaseBackend):
                 variables[asset_name] = dc.Variable(properties=variable_properties)
                 continue
 
-            # Create variables for each band reference (asset|band format)
+            # Create variables for each band reference (asset|bands=band format)
             for i, band_ref in enumerate(band_refs):
-                # Parse the asset|band format to get individual band info
-                _, band_name = (
-                    band_ref.split("|") if "|" in band_ref else (asset_name, band_ref)
-                )
+                # Parse through _parse_asset (titiler/eopf/stac.py), the one
+                # place that already owns this notation, rather than
+                # hand-splitting on "|" again -- that pattern silently broke
+                # when the notation moved from "asset|band" to
+                # "asset|bands=band" (0.8.0), same bug class fixed in
+                # replace_bands_in_summaries_dict (§7.15). Falls back to the
+                # bare band_ref for a reference with no "|" at all (e.g.
+                # "AOT_10m"), matching the previous behaviour exactly.
+                parsed_bands = _parse_asset([band_ref])[0].get("bands")
+                band_name = (parsed_bands or [band_ref])[0]
 
                 # Get corresponding band metadata
                 band = bands[i] if i < len(bands) else {}

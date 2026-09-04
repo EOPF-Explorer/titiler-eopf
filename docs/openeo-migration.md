@@ -558,10 +558,12 @@ Scope: titiler-eopf · the real work
 Two things at once, and the order matters. **First narrow the copies** per the §3.0 verdicts — strip
 `part` down to its two guards. (`load_collection.json` deletion is done — §7.14; `_get_options`'s
 non-Zarr delegation is done — §7.11; the shared Zarr band helper is extracted — §7.12.)
-**Then apply the remaining fixes** — mask inheritance in `_reader`, the asset-href rewrite, plus health
-endpoints in `main.py` — plus the band-notation cleanup: migrate the 11 stale references in
-`services/eopf-explorer.json` and fix the five docstrings that still document `asset|band`.
-(`max_items`, task `items` metadata, and `_get_reader`'s derived-band fallthrough are done — §7.9;
+**Then apply the remaining fixes** — health endpoints in `main.py` — plus the band-notation cleanup:
+migrate the 11 stale references in `services/eopf-explorer.json`.
+(`max_items`, task `items` metadata, `_get_reader`'s derived-band fallthrough, mask inheritance in
+`_reader`, and the asset-href rewrite are done — §7.9/§7.16; the stale docstrings are fixed — §7.17,
+which also caught a third instance of the same parsing bug fixed in §7.15, this time in
+`getzarrvariables`;
 `replace_bands_in_summaries_dict`'s two bugs are fixed — §7.15; `_add_band_summaries`/band-dimension
 shape turned out to need no work at all — §7.15.)
 
@@ -1103,3 +1105,31 @@ implicitly, since `_inherit_derived_band_masks` didn't exist to import). Full su
 The bbox pre-check inside `part`'s inner `_reader` closure is the one thing left in §3.2 that cannot be
 removed without an upstream `reader_cls`/hook change (§3.0) — it lives inside a closure a subclass
 cannot reach independently.
+
+### 7.17 Stale docstrings fixed — and a third instance of §7.15's parsing bug found in the process
+
+Of the "five stale docstrings" §3.1 flagged, only three were genuinely stale documentation of *current*
+behaviour, in `getzarrvariables` (`titiler/eopf/openeo/stacapi.py`): its docstring and two inline
+comments still said `"asset|band"`. Fixed to `"asset|bands=band"`.
+
+The other two are correctly left alone: the 0.4.0 `CHANGELOG.md` entry is a historical record of a past
+release and should not be rewritten to describe a scheme it didn't ship with; and a comment added in
+this same migration (§7.15, explaining *why* `replace_bands_in_summaries_dict` used to be broken)
+correctly references the old `"asset|band"` shape as historical context, not as current documentation.
+
+While fixing the docstring, found `getzarrvariables` had the **same parsing bug** as §7.15's, a third
+independent instance of it: `band_ref.split("|")` on `"reflectance|bands=b04"` (no `maxsplit`, no
+stripping of the `bands=` option key) gave `band_name = "bands=b04"`, not `"b04"`. Lower severity than
+§7.15's — the extracted value is only used as a *fallback* description string
+(`f"{band_name} band from {asset_name}"`, when a band has no `description` of its own) — but real
+STAC-visible client output (`cube:variables`, published via `GET /collections/{id}`) whenever that
+fallback is hit. Fixed with the same approach: parse through `_parse_asset` instead of hand-splitting.
+
+Verified directly: old vs. new logic compared side by side for both the piped and bare-name shapes
+(`reflectance|bands=b04` → `b04` not `bands=b04`; `AOT_10m` → `AOT_10m` unchanged, matching the original
+fallback exactly). New test: `tests/test_band_summaries.py::test_getzarrvariables_uses_band_name_not_bands_equals_prefix`
+— confirmed to fail on the pre-fix code. Full suite: 127/127.
+
+Still open from Phase 3's band-notation cleanup: the 11 stale `asset|band` references in
+`services/eopf-explorer.json` — housekeeping for fresh deployments, not the actual Phase 0 cutover
+(§4's own finding: that file never affects users who already have services, i.e. anyone in production).
