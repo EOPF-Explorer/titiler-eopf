@@ -48,6 +48,50 @@ def _parse_option(key: str, value: str) -> tuple[str, Any]:
     )
 
 
+def _resolve_zarr_bands(bands: list[str], stac_bands: list[dict]) -> list[str]:
+    """Map requested band names to Zarr variable names for a `bands` asset option.
+
+    Each name in `bands` may be either a band's `eo:common_name`/`common_name`,
+    or a band's own `name` (the underlying Zarr variable) directly -- both are
+    valid ways to request the same band, and a request matching neither
+    raises. STAC defines no precedence between `eo:common_name` and `name`
+    when both exist; this mirrors rio-tiler's own convention by preferring
+    `eo:common_name`. A band with no `name` at all is not addressable and is
+    skipped, rather than raising `KeyError` while building the mapping.
+
+    Shared between the main app's `EOPFSimpleSTACReader._get_asset_info` and
+    the openEO app's `STACReader._get_options` -- same algorithm, reached
+    from two different base readers with no common hook, so it cannot be a
+    shared method. Callers must ensure `stac_bands` is non-empty first.
+
+    Raises:
+        ValueError: a requested name matches neither a common name nor any
+            band's own `name`.
+    """
+    common_to_variable: dict[str, str] = {}
+    variable_names: set[str] = set()
+    for b in stac_bands:
+        name = b.get("name")
+        if not name:
+            continue
+        variable_names.add(name)
+        common_to_variable[b.get("eo:common_name") or b.get("common_name") or name] = (
+            name
+        )
+
+    resolved: list[str] = []
+    for v in bands:
+        if v in common_to_variable:
+            resolved.append(common_to_variable[v])
+        elif v in variable_names:
+            resolved.append(v)
+        else:
+            raise ValueError(
+                f"Band '{v}' not found in asset metadata, unable to use 'bands' option"
+            )
+    return resolved
+
+
 def _parse_asset(values: list[str]) -> list[AssetType]:
     """Parse assets with optional parameter.
 
@@ -206,15 +250,7 @@ class EOPFSimpleSTACReader(SimpleSTACReader):
                     "application/vnd+zarr",
                 ]
                 if media_type in zarr_media_types:
-                    common_to_variable = {
-                        b.get("eo:common_name") or b.get("common_name") or b["name"]: b[
-                            "name"
-                        ]
-                        for b in stac_bands
-                    }
-                    method_options["variables"] = [
-                        common_to_variable.get(v, v) for v in bands
-                    ]
+                    method_options["variables"] = _resolve_zarr_bands(bands, stac_bands)
 
                 # For COG bands = indexes
                 else:

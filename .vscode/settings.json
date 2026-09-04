@@ -1,4 +1,5 @@
 {
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv-openeo/bin/python",
     "python.testing.pytestArgs": [
         "tests"
     ],

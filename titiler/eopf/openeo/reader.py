@@ -20,6 +20,7 @@ from rio_tiler.utils import cast_to_sequence, inherit_rasterio_env
 from titiler.openeo.reader import SimpleSTACReader
 
 from ..reader import GeoZarrReader
+from ..stac import _resolve_zarr_bands
 
 __all__ = ["STACReader", "_reader"]
 
@@ -40,31 +41,48 @@ class STACReader(SimpleSTACReader):
             ]:
                 return GeoZarrReader
 
-        return self.reader
+        # Not Zarr: defer to upstream, which checks `_derived_bands` before
+        # falling back to `self.reader`. Returning `self.reader` directly (as
+        # this override used to) skipped that check, so a band-source-derived
+        # band (SAR noise/calibration LUTs, S2 view/sun angles) would be read
+        # with the plain OpenEOReader instead of its own resolved reader.
+        return super()._get_reader(asset_info)
 
     def _get_options(
         self,
         asset: AssetWithOptions,
         metadata: pystac.Asset,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        """Copy from rio_tiler.io.stac._get_options."""
+        """EOPF: Zarr `bands` -> `variables` mapping, plus `variables`/`sel`
+        pass-through, on top of upstream's `_get_options`.
+
+        The non-Zarr path (`indexes`/`expression`, and `bands` -> `indexes`
+        for COG-like assets) is delegated to `super()` rather than duplicated:
+        it is now byte-identical to what this used to copy, since
+        titiler-openeo#378 fixed the one thing that used to differ (an
+        unreachable positional-index fallback -- an int key looked up against
+        string band values).
+        """
         method_options: dict[str, Any] = {}
         reader_options: dict[str, Any] = {}
 
-        # Indexes
-        if indexes := asset.get("indexes"):
-            method_options["indexes"] = indexes
-        # Expression
-        if expr := asset.get("expression"):
-            method_options["expression"] = expr
-        # Variables
+        # Variables (Zarr-only; upstream has no equivalent option)
         if vars := asset.get("variables"):
             method_options["variables"] = vars
-        # Sel (dimension selection)
+        # Sel (dimension selection; Zarr-only; upstream has no equivalent option)
         if vars := asset.get("sel"):
             method_options["sel"] = vars
-        # Bands
-        if bands := asset.get("bands"):
+
+        media_type = (
+            metadata.media_type.split(";")[0].strip() if metadata.media_type else ""
+        )
+        is_zarr = media_type in (
+            "application/x-zarr",
+            "application/vnd.zarr",
+            "application/vnd+zarr",
+        )
+
+        if is_zarr and (bands := asset.get("bands")):
             stac_bands = (
                 metadata.extra_fields.get("bands")
                 or metadata.extra_fields.get("eo:bands")  # V1.0
@@ -74,47 +92,17 @@ class STACReader(SimpleSTACReader):
                     "Asset does not have 'bands' metadata, unable to use 'bands' option"
                 )
 
-            # For Zarr bands = variable
-            media_type = (
-                metadata.media_type.split(";")[0].strip() if metadata.media_type else ""
-            )
-            zarr_media_types = [
-                "application/x-zarr",
-                "application/vnd.zarr",
-                "application/vnd+zarr",
-            ]
-            if media_type in zarr_media_types:
-                common_to_variable = {
-                    b.get("eo:common_name") or b.get("common_name") or b["name"]: b[
-                        "name"
-                    ]
-                    for b in stac_bands
-                }
-                method_options["variables"] = [
-                    common_to_variable.get(v, v) for v in bands
-                ]
+            method_options["variables"] = _resolve_zarr_bands(bands, stac_bands)
+            return reader_options, method_options
 
-            # For COG bands = indexes
-            else:
-                common_to_variable = {
-                    b.get("eo:common_name")
-                    or b.get("common_name")
-                    or b.get("name")
-                    or str(ix): ix
-                    for ix, b in enumerate(stac_bands, 1)
-                }
-                band_indexes: list[int] = []
-                for b in bands:
-                    if idx := common_to_variable.get(b):
-                        band_indexes.append(idx)
-                    else:
-                        raise ValueError(
-                            f"Band '{b}' not found in asset metadata, unable to use 'bands' option"
-                        )
-
-                    method_options["indexes"] = band_indexes
-
-        return reader_options, method_options
+        # Not Zarr, or Zarr with no `bands` requested: everything left
+        # (indexes/expression, and COG-style bands -> indexes) is upstream's
+        # unmodified logic.
+        up_reader_options, up_method_options = super()._get_options(asset, metadata)
+        return (
+            {**reader_options, **up_reader_options},
+            {**method_options, **up_method_options},
+        )
 
     def part(  # noqa: C901
         self,

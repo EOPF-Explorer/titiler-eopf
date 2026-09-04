@@ -6,6 +6,7 @@ from unittest.mock import patch
 from urllib.parse import parse_qs
 
 import pystac
+import pytest
 from geojson_pydantic import Polygon
 from owslib.wmts import WebMapTileService
 
@@ -14,6 +15,7 @@ from titiler.eopf.stac import (
     EOPFSimpleSTACReader,
     EOPFSTACAPIBackend,
     _parse_asset,
+    _resolve_zarr_bands,
 )
 from titiler.stacapi.dependencies import APIParams, Search
 
@@ -349,3 +351,35 @@ def test_parse_asset():
             f"Valid keys: {', '.join(sorted(VALID_ASSET_OPTIONS))}. "
             "Example: 'reflectance|bidx=1' or 'reflectance|variables=vv,vh'"
         )
+
+
+def test_resolve_zarr_bands():
+    """test _resolve_zarr_bands -- shared between the main app's
+    EOPFSimpleSTACReader._get_asset_info and the openEO app's
+    STACReader._get_options (titiler/eopf/openeo/reader.py). Same algorithm,
+    reached from two different base readers with no common hook."""
+    stac_bands = [
+        {"name": "b04", "eo:common_name": "red"},
+        {"name": "b03", "eo:common_name": "green"},
+        {"name": "b02", "common_name": "blue"},  # legacy common_name, no eo: prefix
+        {"name": "b08"},  # no common name at all
+        {"description": "no name at all -- must not raise KeyError"},
+    ]
+
+    # By common name (eo:common_name or legacy common_name).
+    assert _resolve_zarr_bands(["red", "green", "blue"], stac_bands) == [
+        "b04",
+        "b03",
+        "b02",
+    ]
+    # By the band's own name, directly -- including a band that also has a
+    # common name (b04's common name is "red", but "b04" itself must still
+    # resolve: this is what EOPF's own `reflectance|bands=b04` pipe notation
+    # relies on against catalogues where every band declares a common name).
+    assert _resolve_zarr_bands(["b04", "b08"], stac_bands) == ["b04", "b08"]
+    # An unknown name -- matching neither a common name nor any band's own
+    # name -- raises rather than silently becoming a bogus variable request.
+    with pytest.raises(ValueError, match="Band 'nope' not found"):
+        _resolve_zarr_bands(["nope"], stac_bands)
+    # Mixed common names and direct variable names in one request.
+    assert _resolve_zarr_bands(["red", "b08"], stac_bands) == ["b04", "b08"]
