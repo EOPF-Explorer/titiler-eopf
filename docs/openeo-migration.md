@@ -217,7 +217,7 @@ lines and the copy is the whole function.
 | `STACReader._get_options` | 73L vs 48L | Zarr `bands`→`variables` branch, `variables`/`sel` pass-through | **done — §7.11** |
 | `LoadCollection.load_collection` | 84L vs 189L | `_parse_asset(bands)` and the EOPF `_reader` — that is all | **narrow hard** |
 | `processes/data/load_collection.json` | — | nothing (verified: no Zarr/notation text) | **drop** — or keep `bands.description` only |
-| `stac.py::_get_asset_info` ↔ `_get_options` | two EOPF copies of one algorithm | only how media type is read (proven: 36/36 cases identical) | **deduplicate** — and fix the 2 bugs in §3.5 |
+| `stac.py::_get_asset_info` ↔ `_get_options` | two EOPF copies of one algorithm | only how media type is read (proven: 36/36 cases identical) | **done — §7.12** |
 
 This is not a style complaint. Copying whole functions to change one line is precisely how the two live
 bugs in §3.1 got in: `max_items` and the missing `items` task metadata are both upstream fixes that
@@ -445,32 +445,35 @@ right base. **The duplication is structural, forced by the two upstreams** — s
 and read `asset_info["type"]`, while the openEO subclass overrides `_get_options` and reads
 `metadata.media_type`. The *method* cannot be shared; only the algorithm can.
 
-#### The algorithm is provably the same
+#### The algorithm is provably the same — done, §7.12
 
 Both paths were run over 36 cases — three Zarr media types plus a parameterised one
 (`application/vnd+zarr; version=3`), a COG type and `None`; bands matched by `name`, by
 `eo:common_name`, several at once, an unknown name, an unnamed band, and missing band metadata. **Zero
-divergences.** The extraction is safe: one free function taking `(media_type, bands, stac_bands)`, in
-`titiler/eopf/stac.py` — which `titiler/eopf/openeo/stacapi.py` already imports (`_parse_asset`), so it
-adds no coupling that is not already there. It is also the natural home for the §2.1 band vocabulary.
+divergences.** Extracted as `_resolve_zarr_bands(bands, stac_bands)` in `titiler/eopf/stac.py` — which
+`titiler/eopf/openeo/stacapi.py` already imports from (`_parse_asset`), so it adds no coupling that is
+not already there.
 
-#### Two bugs the comparison exposed
+#### Two bugs the comparison exposed — fixed alongside the extraction, §7.12
 
-Identical in both copies, and EOPF-only — upstream has no Zarr branch, so these are ours:
+Were identical in both copies, and EOPF-only — upstream has no Zarr branch, so these were ours:
 
-- **An unknown band name is silently accepted for Zarr assets.** The Zarr branch ends in
-  `common_to_variable.get(v, v)`, a passthrough default, so `bands=["nope"]` yields
-  `variables=["nope"]` and fails much later inside `GeoZarrReader`, or produces the wrong band. The COG
-  branch raises `ValueError: Band 'nope' not found in asset metadata` for the same input. The
-  passthrough may have been meant to allow raw variable names, but `_parse_asset` already has an
-  explicit `variables=` option for that, so the asymmetry looks accidental. Making it strict does not
-  break the current vocabulary — every advertised band name is present in its asset's `bands` metadata.
-- **Band metadata without a `name` raises `KeyError`.** The Zarr comprehension subscripts `b["name"]`
-  where the COG branch uses `b.get("name") or str(ix)`. A `KeyError` is neither `ValueError` nor
-  `TypeError`, so 0.17.0's `general_exception_handler` returns **500 `Internal`** where the COG path
-  would return 400.
+- **An unknown band name used to be silently accepted for Zarr assets** (`common_to_variable.get(v, v)`,
+  a passthrough default) — `bands=["nope"]` yielded `variables=["nope"]` and failed much later inside
+  `GeoZarrReader`, or produced the wrong band. Now raises the same `ValueError: Band 'nope' not found in
+  asset metadata` the COG branch always raised. **The passthrough itself had to stay, carefully** — it
+  is not purely the bug, it is also how a band's own internal `name` resolves when that band *also* has
+  a common name (e.g. `reflectance|bands=b04` against a catalogue where every band declares
+  `eo:common_name`, verified against production's real `sentinel-2-l2a` collection). The fix
+  distinguishes "matches a known variable name directly" (kept) from "matches nothing at all" (now
+  raises), rather than removing the passthrough outright.
+- **Band metadata without a `name` used to raise `KeyError`** while building the mapping (`b["name"]`).
+  Such a band is skipped instead — it is not addressable by any name anyway, so it should not prevent
+  the *other* bands in the same asset from resolving.
 
-Fix both while extracting — one helper means fixing them once.
+Verified precisely: re-ran the same 49-case equivalence matrix used to prove the extraction safe, and
+got exactly the 8 expected divergences (4 Zarr media types × the two fixed cases) — nothing else
+changed.
 
 ### 3.6 `tests/fixtures/item.json` — test realism
 
@@ -957,3 +960,27 @@ Verified equivalence, not assumed: captured the *pre-narrowing* function's outpu
 (4 Zarr media-type variants × 3 non-Zarr/archive/unset types, each against 7 request shapes — named
 bands, common names, unknown names, unnamed-band fallback, no-bands-metadata, no-bands-requested) and
 re-ran the identical matrix after narrowing. **0 mismatches.** Full suite: 115/115.
+
+### 7.12 The band-mapping algorithm is deduplicated, and its two bugs fixed
+
+`_resolve_zarr_bands(bands, stac_bands)`, in `titiler/eopf/stac.py`, replaces the duplicated
+`common_to_variable` mapping that used to live separately inside `EOPFSimpleSTACReader._get_asset_info`
+(main app) and `STACReader._get_options` (openEO app) — both now call the same function. §3.5 has the
+full detail; summary:
+
+- **Extraction verified as a pure refactor first**, before any behaviour change: captured the
+  pre-extraction function's output across the same 49-case matrix used in §7.11, re-ran it after —
+  0 mismatches.
+- **Then fixed the two bugs §3.5 had already documented**, in the same pass: an unknown band name no
+  longer silently passes through as a bogus variable request (now raises `ValueError`, matching what the
+  COG path already did); a band with no declared `name` no longer crashes the whole lookup with
+  `KeyError` (now just skipped, since it was never addressable anyway).
+- **The fix had to preserve, not remove, resolving a band by its own raw `name`** even when that band
+  also has a common name — this is exactly the mechanism behind `reflectance|bands=b04`
+  (§7.4/§7.10's working alternative for production's older catalogue shape). Re-verified directly
+  against production's real `sentinel-2-l2a` `reflectance` metadata after the fix: both `b04` and `red`
+  still resolve to `variables=['b04']`.
+- Re-ran the 49-case matrix once more after the bug fixes: exactly the 8 expected divergences (4 Zarr
+  media types × the 2 fixed cases), nothing else changed.
+
+New test: `tests/test_stacapi.py::test_resolve_zarr_bands`. Full suite: 119/119.

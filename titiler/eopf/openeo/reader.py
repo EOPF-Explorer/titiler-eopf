@@ -20,6 +20,7 @@ from rio_tiler.utils import cast_to_sequence, inherit_rasterio_env
 from titiler.openeo.reader import SimpleSTACReader
 
 from ..reader import GeoZarrReader
+from ..stac import _resolve_zarr_bands
 
 __all__ = ["STACReader", "_reader"]
 
@@ -91,11 +92,7 @@ class STACReader(SimpleSTACReader):
                     "Asset does not have 'bands' metadata, unable to use 'bands' option"
                 )
 
-            common_to_variable = {
-                b.get("eo:common_name") or b.get("common_name") or b["name"]: b["name"]
-                for b in stac_bands
-            }
-            method_options["variables"] = [common_to_variable.get(v, v) for v in bands]
+            method_options["variables"] = _resolve_zarr_bands(bands, stac_bands)
             return reader_options, method_options
 
         # Not Zarr, or Zarr with no `bands` requested: everything left
