@@ -11,6 +11,7 @@ from starlette_cramjam.middleware import CompressionMiddleware
 from titiler.openeo.auth import get_auth
 from titiler.openeo.errors import ExceptionHandler, OpenEOException
 from titiler.openeo.factory import EndpointsFactory
+from titiler.openeo.health import register_health_endpoints
 from titiler.openeo.middleware import DynamicCacheControlMiddleware
 from titiler.openeo.services import get_store, get_tile_store, get_udp_store
 from titiler.openeo.settings import ApiSettings, AuthSettings, BackendSettings
@@ -92,7 +93,7 @@ app.add_middleware(
 
 # Register backend specific load_collection methods
 loaders = LoadCollection(stac_client)  # type: ignore
-process_registry["load_collection"] = process_registry["load_collection"] = Process(
+process_registry["load_collection"] = Process(
     spec=PROCESS_SPECIFICATIONS["load_collection"],
     implementation=loaders.load_collection,
 )
@@ -125,6 +126,17 @@ endpoints = EndpointsFactory(
 )
 app.include_router(endpoints.router)
 app.endpoints = endpoints
+
+# Kubernetes-style health endpoints. Registered after the OpenEO router so
+# the explicit /healthz and /readyz paths take precedence and are excluded
+# from the OpenAPI schema -- matches upstream's create_app() placement.
+register_health_endpoints(
+    app,
+    service_store=service_store,
+    tile_store=tile_store,
+    stac_client=stac_client,
+    auth=auth,
+)
 
 # Create exception handler instance
 exception_handler = ExceptionHandler(logger=logging.getLogger(__name__))

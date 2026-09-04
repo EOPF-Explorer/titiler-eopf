@@ -409,9 +409,9 @@ on this one description string. The notation stays documented in code
   library's pieces is the intended use, and the 79% overlap with upstream's `create_app()` is what an
   app wiring the same middleware looks like. Left as is. The two items below are content, not
   duplication.
-- No `/healthz` or `/readyz`.
-- `process_registry["load_collection"] = process_registry["load_collection"] = Process(…)` is a double
-  assignment; upstream cleaned up the same line in 0.17.0.
+- ~~No `/healthz` or `/readyz`.~~ done — §7.18
+- ~~`process_registry["load_collection"] = process_registry["load_collection"] = Process(…)` is a double
+  assignment; upstream cleaned up the same line in 0.17.0.~~ done — §7.18
 
 ### 3.5 One algorithm, two EOPF copies
 
@@ -628,7 +628,7 @@ and the narratives only read tiles anyway.
 
 ### platform-deploy
 
-- Wire `/healthz` and `/readyz` into the EOPF openEO app, then point liveness/readiness probes at them.
+- `/healthz`/`/readyz` are wired in (§7.18) — point liveness/readiness probes at them.
 - Set `TITILER_OPENEO_PROCESSING_APPLY_SCALE_OFFSET=false` — not optional, see §6.
 - Review `TITILER_OPENEO_PROCESSING_MAX_ITEMS` against the `max_items` fix — the guard now fails loudly
   where it used to truncate.
@@ -1133,3 +1133,36 @@ fallback exactly). New test: `tests/test_band_summaries.py::test_getzarrvariable
 Still open from Phase 3's band-notation cleanup: the 11 stale `asset|band` references in
 `services/eopf-explorer.json` — housekeeping for fresh deployments, not the actual Phase 0 cutover
 (§4's own finding: that file never affects users who already have services, i.e. anyone in production).
+
+### 7.18 `/healthz`/`/readyz` wired in, and the `load_collection` double assignment fixed
+
+§3.4's two remaining content items, both in `titiler/eopf/openeo/main.py`:
+
+- **`register_health_endpoints`** (`titiler.openeo.health`, upstream) is now called after
+  `app.include_router(endpoints.router)` / `app.endpoints = endpoints` — matching upstream's
+  `create_app()` placement so the explicit `/healthz`/`/readyz` paths take precedence and stay excluded
+  from the OpenAPI schema. `/healthz` is an always-200 liveness probe; `/readyz` runs bounded-timeout
+  `.ping()` checks against `service_store`, `tile_store`, `stac_client`, and `auth` (each only if the
+  object defines `.ping()` — none of this repo's four objects needed new code for that).
+- `process_registry["load_collection"] = process_registry["load_collection"] = Process(…)` → single
+  assignment. Chained assignment (`a = b = c`) made both sides `Process(…)` anyway, so this was
+  never a functional bug, just confusing to read — no behaviour change, so no regression test for this
+  half beyond confirming `load_collection` still appears in `/processes` exactly once.
+
+Verified against the real STAC API (`https://stac.core.eopf.eodc.eu`): `/readyz` → 200,
+`{"status": "ok", "version": "0.18.0", "checks": {"store": {"status": "ok", "latency_ms": 0}, "stac_api":
+{"status": "ok", "latency_ms": 713}}}`. Verified against an unreachable STAC URL: `/readyz` → 503,
+`checks.stac_api.status == "error"` with the real `NameResolutionError` message. Confirmed both routes
+absent from `GET /api`'s `paths`.
+
+New tests in `tests/test_openeo_app.py`: `test_health_endpoints_registered` (both probes, the
+unreachable-STAC-degrades-503 case, and the OpenAPI exclusion) and
+`test_load_collection_registered_once`. Confirmed the first fails pre-fix (`/healthz` → 404) by stashing
+just the `main.py` change; the second predictably still passes pre-fix, per the "no functional bug" note
+above. One wrinkle found while writing the test: `stac_client` is a module-level singleton (the app is
+imported once and cached in `sys.modules` across the whole file), and its `.client` property lazily
+caches whatever `titiler.openeo.stacapi.Client` resolves to on first access — `test_openeo_app`'s
+`@patch("titiler.openeo.stacapi.Client")`, exercised via its own `/collections` call, would otherwise
+permanently poison that cache with a `MagicMock` for every later test in the file, making `/readyz`
+falsely report healthy. Fixed by placing the health tests before `test_openeo_app` in file order (noted
+inline in the test docstring); no production code involved. Full suite: 129/129.
