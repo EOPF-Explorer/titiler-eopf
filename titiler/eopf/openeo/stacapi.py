@@ -237,7 +237,7 @@ class stacApiBackend(BaseBackend):
         """Get datacube variables from EOPF collection assets.
 
         Creates variables in the format expected by load_collection:
-        - Variables named as "asset|band" (e.g., "reflectance|b04")
+        - Variables named as "asset|bands=band" (e.g., "reflectance|bands=b04")
         - Each asset represents a Zarr group containing bands
         - Variables reference individual bands within assets
         """
@@ -264,12 +264,18 @@ class stacApiBackend(BaseBackend):
                 variables[asset_name] = dc.Variable(properties=variable_properties)
                 continue
 
-            # Create variables for each band reference (asset|band format)
+            # Create variables for each band reference (asset|bands=band format)
             for i, band_ref in enumerate(band_refs):
-                # Parse the asset|band format to get individual band info
-                _, band_name = (
-                    band_ref.split("|") if "|" in band_ref else (asset_name, band_ref)
-                )
+                # Parse through _parse_asset (titiler/eopf/stac.py), the one
+                # place that already owns this notation, rather than
+                # hand-splitting on "|" again -- that pattern silently broke
+                # when the notation moved from "asset|band" to
+                # "asset|bands=band" (0.8.0), same bug class fixed in
+                # replace_bands_in_summaries_dict (§7.15). Falls back to the
+                # bare band_ref for a reference with no "|" at all (e.g.
+                # "AOT_10m"), matching the previous behaviour exactly.
+                parsed_bands = _parse_asset([band_ref])[0].get("bands")
+                band_name = (parsed_bands or [band_ref])[0]
 
                 # Get corresponding band metadata
                 band = bands[i] if i < len(bands) else {}
@@ -300,83 +306,6 @@ class stacApiBackend(BaseBackend):
 
         return variables
 
-    def replace_bands_in_summaries(self, collection: Collection):
-        """Replace band names in summaries to match cube:dimension band values.
-
-        The bands in summaries should be the same list as in cube:dimension band.
-        For asset-only bands, use the asset description.
-        """
-        if not collection.summaries:
-            return collection
-
-        # Get the band names from cube dimension (this is our target list)
-        # Use the cube dimension values if they exist, otherwise fall back to get_all_band_names
-        if (
-            hasattr(collection, "ext")
-            and collection.ext.has("cube")
-            and collection.ext.cube.dimensions.get("bands")
-            and collection.ext.cube.dimensions.get("bands").properties.get("values")
-        ):
-            cube_band_names = collection.ext.cube.dimensions.get(
-                "bands"
-            ).properties.get("values")
-        else:
-            cube_band_names = get_all_band_names(collection)
-
-        # Create new bands list matching cube dimension
-        updated_bands = []
-        for cube_band_name in cube_band_names:
-            if "|" in cube_band_name:
-                # This is asset|band format (e.g., "reflectance|b01")
-                asset_name, band_name = cube_band_name.split("|", 1)
-
-                # Find original band properties from summaries
-                original_band = None
-                if (
-                    hasattr(collection.summaries, "bands")
-                    and collection.summaries.bands
-                ):
-                    for band in collection.summaries.bands:
-                        if band.get("name") == band_name:
-                            original_band = band
-                            break
-
-                if original_band:
-                    # Use existing band properties but update name
-                    updated_band = dict(original_band)
-                    updated_band["name"] = cube_band_name
-                else:
-                    # Create basic band if not found in summaries
-                    updated_band = {"name": cube_band_name}
-
-                updated_bands.append(updated_band)
-            else:
-                # This is asset-only format (e.g., "AOT", "SCL", "WVP")
-                # Use the asset description
-                asset = (
-                    collection.item_assets.get(cube_band_name)
-                    if collection.item_assets
-                    else None
-                )
-                if asset and asset.description:
-                    updated_band = {
-                        "name": cube_band_name,
-                        "description": asset.description,
-                    }
-                else:
-                    # Fallback if asset not found or no description
-                    updated_band = {
-                        "name": cube_band_name,
-                        "description": f"Data from {cube_band_name} asset",
-                    }
-
-                updated_bands.append(updated_band)
-
-        # Set the bands in summaries (though this won't be used)
-        collection.summaries.bands = updated_bands
-
-        return collection
-
     def replace_bands_in_summaries_dict(self, collection_dict: dict) -> None:
         """Replace band names in summaries dict to match cube:dimension band values."""
         if not collection_dict.get("summaries"):
@@ -391,14 +320,22 @@ class stacApiBackend(BaseBackend):
 
         # Get original summaries bands
         original_bands = collection_dict.get("summaries", {}).get("bands", [])
+        item_assets = collection_dict.get("item_assets", {})
 
         # Create new bands list matching cube dimension
         updated_bands = []
         for cube_band_name in cube_band_names:
-            if "|" in cube_band_name:
-                # This is asset|band format (e.g., "reflectance|b01")
-                asset_name, band_name = cube_band_name.split("|", 1)
+            # `_parse_asset` is the single place that knows this format
+            # (currently "asset|bands=band", e.g. "B01_20m|bands=B01" --
+            # get_all_band_names is the only producer of these strings).
+            # Hand-splitting on "|" here previously assumed the pre-0.8.0
+            # "asset|band" shape and silently never matched, since the value
+            # after the pipe is "bands=B01", not "B01" -- every qualified
+            # band lost its description/eo:common_name/wavelength.
+            parsed = _parse_asset([cube_band_name])[0]
+            band_name = (parsed.get("bands") or [None])[0]
 
+            if band_name:
                 # Find original band properties from summaries
                 original_band = None
                 for band in original_bands:
@@ -416,21 +353,17 @@ class stacApiBackend(BaseBackend):
 
                 updated_bands.append(updated_band)
             else:
-                # This is asset-only format (e.g., "AOT", "SCL", "WVP")
-                # Use the asset description if available
-                assets = collection_dict.get("assets", {})
-                asset = assets.get(cube_band_name, {})
-                if asset.get("description"):
-                    updated_band = {
-                        "name": cube_band_name,
-                        "description": asset["description"],
-                    }
-                else:
-                    # Fallback if asset not found or no description
-                    updated_band = {
-                        "name": cube_band_name,
-                        "description": f"Data from {cube_band_name} asset",
-                    }
+                # This is asset-only format (e.g., "AOT_10m", "SCL_20m").
+                # Description lives on the item_assets entry (its `title`,
+                # occasionally `description`) -- not on the top-level
+                # `assets` dict, which only ever holds collection-level
+                # assets like a thumbnail and never matches a band name.
+                asset = item_assets.get(cube_band_name, {})
+                description = asset.get("description") or asset.get("title")
+                updated_band = {
+                    "name": cube_band_name,
+                    "description": description or f"Data from {cube_band_name} asset",
+                }
 
                 updated_bands.append(updated_band)
 
