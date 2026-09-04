@@ -214,7 +214,7 @@ lines and the copy is the whole function.
 | `openeo/main.py` | 107 sig-lines, 79% verbatim upstream | EOPF backend + loaders, `load_nodes_ids`, description | **keep** — app entrypoint |
 | `_reader` | 57L vs 94L | **one line** — `STACReader` instead of `SimpleSTACReader` | **drop, or minimise** |
 | `STACReader.part` | 141L vs 81L | bbox pre-check, widened `allowed_exceptions`, OVH URL rewrite | **keep** — narrow the exceptions, propose the guard upstream |
-| `STACReader._get_options` | 73L vs 48L | Zarr `bands`→`variables` branch, `variables`/`sel` pass-through | **keep, narrow** |
+| `STACReader._get_options` | 73L vs 48L | Zarr `bands`→`variables` branch, `variables`/`sel` pass-through | **done — §7.11** |
 | `LoadCollection.load_collection` | 84L vs 189L | `_parse_asset(bands)` and the EOPF `_reader` — that is all | **narrow hard** |
 | `processes/data/load_collection.json` | — | nothing (verified: no Zarr/notation text) | **drop** — or keep `bands.description` only |
 | `stac.py::_get_asset_info` ↔ `_get_options` | two EOPF copies of one algorithm | only how media type is read (proven: 36/36 cases identical) | **deduplicate** — and fix the 2 bugs in §3.5 |
@@ -371,10 +371,11 @@ meet the requested bbox before opening them — and is a reasonable upstream pro
 - **Hard-coded OVH host rewrite.** The `https://esa-zarr-sentinel-explorer-fra… → s3://` substitution is
   already marked `TODO` in the source. 0.17.0 added `_resolve_asset_href`, which honours STAC
   `alternate` hrefs — the right home for this. Removing it is what lets `part` shrink to the two guards.
-- **`STACReader._get_options` (73L vs 48L) is the one copy that is genuinely EOPF.** It adds the
-  `variables`/`sel` pass-through and the Zarr branch that maps `bands` → `variables` by media type;
-  upstream only knows `indexes`. But its non-Zarr `else` branch is a verbatim copy of upstream's body,
-  so delegate that to `super()._get_options()` and keep only the Zarr path.
+- ~~**`STACReader._get_options` (73L vs 48L) is the one copy that is genuinely EOPF.**~~ **Narrowed
+  in §7.11** — the non-Zarr branch (verbatim upstream logic) now delegates to
+  `super()._get_options()`; only the genuinely EOPF-specific parts stay local:
+  `variables`/`sel` pass-through, and the Zarr `bands` → `variables` mapping (upstream only knows
+  `indexes`).
 
 ### 3.3 `titiler/eopf/openeo/processes/data/load_collection.json` — user-visible
 
@@ -558,8 +559,8 @@ corrupts values if left at its new default.
 Scope: titiler-eopf · the real work
 
 Two things at once, and the order matters. **First narrow the copies** per the §3.0 verdicts — delete
-`load_collection.json`, delegate `_get_options`'s
-non-Zarr branch to `super()`, strip `part` down to its two guards, extract the shared Zarr band helper.
+`load_collection.json`, strip `part` down to its two guards, extract the shared Zarr band helper.
+(`_get_options`'s non-Zarr delegation is done — §7.11.)
 **Then apply the remaining fixes** — `_add_band_summaries`, the band-dimension shape, mask inheritance
 in `_reader`, the asset-href rewrite, plus health endpoints in `main.py` — plus the band-notation
 cleanup: migrate the 11 stale references in `services/eopf-explorer.json` and fix the five docstrings
@@ -915,3 +916,44 @@ cause earlier in this doc. Landed together since none touch the same code:
   `TileOutsideBounds` conversion around it is real and stays.
 
 Full suite: 115/115.
+
+### 7.10 Production's actual STAC endpoint is the *older* catalogue shape
+
+Found while helping someone select bands against a locally-running server pointed at production's
+real config (`TITILER_OPENEO_STAC_API_URL=https://api.explorer.eopf.copernicus.eu/stac`, from
+`docker-compose.yml`/`launch.json`) — **this is a different endpoint than `stac.core.eopf.eodc.eu`**,
+which is what §2.1/§7.4/§7.7's band-vocabulary investigation was run against. Production's endpoint
+still publishes Sentinel-2 L2A as a single 13-band `reflectance` asset (the pre-restructure shape);
+`stac.core.eopf.eodc.eu` has the newer per-band-asset-plus-composites shape. Confirmed by fetching both
+directly — worth reconciling which one `platform-deploy` actually points production at before treating
+§7.4's "40 identifiers across three collections" sizing as production's real exposure.
+
+**The §7.7 dedupe fix is safe against this older shape too** — verified directly:
+`get_all_band_names` against production's actual `sentinel-2-l2a` collection returns exactly 16 clean
+names (`AOT_10m`, `SCL_20m`, `WVP_10m`, `reflectance|bands=b01`…`b12`,`b8a`), a correct no-op since
+there's only one source per band here — nothing to deduplicate. No regression on the shape production
+currently serves.
+
+**A real gap, not a bug**: selecting a band by its internal STAC `name` (`b04`) fails —
+`InvalidAssetName`, listing only common names (`red`, `blue`, …) as valid — because upstream's native
+bare-band resolver (`assetbands.py`, #384) only ever registers one alias per band
+(`eo:common_name`/`common_name`/`name`, first match wins), never both when a band has more than one.
+EOPF's own pipe notation (`reflectance|bands=b04`) already works for this — verified — so this only
+affects the bare-name path. Filed as
+[titiler-openeo#397](https://github.com/sentinel-hub/titiler-openeo/issues/397) rather than worked
+around locally, since a local fix would mean EOPF computing its own band→asset resolution in parallel
+to upstream's `_inner_bands` — exactly the kind of copy §3.0 has been trying to eliminate, not add.
+
+### 7.11 `_get_options` narrowed — non-Zarr path delegates to upstream
+
+The non-Zarr branch (COG `bands` → `indexes`) was a verbatim copy of upstream's logic, kept local only
+because upstream's positional-fallback key used to be unreachable (int key, string values —
+[titiler-openeo#378](https://github.com/sentinel-hub/titiler-openeo/pull/378), merged earlier in this
+migration). Now that it's fixed upstream, the two are byte-identical, so the copy is gone: only the
+genuinely EOPF-specific parts stay — `variables`/`sel` pass-through, and the Zarr `bands` → `variables`
+mapping (media-type-gated, upstream has no equivalent).
+
+Verified equivalence, not assumed: captured the *pre-narrowing* function's output across 49 cases
+(4 Zarr media-type variants × 3 non-Zarr/archive/unset types, each against 7 request shapes — named
+bands, common names, unknown names, unnamed-band fallback, no-bands-metadata, no-bands-requested) and
+re-ran the identical matrix after narrowing. **0 mismatches.** Full suite: 115/115.
