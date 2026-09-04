@@ -216,7 +216,7 @@ lines and the copy is the whole function.
 | `STACReader.part` | 141L vs 81L | bbox pre-check, widened `allowed_exceptions`, OVH URL rewrite | **keep** — narrow the exceptions, propose the guard upstream |
 | `STACReader._get_options` | 73L vs 48L | Zarr `bands`→`variables` branch, `variables`/`sel` pass-through | **done — §7.11** |
 | `LoadCollection.load_collection` | 84L vs 189L | `_parse_asset(bands)` and the EOPF `_reader` — that is all | **narrow hard** |
-| `processes/data/load_collection.json` | — | nothing (verified: no Zarr/notation text) | **drop** — or keep `bands.description` only |
+| `processes/data/load_collection.json` | — | nothing (verified: no Zarr/notation text) | **done — §7.14, dropped** |
 | `stac.py::_get_asset_info` ↔ `_get_options` | two EOPF copies of one algorithm | only how media type is read (proven: 36/36 cases identical) | **done — §7.12** |
 
 This is not a style complaint. Copying whole functions to change one line is precisely how the two live
@@ -401,13 +401,13 @@ any of them**. So **delete the file**; `PROCESS_SPECIFICATIONS = {**OpenEOSpecif
 **EOPF_OPENEO_SPECIFICATIONS}` then falls through to upstream's. `load_zarr.json` in the same directory
 is genuinely EOPF-only and stays.
 
-One thing deleting it does *not* fix: neither spec documents the `<asset>|bands=<band>` notation.
-Upstream's `bands` description talks about unique names and common names, which is not what this
-backend expects — a user following it passes `B04` and gets a `ValueError`. With §2.1 shipping the new
-notation without a shim, `GET /processes` is exactly where someone will look for the new form. Whether
-to keep a **one-key** override customising only `bands.description`, or delete the file outright and
-document the notation elsewhere, is tracked as
-[titiler-eopf#142](https://github.com/EOPF-Explorer/titiler-eopf/issues/142).
+~~One thing deleting it does *not* fix~~ — **resolved, §7.14.** Neither spec documents the
+`<asset>|bands=<band>` notation, and the decision on
+[titiler-eopf#142](https://github.com/EOPF-Explorer/titiler-eopf/issues/142) was: delete outright, no
+`bands.description` override. Not treated as blocking — `titiler-openeo#398` (§7.13, merged upstream,
+unreleased) will make bare band-name selection work natively too, which reduces how much weight rests
+on this one description string. The notation stays documented in code
+(`titiler/eopf/stac.py::_parse_asset`'s docstring) and in this migration doc.
 
 ### 3.4 `titiler/eopf/openeo/main.py` — moderate
 
@@ -814,11 +814,15 @@ this repo's `_reader` copy still has to override; nothing in 0.18.0 changed that
 
 ### 7.5 Filed-issue status
 
+Kept current as of §7.13; see §7.10/§7.13 for the two entries added after the original pass.
+
 | issue | state | note |
 | --- | --- | --- |
 | [titiler-openeo#378](https://github.com/sentinel-hub/titiler-openeo/pull/378) | **merged**, in 0.18.0 | positional band fallback fix |
 | [titiler-openeo#379](https://github.com/sentinel-hub/titiler-openeo/issues/379) | open, unaddressed | `reader_cls` / `LoadCollection` fields |
 | [titiler-openeo#381](https://github.com/sentinel-hub/titiler-openeo/issues/381) | open, **mostly fixed** (#384) | commented: works for EOPF today, unit gate still missing for the general case |
+| [titiler-openeo#396](https://github.com/sentinel-hub/titiler-openeo/issues/396) | open, unaddressed | `Optional[X]` vs `X \| None` — decision ask, no PR |
+| [titiler-openeo#397](https://github.com/sentinel-hub/titiler-openeo/issues/397) | **closed, fixed by #398** — merged, **not yet released** (PyPI still 0.18.0) | bare band-name resolution now registers both `eo:common_name` and the STAC `name`, not just the precedence winner — §7.13 |
 | [titiler-eopf#142](https://github.com/EOPF-Explorer/titiler-eopf/issues/142) | open | `bands.description` question — now sharper: does EOPF keep its own notation at all, per §7.4 |
 
 ### 7.6 What this changes about Phase 0–3
@@ -946,6 +950,7 @@ affects the bare-name path. Filed as
 [titiler-openeo#397](https://github.com/sentinel-hub/titiler-openeo/issues/397) rather than worked
 around locally, since a local fix would mean EOPF computing its own band→asset resolution in parallel
 to upstream's `_inner_bands` — exactly the kind of copy §3.0 has been trying to eliminate, not add.
+**Fixed upstream — see §7.13.**
 
 ### 7.11 `_get_options` narrowed — non-Zarr path delegates to upstream
 
@@ -984,3 +989,50 @@ full detail; summary:
   media types × the 2 fixed cases), nothing else changed.
 
 New test: `tests/test_stacapi.py::test_resolve_zarr_bands`. Full suite: 119/119.
+
+### 7.13 `titiler-openeo#397` fixed upstream, merged, not yet released
+
+[`titiler-openeo#397`](https://github.com/sentinel-hub/titiler-openeo/issues/397) — bare band-name
+resolution only ever offering one alias per band — fixed by
+[`titiler-openeo#398`](https://github.com/sentinel-hub/titiler-openeo/pull/398), merged. `main`'s
+`resolve_asset_bands` now registers **both** the common name and the band's own STAC `name` when they
+differ, resolving to the same `ResolvedAssetBand`. Once released, `load_collection(bands=["b04"])`
+resolves directly through upstream's native mechanism — no EOPF-side change needed, since
+`_get_asset_info`'s bare-name path is inherited, not overridden.
+
+**Not yet released** — PyPI's latest `titiler-openeo` is still `0.18.0`; #398 is `main`-only. Nothing to
+bump to right now.
+
+**Corrects a claim in the original #397 issue text**: it stated upstream's `_get_options` "already
+accepts `b04` today" via the pipe-shaped request. Wrong — that was testing EOPF's own fork's
+`_get_options` (`titiler/eopf/openeo/reader.py`, Zarr-aware), not upstream's generic one (no Zarr
+concept at all). Caught during the PR's own investigation, not this doc's. Doesn't change the fix or
+anything else in this migration, since EOPF's fork and upstream's mechanism are independent paths that
+happen to solve overlapping problems — see the reconciliation below.
+
+**Does not affect anything already done in this migration:**
+
+- **§7.12's `_resolve_zarr_bands`** is EOPF's own pipe-notation mechanism
+  (`reflectance|bands=b04`) — a separate code path from upstream's `assetbands.py`. Both now
+  independently resolve internal band names, via different routes; neither depends on the other.
+- **§7.4/§7.7's parked decision** (keep EOPF's own vocabulary rather than adopt upstream's native
+  mechanism) is unaffected — #398 fixes *alias resolution for one band*, not the *redundancy across
+  assets* problem (the same band published by `SR_10m`/`SR_20m`/`SR_60m`/`TCI_10m` at once) that
+  decision was actually about.
+
+### 7.14 `load_collection.json` deleted — `titiler-eopf#142` resolved
+
+Deleted `titiler/eopf/openeo/processes/data/load_collection.json`. Decided: no `bands.description`
+override either — not treated as blocking, given `titiler-openeo#398` (§7.13) will make bare band-name
+selection work natively once released, reducing how much rests on this one description string. The
+notation stays documented where it already was: `titiler/eopf/stac.py::_parse_asset`'s docstring, and
+this doc.
+
+Verified end to end, not just at the merge-dict level: booted the openEO app and hit `GET /processes`
+directly — `load_collection`'s advertised parameters now exactly match upstream's spec
+(`id, spatial_extent, temporal_extent, bands, properties, width, height, tile_buffer, target_crs`), no
+`options`, and the implementation accepts exactly this set (re-confirmed against the current signature,
+unchanged from §3.3's original finding). `load_zarr.json` in the same directory is untouched — it is
+genuinely EOPF-only.
+
+Full suite: 119/119.
