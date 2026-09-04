@@ -57,7 +57,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+        uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
@@ -154,7 +154,7 @@ jobs:
       # Fork PRs get a read-only GITHUB_TOKEN, so the upload would fail there.
       - name: Upload Trivy SARIF (CRITICAL/HIGH) to GitHub Security tab
         if: steps.trivy-sarif-critical-high.outcome == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: trivy-results-critical-high.sarif
           category: trivy-critical-high
@@ -223,7 +223,7 @@ jobs:
           docker tag ghcr.io/${{ env.REPO }}:${{ env.sha_tag }} titiler-eopf:ci
 
       - name: Create kind cluster
-        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
+        uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
 
       - name: Load container image in kind cluster
         run: kind load docker-image titiler-eopf:ci --name chart-testing
