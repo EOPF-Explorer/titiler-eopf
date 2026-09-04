@@ -262,13 +262,25 @@ def get_multiscale_level(
     target_res: float,
     zoom_level_strategy: Literal["AUTO", "LOWER", "UPPER"] = "AUTO",
 ) -> str:
-    """Return the multiscale level corresponding to the desired resolution."""
+    """Return the multiscale level corresponding to the desired resolution.
+
+    Only considers levels that actually carry `variable`: EOPF's Sentinel-2
+    GeoZarr layout stores 10m-native bands (b02/b03/b04/b08) at the r10m
+    level only, with every other band appearing from r20m down -- picking a
+    level by resolution proximity alone (ignoring which levels the requested
+    variable is even in) can select a level missing it entirely, e.g. b05 at
+    r10m raising a raw `KeyError` from the datatree instead of falling back
+    to the next level that actually has it. The caller already guarantees at
+    least one level has `variable` (see the `layout`/`StopIteration` check
+    above), so this can never end up with nothing to choose from.
+    """
     ms_resolutions: list[tuple[str, float]] = [
         (
             ms["asset"],
             min(abs(ms["spatial:transform"][0]), abs(ms["spatial:transform"][4])),
         )
         for ms in dt.attrs["multiscales"]["layout"]
+        if variable in dt[ms["asset"]].data_vars
     ]
 
     # Based on aiocogeo:

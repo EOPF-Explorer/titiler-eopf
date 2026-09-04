@@ -238,6 +238,35 @@ def test_part(geozarr_dataset):
         numpy.testing.assert_array_equal(img.array, img_tile.array)
 
 
+def test_part_falls_back_to_a_scale_that_has_the_band(geozarr_dataset):
+    """`get_multiscale_level` must only pick among scales that actually carry
+    the requested variable (regression).
+
+    The `geozarr_dataset` (v1) fixture stores 10m-native bands
+    (b02/b03/b04/b08) at the r10m level only; b05 first appears at r20m. A
+    high-zoom request for b05 computes a target resolution close to 10m --
+    picking a level by resolution proximity alone (ignoring which levels
+    even have the variable) selects r10m and raises a raw `KeyError` from
+    the datatree (`tree[scale][variable]`) instead of falling back to r20m,
+    the next level that actually has it.
+    """
+    with GeoZarrReader(geozarr_dataset) as src:
+        bounds = src.bounds
+        lon, lat = (bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2
+        tile = src.tms.tile(lon, lat, 14)
+        bbox = src.tms.xy_bounds(*tile)
+
+        img = src.part(
+            bbox,
+            bounds_crs="epsg:3857",
+            dst_crs="epsg:3857",
+            variables=["/measurements/reflectance:b05"],
+            width=256,
+            height=256,
+        )
+        assert img.array.shape == (1, 256, 256)
+
+
 def test_feature(geozarr_dataset):
     """test feature method."""
     with GeoZarrReader(geozarr_dataset) as src:
