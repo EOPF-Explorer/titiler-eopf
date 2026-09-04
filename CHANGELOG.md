@@ -11,6 +11,19 @@
 
 **Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.8.0...v0.9.0
 
+## 0.11.0 (2026-09-04)
+
+## What's Changed
+* chore(deps): bump the all group across 1 directory with 3 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/147
+* fix: fix cache key for repeated query params by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/146
+* build(docker): base the image on digest-pinned Chainguard Wolfi by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/138
+* chore(deps): bump astral-sh/uv from 0.11.17 to 0.12.9 by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/149
+* chore(deps): bump chainguard/wolfi-base from `7e62cec` to `103eb3f` by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/150
+* feat(api): pre-select viewer rendering options from query parameters by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/132
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.10.1...v0.11.0
+
 ## 0.10.1 (2026-08-14)
 
 ## What's Changed
