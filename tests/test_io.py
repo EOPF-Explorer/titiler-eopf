@@ -3,6 +3,7 @@
 from unittest.mock import Mock, patch
 
 import numpy as np
+import pystac
 import pytest
 from openeo_pg_parser_networkx.pg_schema import BoundingBox
 from rasterio.errors import RasterioIOError
@@ -137,6 +138,76 @@ class TestSTACReaderMethods:
             }
             reader_class = reader._get_reader(asset_info)
             assert reader_class != GeoZarrReader
+
+    def test_get_options_zarr_maps_bands_to_variables(self):
+        """Zarr assets: `bands` resolves to `variables`, by common name or
+        by the band's own `name` (both must map to the same underlying
+        variable, matching `_get_asset_info`'s Zarr band selection)."""
+        with patch("titiler.eopf.openeo.reader.SimpleSTACReader.__attrs_post_init__"):
+            mock_item = Mock()
+            mock_item.bbox = [0, 0, 1, 1]
+            reader = STACReader(mock_item)
+
+            metadata = pystac.Asset(
+                href="s3://x/a.zarr",
+                media_type="application/vnd+zarr",
+                extra_fields={
+                    "bands": [
+                        {"name": "b04", "eo:common_name": "red"},
+                        {"name": "b03", "eo:common_name": "green"},
+                    ]
+                },
+            )
+
+            _, by_common = reader._get_options(
+                {"name": "a", "bands": ["red", "green"]}, metadata
+            )
+            assert by_common["variables"] == ["b04", "b03"]
+
+            _, by_name = reader._get_options({"name": "a", "bands": ["b04"]}, metadata)
+            assert by_name["variables"] == ["b04"]
+
+    def test_get_options_non_zarr_delegates_to_upstream(self):
+        """Non-Zarr assets: `bands` -> `indexes` is now upstream's own logic
+        (`SimpleSTACReader._get_options`, delegated via `super()`), not a
+        local copy. Exercises the positional-index fallback specifically --
+        it depends on upstream's own bugfix (titiler-openeo#378) rather than
+        anything local, so this is the test that would catch a regression on
+        either side of that delegation."""
+        with patch("titiler.eopf.openeo.reader.SimpleSTACReader.__attrs_post_init__"):
+            mock_item = Mock()
+            mock_item.bbox = [0, 0, 1, 1]
+            reader = STACReader(mock_item)
+
+            metadata = pystac.Asset(
+                href="s3://x/a.tif",
+                media_type="image/tiff",
+                extra_fields={
+                    "bands": [{"description": "first"}, {"description": "second"}]
+                },
+            )
+
+            _, mo = reader._get_options({"name": "a", "bands": ["2"]}, metadata)
+            assert mo["indexes"] == [2]
+
+    def test_get_options_variables_and_sel_pass_through(self):
+        """`variables`/`sel` are EOPF-only options with no upstream
+        equivalent; must survive delegation for non-Zarr/no-bands assets."""
+        with patch("titiler.eopf.openeo.reader.SimpleSTACReader.__attrs_post_init__"):
+            mock_item = Mock()
+            mock_item.bbox = [0, 0, 1, 1]
+            reader = STACReader(mock_item)
+
+            metadata = pystac.Asset(
+                href="s3://x/a.zarr", media_type="application/vnd+zarr"
+            )
+
+            _, mo = reader._get_options(
+                {"name": "a", "variables": ["b04"], "sel": ["time=2024-01-01"]},
+                metadata,
+            )
+            assert mo["variables"] == ["b04"]
+            assert mo["sel"] == ["time=2024-01-01"]
 
 
 class TestReader:
