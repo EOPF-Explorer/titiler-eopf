@@ -132,8 +132,6 @@ def set_env(redis_host, monkeypatch) -> Generator[TestClient, Any, Any]:
     # STAC API
     monkeypatch.setenv("TITILER_EOPF_STAC_API_URL", "https://fake.api.io/stac")
 
-    monkeypatch.setenv("TITILER_EOPF_API_ENABLE_EXTERNAL_DATASET_ENDPOINTS", "TRUE")
-
 
 @pytest.fixture
 def app(set_env) -> Generator[TestClient, Any, Any]:

@@ -2,6 +2,7 @@
 
 import logging
 import os
+from collections.abc import Callable
 from typing import Annotated, Any, Literal
 from urllib.parse import urlencode
 
@@ -33,6 +34,8 @@ logger = logging.getLogger(__name__)
 @define(kw_only=True)
 class TilerFactory(BaseTilerFactory):
     """Xarray Tiler Factory."""
+
+    path_dependency: Callable[..., str]
 
     reader: type[GeoZarrReader] = GeoZarrReader
 

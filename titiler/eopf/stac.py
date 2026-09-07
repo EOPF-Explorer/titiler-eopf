@@ -7,16 +7,18 @@ from typing import Annotated, Any, cast
 import attr
 import pystac
 import zarr
-from fastapi import Query
+from fastapi import Path, Query
 from pydantic import AfterValidator
 from rio_tiler.errors import InvalidAssetName
 from rio_tiler.io.stac import DEFAULT_VALID_TYPE, STAC_ALTERNATE_KEY
 from rio_tiler.models import Info
 from rio_tiler.types import AssetInfo, AssetType, AssetWithOptions
+from starlette.requests import Request
 
 from titiler.core.dependencies import DefaultDependency, ExpressionParams
 from titiler.eopf.reader import GeoZarrReader
 from titiler.stacapi.backend import STACAPIBackend
+from titiler.stacapi.dependencies import get_stac_item
 from titiler.stacapi.reader import SimpleSTACReader, STACAPIReader
 
 _VALID_TYPE = {
@@ -345,3 +347,33 @@ class EOPFSTACAPIBackend(STACAPIBackend):
     """Custom EOPF STACAPI Backend."""
 
     reader: type[EOPFSimpleSTACReader] = attr.ib(default=EOPFSimpleSTACReader)
+
+
+def asset_path_parameter(
+    request: Request,
+    collection_id: Annotated[str, Path(description="STAC Collection Identifier")],
+    item_id: Annotated[str, Path(description="STAC Item Identifier")],
+    asset_id: Annotated[str, Path(description="STAC Asset Identifier")],
+) -> str:
+    """STAC Asset dependency."""
+    headers: dict[str, Any] = {}
+    item = get_stac_item(
+        request.app.state.stac_url,
+        collection_id,
+        item_id,
+        headers=headers,
+    )
+
+    if asset_id not in item.assets:
+        raise InvalidAssetName(
+            f"'{asset_id}' is not valid, should be one of {list(item.assets)}"
+        )
+
+    asset_info = item.assets[asset_id]
+
+    url = asset_info.get_absolute_href()
+    if STAC_ALTERNATE_KEY and asset_info.extra_fields.get("alternate"):
+        if alternate := asset_info.extra_fields["alternate"].get(STAC_ALTERNATE_KEY):
+            url = alternate["href"]
+
+    return url

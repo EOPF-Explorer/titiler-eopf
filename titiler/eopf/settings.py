@@ -17,7 +17,6 @@ class ApiSettings(BaseSettings):
     cachecontrol: str = "public, max-age=3600"
     root_path: str = ""
     debug: bool = False
-    enable_external_dataset_endpoints: bool = False
 
     model_config = SettingsConfigDict(
         env_prefix="TITILER_EOPF_API_", env_file=".env", extra="ignore"

@@ -48,6 +48,13 @@ from titiler.stacapi.errors import STACAPI_STATUS_CODES
 
 from . import __version__ as titiler_version
 from .cache_deps import setup_cache
+from .extensions import (
+    DatasetMetadataExtension,
+    EOPFChunkVizExtension,
+    EOPFViewerExtension,
+    EOPFwmtsExtension,
+)
+from .factory import TilerFactory
 from .settings import ApiSettings, EOPFCacheSettings, STACAPISettings
 from .stac import (
     AssetsExprParams,
@@ -55,6 +62,7 @@ from .stac import (
     EOPFSimpleSTACReader,
     EOPFSTACAPIBackend,
     EOPFSTACAPIReader,
+    asset_path_parameter,
 )
 
 # Configure logging
@@ -196,7 +204,35 @@ TITILER_CONFORMS_TO = {
 }
 
 
-# STAC Item Endpoints
+###############################################################################
+# STAC COLLECTION Endpoints - /collections/{collection_id}
+# Notes:
+# - The `path_dependency` is set to `STACCollectionSearchParams` which define `{collection_id}`
+# `Path` dependency and other Query parameters used to construct STAC API Search request.
+collection = MosaicTilerFactory(
+    path_dependency=CollectionSearch,
+    backend=EOPFSTACAPIBackend,
+    backend_dependency=BackendParams,
+    dataset_reader=EOPFSimpleSTACReader,
+    assets_accessor_dependency=STACAPIExtensionParams,
+    layer_dependency=AssetsExprParams,
+    router_prefix="/collections/{collection_id}",
+    add_viewer=True,
+    templates=templates,
+    extensions=[
+        wmtsExtensionMosaic(),
+    ],
+)
+app.include_router(
+    collection.router,
+    tags=["EOPF Collections"],
+    prefix="/collections/{collection_id}",
+)
+TITILER_CONFORMS_TO.update(collection.conforms_to)
+
+
+###############################################################################
+# STAC ITEM Endpoints - /collections/{collection_id}/items/{item_id}
 def _get_renders_item(obj) -> dict:
     renders = obj.item.properties.get("renders", {})
     for render in renders.values():
@@ -224,59 +260,26 @@ app.include_router(
 )
 TITILER_CONFORMS_TO.update(items.conforms_to)
 
-# STAC COLLECTION Endpoints
-# Notes:
-# - The `path_dependency` is set to `STACCollectionSearchParams` which define `{collection_id}`
-# `Path` dependency and other Query parameters used to construct STAC API Search request.
-collection = MosaicTilerFactory(
-    path_dependency=CollectionSearch,
-    backend=EOPFSTACAPIBackend,
-    backend_dependency=BackendParams,
-    dataset_reader=EOPFSimpleSTACReader,
-    assets_accessor_dependency=STACAPIExtensionParams,
-    layer_dependency=AssetsExprParams,
-    router_prefix="/collections/{collection_id}",
-    add_viewer=True,
+###############################################################################
+# STAC ASSET Endpoints - /collections/{collection_id}/items/{item_id}/assets/{asset_id}
+asset = TilerFactory(
+    path_dependency=asset_path_parameter,
     templates=templates,
     extensions=[
-        wmtsExtensionMosaic(),
+        DatasetMetadataExtension(),
+        EOPFViewerExtension(),
+        EOPFChunkVizExtension(),
+        EOPFwmtsExtension(),
     ],
+    router_prefix="/collections/{collection_id}/items/{item_id}/assets/{asset_id}",
 )
 app.include_router(
-    collection.router,
-    tags=["EOPF Collections"],
-    prefix="/collections/{collection_id}",
+    asset.router,
+    prefix="/collections/{collection_id}/items/{item_id}/assets/{asset_id}",
+    tags=["EOPF Products"],
 )
-TITILER_CONFORMS_TO.update(collection.conforms_to)
 
-
-# External EOPF product
-if settings.enable_external_dataset_endpoints:
-    from .extensions import (
-        DatasetMetadataExtension,
-        EOPFChunkVizExtension,
-        EOPFViewerExtension,
-        EOPFwmtsExtension,
-    )
-    from .factory import TilerFactory
-
-    external = TilerFactory(
-        templates=templates,
-        extensions=[
-            DatasetMetadataExtension(),
-            EOPFViewerExtension(),
-            EOPFChunkVizExtension(),
-            EOPFwmtsExtension(),
-        ],
-        router_prefix="/external",
-    )
-    app.include_router(
-        external.router,
-        prefix="/external",
-        tags=["EOPF Products"],
-    )
-
-    TITILER_CONFORMS_TO.update(external.conforms_to)
+TITILER_CONFORMS_TO.update(asset.conforms_to)
 
 
 ###############################################################################
