@@ -1281,8 +1281,7 @@ class GeoZarrReader(BaseReader):
 
         if expression:
             variables = self.parse_expression(expression)
-        print(expression)
-        print(variables)
+
         if not variables:
             raise MissingVariables(
                 "`variables` must be passed via `expression` or `variables` options."
@@ -1329,7 +1328,7 @@ class GeoZarrReader(BaseReader):
         if expression:
             # NOTE: translate expression from {group:variable} to Var{ix}
             expression = self._convert_expression_to_index(expression)
-            print(expression)
+
             # NOTE: `apply_expression` method uses band_names (e.g b1) not band_descriptions
             img = img.apply_expression(expression)
 
