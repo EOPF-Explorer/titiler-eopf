@@ -198,18 +198,23 @@ def test_dataset_3d(app, geozarr_3d_dataset):
     assert info["count"] == 1
 
 
-def test_viewer(app, geozarr):
+def test_viewer(app, geozarr_dataset):
     """Test /viewer endpoint, with and without render presets in the query string."""
-    collection, item = geozarr
-    response = app.get(f"/collections/{collection}/items/{item}/viewer")
+    response = app.get(
+        "/external/viewer",
+        params={
+            "url": f"file://{geozarr_dataset}",
+        },
+    )
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     # the template pre-selects tile parameters found in the page query string
     assert "applyPresetFromQuery" in response.text
 
     response = app.get(
-        f"/collections/{collection}/items/{item}/viewer",
+        "/external/viewer",
         params={
+            "url": f"file://{geozarr_dataset}",
             "variables": [
                 "/measurements/reflectance:b04",
                 "/measurements/reflectance:b03",
@@ -227,9 +232,7 @@ def test_viewer(app, geozarr):
     assert response.status_code == 200
     parameters = {
         param["name"]
-        for param in response.json()["paths"][
-            "/collections/{collection_id}/items/{item_id}/viewer"
-        ]["get"]["parameters"]
+        for param in response.json()["paths"]["/external/viewer"]["get"]["parameters"]
     }
     assert {
         "variables",

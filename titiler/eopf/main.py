@@ -211,8 +211,9 @@ items = MultiBaseTilerFactory(
     layer_dependency=AssetsExprParams,
     router_prefix="/collections/{collection_id}/items/{item_id}",
     add_viewer=True,
+    get_renders=_get_renders_item,
     extensions=[
-        wmtsExtension(get_renders=_get_renders_item),  # type: ignore [attr-defined]
+        wmtsExtension(),
     ],
     templates=templates,
 )
