@@ -264,10 +264,10 @@ class EOPFSTACAPIReader(STACAPIReader):
         def _key_to_var(v: str) -> str:
             if ":" in v:
                 group, var = v.split(":")
-                group = "root" if group == "/" else group
-                return f"{group}_{var}"
+                return var if group == "/" else f"{group.lstrip("/")}_{var}"
             return v
 
+        # Keys are in form or "{asset_name}_({group_name}_)?{variable_name}"
         return {
             f"{asset_name.rstrip("|")}_{_key_to_var(key)}": value
             for asset_name, info in infos.items()

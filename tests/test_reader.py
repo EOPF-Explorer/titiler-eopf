@@ -656,3 +656,94 @@ def test_sel_on_int64_axis_raises_bad_request(geozarr_3d_dataset):
             "b02",
             sel=["time=2022-01-02T00:00:00.000000000"],
         )
+
+
+def test_root_group(geozarr_dataset):
+    """test GeoZarrReader open."""
+    with GeoZarrReader(f"{geozarr_dataset}/measurements/reflectance") as src:
+        assert isinstance(src.datatree, xarray.DataTree)
+        assert src.groups == ["/"]
+        assert src.variables == [
+            "b02",
+            "b03",
+            "b04",
+            "b05",
+            "b06",
+            "b07",
+            "b08",
+            "b11",
+            "b12",
+            "b8a",
+        ]
+
+        assert src.crs == "EPSG:32633"
+
+        # We don't have the shape the whole dataset
+        assert not src.height
+        assert not src.width
+        assert not src.transform
+
+        # If the root group has spatial information
+        # we can derive min/max zooms
+        assert src.minzoom == 10
+        assert src.maxzoom == 14
+
+        img = src.preview(variables=["b02"], max_size=128)
+
+        bounds = src.get_geographic_bounds(crs="EPSG:4326")
+        lon, lat = (bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2
+        tile = src.tms.tile(lon, lat, 10)
+
+        img = src.tile(*tile, variables=["b02"])
+        assert img.band_names == ["b1"]
+        assert img.band_descriptions == ["b02"]
+        assert img.data.shape == (1, 256, 256)
+
+        img = src.tile(*tile, expression="b02+b03")
+        assert img.band_names == ["b1"]
+        assert img.band_descriptions == ["b02+b03"]
+        assert img.data.shape == (1, 256, 256)
+
+
+def test_sub_group(geozarr_dataset):
+    """test GeoZarrReader open."""
+    with GeoZarrReader(f"{geozarr_dataset}/measurements") as src:
+        assert isinstance(src.datatree, xarray.DataTree)
+        assert src.groups == ["/reflectance"]
+        assert src.variables == [
+            "/reflectance:b02",
+            "/reflectance:b03",
+            "/reflectance:b04",
+            "/reflectance:b05",
+            "/reflectance:b06",
+            "/reflectance:b07",
+            "/reflectance:b08",
+            "/reflectance:b11",
+            "/reflectance:b12",
+            "/reflectance:b8a",
+        ]
+
+        # We don't have the shape the whole dataset
+        assert not src.height
+        assert not src.width
+        assert not src.transform
+
+        assert src.minzoom == 0
+        assert src.maxzoom == 24
+        assert src.crs == "EPSG:4326"
+
+        img = src.preview(variables=["/reflectance:b02"], max_size=128)
+
+        bounds = src.get_geographic_bounds(crs="EPSG:4326")
+        lon, lat = (bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2
+        tile = src.tms.tile(lon, lat, 10)
+
+        img = src.tile(*tile, variables=["/reflectance:b02"])
+        assert img.band_names == ["b1"]
+        assert img.band_descriptions == ["/reflectance:b02"]
+        assert img.data.shape == (1, 256, 256)
+
+        img = src.tile(*tile, expression="/reflectance:b02+/reflectance:b03")
+        assert img.band_names == ["b1"]
+        assert img.band_descriptions == ["/reflectance:b02+/reflectance:b03"]
+        assert img.data.shape == (1, 256, 256)

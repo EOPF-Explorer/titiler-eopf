@@ -83,6 +83,21 @@ def geozarr_stac(geozarr_dataset) -> pystac.Item:
 
 
 @pytest.fixture
+def geozarr_stac_measurements(geozarr_dataset) -> pystac.Item:
+    """Create GeoZARR STAC Item."""
+    env = jinja2.Environment(
+        loader=jinja2.ChoiceLoader(
+            [
+                jinja2.FileSystemLoader(FIXTURES_DIRECTORY),
+            ]
+        )
+    )
+    template = env.get_template("item_measurment.json")
+    rendered = template.render(store_url=f"file://{geozarr_dataset}")
+    return pystac.Item.from_dict(json.loads(rendered))
+
+
+@pytest.fixture
 def geozarr_3d() -> Generator[tuple[str, str], Any, Any]:
     """Create GeoZarr v1 with time dimension fixture."""
     collection_dir = os.path.join(FIXTURES_DIRECTORY, "eopf3d")

@@ -36,16 +36,16 @@ def test_info(get_stac_item, app, geozarr_stac):
     assert response.status_code == 200
     infos = response.json()
     assert list(infos) == [
-        "reflectance_root_b02",
-        "reflectance_root_b03",
-        "reflectance_root_b04",
-        "reflectance_root_b05",
-        "reflectance_root_b06",
-        "reflectance_root_b07",
-        "reflectance_root_b08",
-        "reflectance_root_b11",
-        "reflectance_root_b12",
-        "reflectance_root_b8a",
+        "reflectance_b02",
+        "reflectance_b03",
+        "reflectance_b04",
+        "reflectance_b05",
+        "reflectance_b06",
+        "reflectance_b07",
+        "reflectance_b08",
+        "reflectance_b11",
+        "reflectance_b12",
+        "reflectance_b8a",
     ]
 
     response = app.get(
@@ -56,16 +56,16 @@ def test_info(get_stac_item, app, geozarr_stac):
     assert response.headers["content-type"] == "application/json"
     infos = response.json()
     assert list(infos) == [
-        "reflectance_root_b02",
-        "reflectance_root_b03",
-        "reflectance_root_b04",
-        "reflectance_root_b05",
-        "reflectance_root_b06",
-        "reflectance_root_b07",
-        "reflectance_root_b08",
-        "reflectance_root_b11",
-        "reflectance_root_b12",
-        "reflectance_root_b8a",
+        "reflectance_b02",
+        "reflectance_b03",
+        "reflectance_b04",
+        "reflectance_b05",
+        "reflectance_b06",
+        "reflectance_b07",
+        "reflectance_b08",
+        "reflectance_b11",
+        "reflectance_b12",
+        "reflectance_b8a",
     ]
 
     response = app.get(
@@ -204,16 +204,16 @@ def test_dataset_3d(get_stac_item, app, geozarr_3d_stac):
     assert response.headers["content-type"] == "application/json"
     infos = response.json()
     assert list(infos) == [
-        "reflectance_root_b02",
-        "reflectance_root_b03",
-        "reflectance_root_b04",
-        "reflectance_root_b05",
-        "reflectance_root_b06",
-        "reflectance_root_b07",
-        "reflectance_root_b08",
-        "reflectance_root_b11",
-        "reflectance_root_b12",
-        "reflectance_root_b8a",
+        "reflectance_b02",
+        "reflectance_b03",
+        "reflectance_b04",
+        "reflectance_b05",
+        "reflectance_b06",
+        "reflectance_b07",
+        "reflectance_b08",
+        "reflectance_b11",
+        "reflectance_b12",
+        "reflectance_b8a",
     ]
 
     response = app.get(
@@ -254,3 +254,61 @@ def test_dataset_3d(get_stac_item, app, geozarr_3d_stac):
     assert len(info["band_descriptions"]) == 1
     assert info["band_descriptions"] == [["b1", "2022-01-01T00:00:00.000000000"]]
     assert info["dimensions"] == ["y", "x"]
+
+
+@patch("titiler.stacapi.dependencies.get_stac_item")
+def test_info_measurements(get_stac_item, app, geozarr_stac_measurements):
+    """Test /info routes."""
+    collection = geozarr_stac_measurements.collection_id
+    item = geozarr_stac_measurements.id
+
+    get_stac_item.return_value = geozarr_stac_measurements
+
+    response = app.get(f"/collections/{collection}/items/{item}/assets")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+    assert response.json() == ["measurements"]
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/info",
+        params={
+            "assets": "measurements",
+        },
+    )
+    assert list(response.json()) == [
+        "measurements_reflectance_b02",
+        "measurements_reflectance_b03",
+        "measurements_reflectance_b04",
+        "measurements_reflectance_b05",
+        "measurements_reflectance_b06",
+        "measurements_reflectance_b07",
+        "measurements_reflectance_b08",
+        "measurements_reflectance_b11",
+        "measurements_reflectance_b12",
+        "measurements_reflectance_b8a",
+    ]
+    info = response.json()["measurements_reflectance_b02"]
+    assert len(info["band_descriptions"]) == 1
+    assert info["band_descriptions"][0][0] == "b1"
+    assert info["band_descriptions"][0][1] == "b02"
+    assert info["name"] == "b02"
+    assert info["dimensions"] == ["y", "x"]
+    assert info["count"] == 1
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/info",
+        params={
+            "assets": "measurements|variables=/reflectance:b02",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/preview",
+        params={
+            "assets": "measurements|expression=/reflectance:b02+/reflectance:b03",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
