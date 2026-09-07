@@ -155,6 +155,75 @@ class AssetsExprParams(ExpressionParams, AssetsParams):
     ] = None
 
 
+def _get_options(  # noqa: C901
+    asset: AssetWithOptions,
+    metadata: dict,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Return Method/Reader options for a given asset and stac metadata."""
+    method_options: dict[str, Any] = {}
+    reader_options: dict[str, Any] = {}
+    if isinstance(asset, dict):
+        # Indexes
+        if indexes := asset.get("indexes"):
+            method_options["indexes"] = indexes
+        # Expression
+        if expr := asset.get("expression"):
+            method_options["expression"] = expr
+        # Variables
+        if vars := asset.get("variables"):
+            method_options["variables"] = vars
+        # Sel (dimension selection)
+        if vars := asset.get("sel"):
+            method_options["sel"] = vars
+        # Bands
+        if bands := asset.get("bands"):
+            stac_bands = metadata.get("bands") or metadata.get("eo:bands")
+            if not stac_bands:
+                raise ValueError(
+                    "Asset does not have 'bands' metadata, unable to use 'bands' option"
+                )
+
+            # For Zarr bands = variable
+            media_type = metadata.get("type", "")
+            zarr_media_types = [
+                "application/x-zarr",
+                "application/vnd.zarr",
+                "application/vnd+zarr",
+            ]
+            if media_type.split(";")[0].strip() in zarr_media_types:
+                common_to_variable = {
+                    b.get("eo:common_name") or b.get("common_name") or b["name"]: b[
+                        "name"
+                    ]
+                    for b in stac_bands
+                }
+                method_options["variables"] = [
+                    common_to_variable.get(v, v) for v in bands
+                ]
+
+            # For COG bands = indexes
+            else:
+                common_to_variable = {
+                    b.get("eo:common_name")
+                    or b.get("common_name")
+                    or b.get("name")
+                    or str(ix): ix
+                    for ix, b in enumerate(stac_bands, 1)
+                }
+                band_indexes: list[int] = []
+                for b in bands:
+                    if idx := common_to_variable.get(b):
+                        band_indexes.append(idx)
+                    else:
+                        raise ValueError(
+                            f"Band '{b}' not found in asset metadata, unable to use 'bands' option"
+                        )
+
+                    method_options["indexes"] = band_indexes
+
+    return reader_options, method_options
+
+
 @attr.s
 class EOPFSTACAPIReader(STACAPIReader):
     """Custom EOPF STACAPI Reader."""
@@ -208,75 +277,7 @@ class EOPFSTACAPIReader(STACAPIReader):
         asset: AssetWithOptions,
         metadata: pystac.Asset,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        method_options: dict[str, Any] = {}
-        reader_options: dict[str, Any] = {}
-
-        # Indexes
-        if indexes := asset.get("indexes"):
-            method_options["indexes"] = indexes
-        # Expression
-        if expr := asset.get("expression"):
-            method_options["expression"] = expr
-        # Variables
-        if vars := asset.get("variables"):
-            method_options["variables"] = vars
-        # Sel (dimension selection)
-        if vars := asset.get("sel"):
-            method_options["sel"] = vars
-        # Bands
-        if bands := asset.get("bands"):
-            stac_bands = (
-                metadata.extra_fields.get("bands")
-                or metadata.extra_fields.get("eo:bands")  # V1.0
-            )
-            if not stac_bands:
-                raise ValueError(
-                    "Asset does not have 'bands' metadata, unable to use 'bands' option"
-                )
-            # For Zarr bands = variable
-            media_type = (
-                metadata.media_type.split(";")[0].strip() if metadata.media_type else ""
-            )
-            zarr_media_types = [
-                "application/x-zarr",
-                "application/vnd.zarr",
-                "application/vnd+zarr",
-            ]
-            if media_type in zarr_media_types:
-                common_to_variable = {
-                    b.get("eo:common_name") or b.get("common_name") or b["name"]: b[
-                        "name"
-                    ]
-                    for b in stac_bands
-                }
-                method_options["variables"] = [
-                    common_to_variable.get(v, v) for v in bands
-                ]
-
-            # For COG bands = indexes
-            else:
-                # There is no standard for precedence between 'eo:common_name' and 'name'
-                # in STAC specification, so we will use 'eo:common_name' if it exists,
-                # otherwise fallback to 'name', and if not exist use the band index as last resource.
-                common_to_variable = {
-                    b.get("eo:common_name")
-                    or b.get("common_name")
-                    or b.get("name")
-                    or str(ix): ix
-                    for ix, b in enumerate(stac_bands, 1)
-                }
-                band_indexes: list[int] = []
-                for b in bands:
-                    if idx := common_to_variable.get(b):
-                        band_indexes.append(idx)
-                    else:
-                        raise ValueError(
-                            f"Band '{b}' not found in asset metadata, unable to use 'bands' option"
-                        )
-
-                    method_options["indexes"] = band_indexes
-
-        return reader_options, method_options
+        return _get_options(asset, metadata.to_dict())
 
 
 @attr.s
@@ -309,70 +310,7 @@ class EOPFSimpleSTACReader(SimpleSTACReader):
 
         asset_info = self.input["assets"][asset_name]
 
-        method_options: dict[str, Any] = {}
-        reader_options: dict[str, Any] = {}
-        if isinstance(asset, dict):
-            # Indexes
-            if indexes := asset.get("indexes"):
-                method_options["indexes"] = indexes
-            # Expression
-            if expr := asset.get("expression"):
-                method_options["expression"] = expr
-            # Variables
-            if vars := asset.get("variables"):
-                method_options["variables"] = vars
-            # Sel (dimension selection)
-            if vars := asset.get("sel"):
-                method_options["sel"] = vars
-            # Bands
-            if bands := asset.get("bands"):
-                stac_bands = asset_info.get("bands") or asset_info.get("eo:bands")
-                if not stac_bands:
-                    raise ValueError(
-                        "Asset does not have 'bands' metadata, unable to use 'bands' option"
-                    )
-
-                # For Zarr bands = variable
-                media_type = (
-                    asset_info["type"].split(";")[0].strip()
-                    if asset_info["type"]
-                    else ""
-                )
-                zarr_media_types = [
-                    "application/x-zarr",
-                    "application/vnd.zarr",
-                    "application/vnd+zarr",
-                ]
-                if media_type in zarr_media_types:
-                    common_to_variable = {
-                        b.get("eo:common_name") or b.get("common_name") or b["name"]: b[
-                            "name"
-                        ]
-                        for b in stac_bands
-                    }
-                    method_options["variables"] = [
-                        common_to_variable.get(v, v) for v in bands
-                    ]
-
-                # For COG bands = indexes
-                else:
-                    common_to_variable = {
-                        b.get("eo:common_name")
-                        or b.get("common_name")
-                        or b.get("name")
-                        or str(ix): ix
-                        for ix, b in enumerate(stac_bands, 1)
-                    }
-                    band_indexes: list[int] = []
-                    for b in bands:
-                        if idx := common_to_variable.get(b):
-                            band_indexes.append(idx)
-                        else:
-                            raise ValueError(
-                                f"Band '{b}' not found in asset metadata, unable to use 'bands' option"
-                            )
-
-                        method_options["indexes"] = band_indexes
+        reader_options, method_options = _get_options(asset, asset_info)
 
         info = AssetInfo(
             url=asset_info["href"],
