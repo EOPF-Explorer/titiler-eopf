@@ -109,7 +109,7 @@ wait_http() {
 # them without these raises ValidationError. That is true of the current image
 # too — it is app behaviour, not image behaviour, so the contract test supplies
 # the env rather than treating it as a failure.
-#   titiler/eopf/dependencies.py  -> DataStoreSettings()
+#   titiler/eopf/dependencies.py  -> STACAPISettings() | ApiSettings() | EOPFCacheSettings()
 #   titiler/eopf/openeo/main.py   -> BackendSettings()
 RASTER_ENV=(-e TITILER_EOPF_STAC_API_URL=https://api.explorer.eopf.copernicus.eu/stac)
 OPENEO_ENV=(
