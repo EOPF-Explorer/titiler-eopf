@@ -929,6 +929,64 @@ const updateUI = () => {
   }
 }
 
+// Pre-select rendering options from the page query string (same parameters as
+// the tile endpoints: variables, bidx, rescale, color_formula, colormap_name)
+// and render immediately. Returns false when the query does not map onto this
+// dataset's variables, leaving the default (manual) behavior untouched.
+const applyPresetFromQuery = () => {
+  const query = new URLSearchParams(window.location.search)
+  const variables = query.getAll('variables')
+  if (variables.length === 0 || !variables.every(v => scope.variables.includes(v))) return false
+
+  const bidx = query.getAll('bidx')
+
+  const selectByBidx = (selectorId, value) => {
+    const opt = [...document.getElementById(selectorId).options].find(o => o.getAttribute('bidx') === value)
+    if (opt) opt.selected = true
+  }
+
+  if (variables.length === 3) {
+    // variables composition: one band per variable, mapped to RGB
+    const composeSwitch = document.getElementById('compose-switch')
+    composeSwitch.checked = true
+    composeSwitch.dispatchEvent(new Event('change'))
+    document.getElementById('r-selector').value = variables[0]
+    document.getElementById('g-selector').value = variables[1]
+    document.getElementById('b-selector').value = variables[2]
+  } else if (variables.length === 1 && bidx.length === 3) {
+    // single variable, 3 bands mapped to RGB
+    document.getElementById('variables-selector').value = variables[0]
+    init3bUI()
+    selectByBidx('r-selector', bidx[0])
+    selectByBidx('g-selector', bidx[1])
+    selectByBidx('b-selector', bidx[2])
+  } else if (variables.length === 1) {
+    // single variable, single band
+    document.getElementById('variables-selector').value = variables[0]
+    init1bUI()
+    if (bidx.length === 1) selectByBidx('layer-selector', bidx[0])
+    if (query.has('colormap_name')) {
+      const cmapOpt = [...document.getElementById('colormap-selector').options].find(o => o.value === query.get('colormap_name'))
+      if (cmapOpt) cmapOpt.selected = true
+    }
+  } else {
+    return false
+  }
+
+  // after the pane init above, which resets min/max to the dtype range
+  if (query.has('rescale')) {
+    const minmax = query.get('rescale').split(',')
+    document.getElementById('data-min').value = minmax[0]
+    document.getElementById('data-max').value = minmax[1]
+  }
+  if (query.has('color_formula')) {
+    document.getElementById('ColorFormulaValue').value = query.get('color_formula')
+  }
+
+  updateViz()
+  return true
+}
+
 map.on('load', () => {
   fetch(`${info_endpoint}`)
     .then(res => {
@@ -969,6 +1027,7 @@ map.on('load', () => {
     })
     .then(() => {
       updateUI()
+      applyPresetFromQuery()
       document.getElementById('loader').classList.add('off')
     })
     .catch(err => {
