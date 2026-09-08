@@ -75,13 +75,56 @@ def test_info(get_stac_item, app, geozarr_stac):
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
     infos = response.json()
-    assert "reflectance|bands=['b02','b03']_b02" in infos
-    assert "reflectance|bands=['b02','b03']_b03" in infos
+    assert "reflectance_b02" in infos
+    assert "reflectance_b03" in infos
 
-    info = infos["reflectance|bands=['b02','b03']_b02"]
+    info = infos["reflectance_b02"]
     assert len(info["band_descriptions"]) == 1
     assert info["band_descriptions"] == [["b1", "b02"]]
     assert info["dimensions"] == ["y", "x"]
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/info",
+        params={"assets": "reflectance|bands=red"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+    infos = response.json()
+    assert infos["reflectance_b04"]
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/statistics",
+        params={"assets": "reflectance|expression=b02+b04"},
+    )
+
+
+@patch("titiler.stacapi.dependencies.get_stac_item")
+def test_statistics(get_stac_item, app, geozarr_stac):
+    """Test /statistics routes."""
+    collection = geozarr_stac.collection_id
+    item = geozarr_stac.id
+
+    get_stac_item.return_value = geozarr_stac
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/statistics",
+        params={"assets": "reflectance|bands=red"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+    infos = response.json()
+    assert infos["b1"]
+    assert infos["b1"]["description"] == "reflectance_b04"
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/statistics",
+        params={"assets": "reflectance|expression=b02+b04"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+    infos = response.json()
+    assert infos["b1"]
+    assert infos["b1"]["description"] == "reflectance_b02+b04"
 
 
 @patch("titiler.stacapi.dependencies.get_stac_item")
@@ -223,10 +266,10 @@ def test_dataset_3d(get_stac_item, app, geozarr_3d_stac):
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
     infos = response.json()
-    assert "reflectance|bands=['b02','b03']_b02" in infos
-    assert "reflectance|bands=['b02','b03']_b03" in infos
+    assert "reflectance_b02" in infos
+    assert "reflectance_b03" in infos
 
-    info = infos["reflectance|bands=['b02','b03']_b02"]
+    info = infos["reflectance_b02"]
     assert len(info["band_descriptions"]) == 2
     assert info["band_descriptions"] == [
         ["b1", "2022-01-01T00:00:00.000000000"],
@@ -243,14 +286,9 @@ def test_dataset_3d(get_stac_item, app, geozarr_3d_stac):
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
     infos = response.json()
-    assert (
-        "reflectance|bands=['b02']&sel=['time=2022-01-01T00:00:00.000000000']_b02"
-        in infos
-    )
+    assert "reflectance_b02" in infos
 
-    info = infos[
-        "reflectance|bands=['b02']&sel=['time=2022-01-01T00:00:00.000000000']_b02"
-    ]
+    info = infos["reflectance_b02"]
     assert len(info["band_descriptions"]) == 1
     assert info["band_descriptions"] == [["b1", "2022-01-01T00:00:00.000000000"]]
     assert info["dimensions"] == ["y", "x"]

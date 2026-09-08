@@ -91,6 +91,8 @@ def test_info(get_stac_item, app, geozarr_stac):
     assert info["name"] == "b02"
     assert info["dimensions"] == ["y", "x"]
     assert info["count"] == 1
+    assert info["group"] == "/"
+    assert info["variable"] == "b02"
 
     response = app.get(
         f"/collections/{collection}/items/{item}/assets/{asset}/info",
@@ -380,6 +382,8 @@ def test_info_measurements(get_stac_item, app, geozarr_stac_measurements):
     assert info["name"] == "b02"
     assert info["dimensions"] == ["y", "x"]
     assert info["count"] == 1
+    assert info["group"] == "/reflectance"
+    assert info["variable"] == "b02"
 
     response = app.get(
         f"/collections/{collection}/items/{item}/assets/{asset}/info",
@@ -412,3 +416,33 @@ def test_info_measurements(get_stac_item, app, geozarr_stac_measurements):
     )
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/png"
+
+
+@patch("titiler.eopf.stac.get_stac_item")
+def test_statistics(get_stac_item, app, geozarr_stac):
+    """Test /statistics routes."""
+    collection = geozarr_stac.collection_id
+    item = geozarr_stac.id
+    asset = "reflectance"
+
+    get_stac_item.return_value = geozarr_stac
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/assets/{asset}/statistics",
+        params={"variables": "b02"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+    infos = response.json()
+    assert infos["b1"]
+    assert infos["b1"]["description"] == "b02"
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/assets/{asset}/statistics",
+        params={"expression": "b02+b04"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+    infos = response.json()
+    assert infos["b1"]
+    assert infos["b1"]["description"] == "b02+b04"

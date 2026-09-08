@@ -269,7 +269,7 @@ class EOPFSTACAPIReader(STACAPIReader):
 
         # Keys are in form or "{asset_name}_({group_name}_)?{variable_name}"
         return {
-            f"{asset_name.rstrip("|")}_{_key_to_var(key)}": value
+            f"{asset_name.split("|")[0]}_{_key_to_var(key)}": value
             for asset_name, info in infos.items()
             for key, value in info.items()
         }

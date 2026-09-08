@@ -59,30 +59,6 @@ class TilerFactory(BaseTilerFactory):
     add_part: bool = field(default=True)
     add_preview: bool = field(default=True)
 
-    def register_routes(self):
-        """This Method register routes to the router."""
-        self.info()
-        # self.statistics()
-
-        self.tilesets()
-        self.tile()
-        if self.add_viewer:
-            self.map_viewer()
-
-        self.tilejson()
-
-        self.point()
-
-        # Optional Routes
-        if self.add_preview:
-            self.preview()
-
-        if self.add_part:
-            self.part()
-
-        if self.add_ogc_maps:
-            self.ogc_maps()
-
     # Custom /info endpoints
     def info(self):
         """Register /info endpoint."""

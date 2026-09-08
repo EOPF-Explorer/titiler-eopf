@@ -1042,7 +1042,12 @@ class GeoZarrReader(BaseReader):
                     input=self._get_variable(group, variable, sel=sel),
                     options={},
                 ) as da:
-                    return da.info()
+                    info_dict = da.info().model_dump()
+                    return Info(
+                        **info_dict,
+                        group=group,
+                        variable=variable,
+                    )
             except Exception as e:
                 logger.info(f"Failed to get info for variable '{group_var}': {e!s}")
                 return None

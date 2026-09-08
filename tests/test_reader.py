@@ -61,12 +61,15 @@ def test_info(geozarr_dataset):
         # Default to all variables
         info = src.info()
         assert src.variables == list(info)
+
         info = src.info(variables=["/measurements/reflectance:b02"])
         info_b02 = info["/measurements/reflectance:b02"]
         assert info_b02.crs == "http://www.opengis.net/def/crs/EPSG/0/32633"
         assert info_b02.band_descriptions == [("b1", "b02")]
         assert info_b02.width == 1000
         assert info_b02.height == 1000
+        assert info_b02.variable == "b02"
+        assert info_b02.group == "/measurements/reflectance"
 
 
 def test_tile(geozarr_dataset):
@@ -722,6 +725,10 @@ def test_sub_group(geozarr_dataset):
             "/reflectance:b12",
             "/reflectance:b8a",
         ]
+
+        info = src.info(variables=["/reflectance:b02"])
+        assert info["/reflectance:b02"].variable == "b02"
+        assert info["/reflectance:b02"].group == "/reflectance"
 
         # We don't have the shape the whole dataset
         assert not src.height
