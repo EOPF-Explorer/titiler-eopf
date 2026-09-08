@@ -34,16 +34,16 @@ def test_dataset(get_stac_item, app, geozarr_stac):
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
     assert response.json() == [
-        "/:b02",
-        "/:b03",
-        "/:b04",
-        "/:b05",
-        "/:b06",
-        "/:b07",
-        "/:b08",
-        "/:b11",
-        "/:b12",
-        "/:b8a",
+        "b02",
+        "b03",
+        "b04",
+        "b05",
+        "b06",
+        "b07",
+        "b08",
+        "b11",
+        "b12",
+        "b8a",
     ]
 
     response = app.get(
@@ -73,24 +73,26 @@ def test_info(get_stac_item, app, geozarr_stac):
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
     assert list(response.json()) == [
-        "/:b02",
-        "/:b03",
-        "/:b04",
-        "/:b05",
-        "/:b06",
-        "/:b07",
-        "/:b08",
-        "/:b11",
-        "/:b12",
-        "/:b8a",
+        "b02",
+        "b03",
+        "b04",
+        "b05",
+        "b06",
+        "b07",
+        "b08",
+        "b11",
+        "b12",
+        "b8a",
     ]
-    info = response.json()["/:b02"]
+    info = response.json()["b02"]
     assert len(info["band_descriptions"]) == 1
     assert info["band_descriptions"][0][0] == "b1"
     assert info["band_descriptions"][0][1] == "b02"
     assert info["name"] == "b02"
     assert info["dimensions"] == ["y", "x"]
     assert info["count"] == 1
+    assert info["group"] == "/"
+    assert info["variable"] == "b02"
 
     response = app.get(
         f"/collections/{collection}/items/{item}/assets/{asset}/info",
@@ -139,6 +141,19 @@ def test_preview(get_stac_item, app, geozarr_stac):
     assert response.headers["content-type"] == "image/png"
     profile = parse_img(response.content)
     assert profile["count"] == 4
+    assert profile["dtype"] == "uint8"
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/assets/{asset}/preview.png",
+        params=(
+            ("expression", "b04+b03+b02"),
+            ("rescale", "0,3"),
+        ),
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    profile = parse_img(response.content)
+    assert profile["count"] == 2
     assert profile["dtype"] == "uint8"
 
 
@@ -201,34 +216,34 @@ def test_dataset_3d(get_stac_item, app, geozarr_3d_stac):
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
     assert response.json() == [
-        "/:b02",
-        "/:b03",
-        "/:b04",
-        "/:b05",
-        "/:b06",
-        "/:b07",
-        "/:b08",
-        "/:b11",
-        "/:b12",
-        "/:b8a",
+        "b02",
+        "b03",
+        "b04",
+        "b05",
+        "b06",
+        "b07",
+        "b08",
+        "b11",
+        "b12",
+        "b8a",
     ]
 
     response = app.get(f"/collections/{collection}/items/{item}/assets/{asset}/info")
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
     assert list(response.json()) == [
-        "/:b02",
-        "/:b03",
-        "/:b04",
-        "/:b05",
-        "/:b06",
-        "/:b07",
-        "/:b08",
-        "/:b11",
-        "/:b12",
-        "/:b8a",
+        "b02",
+        "b03",
+        "b04",
+        "b05",
+        "b06",
+        "b07",
+        "b08",
+        "b11",
+        "b12",
+        "b8a",
     ]
-    info = response.json()["/:b02"]
+    info = response.json()["b02"]
     assert len(info["band_descriptions"]) == 2
     assert info["band_descriptions"][0][0] == "b1"
     assert info["band_descriptions"][0][1] == "2022-01-01T00:00:00.000000000"
@@ -334,3 +349,100 @@ def test_chunks_extension(get_stac_item, app, geozarr_stac):
     )
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
+
+
+@patch("titiler.eopf.stac.get_stac_item")
+def test_info_measurements(get_stac_item, app, geozarr_stac_measurements):
+    """Test /info routes."""
+    collection = geozarr_stac_measurements.collection_id
+    item = geozarr_stac_measurements.id
+    asset = "measurements"
+
+    get_stac_item.return_value = geozarr_stac_measurements
+
+    response = app.get(f"/collections/{collection}/items/{item}/assets/{asset}/info")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+    assert list(response.json()) == [
+        "/reflectance:b02",
+        "/reflectance:b03",
+        "/reflectance:b04",
+        "/reflectance:b05",
+        "/reflectance:b06",
+        "/reflectance:b07",
+        "/reflectance:b08",
+        "/reflectance:b11",
+        "/reflectance:b12",
+        "/reflectance:b8a",
+    ]
+    info = response.json()["/reflectance:b02"]
+    assert len(info["band_descriptions"]) == 1
+    assert info["band_descriptions"][0][0] == "b1"
+    assert info["band_descriptions"][0][1] == "b02"
+    assert info["name"] == "b02"
+    assert info["dimensions"] == ["y", "x"]
+    assert info["count"] == 1
+    assert info["group"] == "/reflectance"
+    assert info["variable"] == "b02"
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/assets/{asset}/info",
+        params={
+            "variables": "/reflectance:b02",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+    assert list(response.json()) == [
+        "/reflectance:b02",
+    ]
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/assets/{asset}/preview",
+        params={
+            "variables": "/reflectance:b02",
+            "rescale": "0,1",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/assets/{asset}/preview",
+        params={
+            "expression": "/reflectance:b02+/reflectance:b03",
+            "rescale": "0,2",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+
+
+@patch("titiler.eopf.stac.get_stac_item")
+def test_statistics(get_stac_item, app, geozarr_stac):
+    """Test /statistics routes."""
+    collection = geozarr_stac.collection_id
+    item = geozarr_stac.id
+    asset = "reflectance"
+
+    get_stac_item.return_value = geozarr_stac
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/assets/{asset}/statistics",
+        params={"variables": "b02"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+    infos = response.json()
+    assert infos["b1"]
+    assert infos["b1"]["description"] == "b02"
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/assets/{asset}/statistics",
+        params={"expression": "b02+b04"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+    infos = response.json()
+    assert infos["b1"]
+    assert infos["b1"]["description"] == "b02+b04"
