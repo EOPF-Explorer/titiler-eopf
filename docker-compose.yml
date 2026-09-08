@@ -42,12 +42,10 @@ services:
       - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
       - AWS_REGION=${AWS_REGION}
       - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL}
-      - TITILER_EOPF_STORE_SCHEME=s3
-      - TITILER_EOPF_STORE_HOST=esa-zarr-sentinel-explorer-fra
-      - TITILER_EOPF_STORE_PATH=tests-output
       # Cache environment variables (will be overridden by .env file)
       - TITILER_EOPF_CACHE_HOST=cache
       - TITILER_EOPF_CACHE_ENABLE=True
+      - TITILER_EOPF_STAC_API_URL=https://api.explorer.eopf.copernicus.eu/stac
     volumes:
       - ./:/data
     depends_on:

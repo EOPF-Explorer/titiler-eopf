@@ -2,7 +2,8 @@
 
 import logging
 import os
-from typing import Annotated, Any, Callable, Literal
+from collections.abc import Callable
+from typing import Annotated, Any, Literal
 from urllib.parse import urlencode
 
 import rasterio
@@ -24,7 +25,7 @@ from titiler.core.resources.responses import GeoJSONResponse, JSONResponse
 from titiler.core.utils import bounds_to_geometry
 from titiler.xarray.dependencies import DatasetParams
 
-from .dependencies import DatasetPathParams, LayerParams, VariablesParams
+from .dependencies import LayerParams, VariablesParams
 from .reader import GeoZarrReader
 
 logger = logging.getLogger(__name__)
@@ -34,9 +35,9 @@ logger = logging.getLogger(__name__)
 class TilerFactory(BaseTilerFactory):
     """Xarray Tiler Factory."""
 
-    reader: type[GeoZarrReader] = GeoZarrReader
+    path_dependency: Callable[..., str]
 
-    path_dependency: Callable[..., Any] = DatasetPathParams
+    reader: type[GeoZarrReader] = GeoZarrReader
 
     reader_dependency: type[DefaultDependency] = DefaultDependency
 
@@ -57,30 +58,6 @@ class TilerFactory(BaseTilerFactory):
     add_ogc_maps: bool = field(default=True)
     add_part: bool = field(default=True)
     add_preview: bool = field(default=True)
-
-    def register_routes(self):
-        """This Method register routes to the router."""
-        self.info()
-        # self.statistics()
-
-        self.tilesets()
-        self.tile()
-        if self.add_viewer:
-            self.map_viewer()
-
-        self.tilejson()
-
-        self.point()
-
-        # Optional Routes
-        if self.add_preview:
-            self.preview()
-
-        if self.add_part:
-            self.part()
-
-        if self.add_ogc_maps:
-            self.ogc_maps()
 
     # Custom /info endpoints
     def info(self):

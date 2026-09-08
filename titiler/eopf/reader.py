@@ -527,6 +527,15 @@ class GeoZarrReader(BaseReader):
             bounds = attributes.get("spatial:bbox")
             crs = _get_proj_crs(attributes)
 
+            try:
+                # Get Max Zoom for the root group
+                self.maxzoom = self.get_maxzoom("/")
+
+                # Get Min Zoom for the root group
+                self.minzoom = self.get_minzoom("/")
+            except AssertionError:
+                pass
+
         if all([bounds, crs]):
             self.bounds = bounds
             self.crs = crs
@@ -594,6 +603,9 @@ class GeoZarrReader(BaseReader):
             # Select a group
             tree = self.datatree[g]
 
+            # We don't add `/` for root level variables
+            group_name = f"{g}:" if g != "/" else ""
+
             # If a Group is a Multiscale group then we collect variables from all scales
             # GeoZarr V1
             if _has_multiscales(tree.attrs.get("zarr_conventions", [])):
@@ -608,7 +620,7 @@ class GeoZarrReader(BaseReader):
                             if data_array.ndim > 0
                         }
                     )
-                variables.extend(f"{g}:{v}" for v in sorted(all_vars))
+                variables.extend(f"{group_name}{v}" for v in sorted(all_vars))
 
             else:
                 # Only include multidimensional data variables (not 0D attributes)
@@ -617,7 +629,7 @@ class GeoZarrReader(BaseReader):
                     for var, data_array in tree.data_vars.items()
                     if data_array.ndim > 0
                 ]
-                variables.extend(f"{g}:{v}" for v in multidim_vars)
+                variables.extend(f"{group_name}{v}" for v in multidim_vars)
 
         return variables
 
@@ -1030,7 +1042,12 @@ class GeoZarrReader(BaseReader):
                     input=self._get_variable(group, variable, sel=sel),
                     options={},
                 ) as da:
-                    return da.info()
+                    info_dict = da.info().model_dump()
+                    return Info(
+                        **info_dict,
+                        group=group,
+                        variable=variable,
+                    )
             except Exception as e:
                 logger.info(f"Failed to get info for variable '{group_var}': {e!s}")
                 return None

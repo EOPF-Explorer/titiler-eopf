@@ -109,9 +109,9 @@ wait_http() {
 # them without these raises ValidationError. That is true of the current image
 # too — it is app behaviour, not image behaviour, so the contract test supplies
 # the env rather than treating it as a failure.
-#   titiler/eopf/dependencies.py  -> DataStoreSettings()
+#   titiler/eopf/dependencies.py  -> STACAPISettings() | ApiSettings() | EOPFCacheSettings()
 #   titiler/eopf/openeo/main.py   -> BackendSettings()
-RASTER_ENV=(-e TITILER_EOPF_STORE_URL=s3://smoke-test-bucket/smoke-test-path)
+RASTER_ENV=(-e TITILER_EOPF_STAC_API_URL=https://api.explorer.eopf.copernicus.eu/stac)
 OPENEO_ENV=(
   -e TITILER_OPENEO_STAC_API_URL=https://api.explorer.eopf.copernicus.eu/stac
   -e TITILER_OPENEO_STORE_URL=/services/store.json
