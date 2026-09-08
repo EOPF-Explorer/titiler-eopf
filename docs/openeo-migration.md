@@ -1166,3 +1166,54 @@ caches whatever `titiler.openeo.stacapi.Client` resolves to on first access — 
 permanently poison that cache with a `MagicMock` for every later test in the file, making `/readyz`
 falsely report healthy. Fixed by placing the health tests before `test_openeo_app` in file order (noted
 inline in the test docstring); no production code involved. Full suite: 129/129.
+
+### 7.19 `get_multiscale_level` picked a resolution level with no regard for whether it had the band
+
+Production traceback, first-pixel mosaic (`apply_pixel_selection`): `KeyError('Could not find node at
+b05')` out of `xarray`'s `DataTree.__getitem__`, uncaught, 500. Not a titiler-openeo issue — the
+exception originates entirely inside `titiler/eopf/reader.py`'s own GeoZarr/`DataTree` handling.
+
+Root cause: `get_multiscale_level()` (`titiler/eopf/reader.py`) picks a multiscale resolution level by
+proximity to the requested output resolution alone. It takes a `variable` parameter but never once
+referenced it in the body — a strong tell the filtering was meant to happen and never did. EOPF's
+Sentinel-2 GeoZarr layout stores 10m-native bands (b02/b03/b04/b08) only at the `r10m` level; every other
+band (b05 included) starts at `r20m`. A high-resolution request for b05 computes a target resolution near
+10m, `get_multiscale_level` picks `r10m` regardless, and `_get_variable`'s `tree[scale][variable]` raises
+the raw `KeyError` instead of falling back to `r20m`, the next level that actually has the band.
+
+Fixed by filtering candidate scales to those containing `variable` before the resolution match. The
+caller already guarantees at least one scale has the variable (the `layout`/`StopIteration` check earlier
+in `_get_variable`), so the filtered list can never end up empty.
+
+Reproduced and verified with the existing `geozarr` (v1) fixture, which already models this exact
+per-scale band layout (`create_multiscale_fixture.py`'s own comments even document it: "Level 0 (10m):
+Only native 10m bands"). New regression test
+`tests/test_reader.py::test_part_falls_back_to_a_scale_that_has_the_band`, confirmed to fail pre-fix.
+PR: [#156](https://github.com/EOPF-Explorer/titiler-eopf/pull/156), stacked on §7.18's PR.
+
+### 7.20 Rebased the whole stack onto main after PR #114/#158 landed — one real reconciliation
+
+`main` picked up a large, unrelated set of changes in the meantime: PR #114 (new
+`/collections/{id}/items/{id}` asset endpoints, `EOPFSTACAPIReader`) and PR #158 (`fix/better-handle-groups`,
+root/sub-group support in `GeoZarrReader`), plus a 0.11.0 release. Rebasing the 4-PR stack
+(#152 → #153 → #155 → #156) onto the new `main` surfaced exactly one real conflict, in
+`titiler/eopf/stac.py`: PR #114 independently extracted the same `bands` → `variables`/`indexes` option
+logic our own §7.12 had deduplicated, but into a *broader* module-level `_get_options(asset, metadata)`
+(shared by both the new `EOPFSTACAPIReader` and the existing `EOPFSimpleSTACReader`) — and it kept the
+**old, buggy** inline Zarr-band mapping (permissive `common_to_variable.get(v, v)` fallback: no error on
+an unknown band name, `KeyError` on a band with no `name`), not our `_resolve_zarr_bands` helper.
+
+Reconciled by keeping upstream's broader extraction (`EOPFSimpleSTACReader._get_asset_info` now just
+calls the shared `_get_options`, same as `EOPFSTACAPIReader`) and swapping `_resolve_zarr_bands` in for
+its Zarr branch — so both readers, including the new asset endpoints, get §7.12's two bug fixes for free.
+`titiler/eopf/reader.py`, `titiler/eopf/openeo/*`, and `pyproject.toml` all rebased with no conflicts
+(different line ranges from PR #158's own `reader.py` changes). `uv.lock` conflicted at every commit that
+touched it, as expected for a generated file — resolved by regenerating it with `uv lock` at each of
+those two commits (the initial titiler-openeo bump, and the later `openeo`-client/pystac-override commit)
+rather than hand-merging, so every one of the 4 branch tips carries a lockfile consistent with its own
+`pyproject.toml` (the repo's CI runs a strict `uv sync --frozen` benchmark job on PRs, not just pushes to
+`main`, so a stale lock at an intermediate branch would have broken that job).
+
+All 4 branches force-pushed to their rebased history; PR numbers, bases, and stacking unchanged. Full
+suite verified independently at the bottom of the stack (chore/openeo-0.18-bump: 125/125) and at the tip
+(fix/multiscale-band-fallback: 136/136, the 11 extra tests being PR #114/#158's own new endpoint tests).
