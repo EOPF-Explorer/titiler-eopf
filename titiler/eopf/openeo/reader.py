@@ -17,7 +17,7 @@ from rio_tiler.tasks import multi_arrays
 from rio_tiler.types import AssetInfo, AssetType, AssetWithOptions, BBox
 from rio_tiler.utils import cast_to_sequence, inherit_rasterio_env
 
-from titiler.openeo.reader import SimpleSTACReader
+from titiler.openeo.reader import SimpleSTACReader, _inherit_derived_band_masks
 
 from ..reader import GeoZarrReader
 from ..stac import _resolve_zarr_bands
@@ -115,7 +115,6 @@ class STACReader(SimpleSTACReader):
         """Custom `part` method.
 
         NOTE:
-            - HTTPS -> S3 URI replacement
             - BBOX check before reading
 
         Custom PART method for multi-asset reading.
@@ -164,12 +163,6 @@ class STACReader(SimpleSTACReader):
             method_options = {**asset_info["method_options"], **kwargs}
 
             uri = asset_info["url"]
-
-            # TODO: add s3 alternate in STAC Items
-            uri = uri.replace(
-                "https://esa-zarr-sentinel-explorer-fra.s3.de.io.cloud.ovh.net/",
-                "s3://esa-zarr-sentinel-explorer-fra/",
-            )
 
             with self.ctx(**asset_info.get("env", {})):
                 with reader(input=uri, tms=self.tms, **reader_options) as src:
@@ -221,11 +214,14 @@ class STACReader(SimpleSTACReader):
                 assets,
                 _reader,
                 bbox,
-                allowed_exceptions=(
-                    TileOutsideBounds,
-                    ValueError,
-                    IndexError,
-                ),
+                # Only TileOutsideBounds -- matches mosaic_reader's own default one
+                # level up. A wider tuple here used to swallow real option
+                # errors (e.g. an unknown band name from _get_options)
+                # silently: filter_tasks logs allowed exceptions at INFO and
+                # drops the asset, so the ValueError naming the bad band
+                # never reached the caller -- with every asset then dropped,
+                # this degraded into a generic "no valid data" failure.
+                allowed_exceptions=(TileOutsideBounds,),
                 **kwargs,
             )
         except ValueError as e:
@@ -265,10 +261,34 @@ def _reader(item: dict[str, Any], bbox: BBox, **kwargs: Any) -> ImageData:
     retry_delay = 1.0  # seconds
     retries = 0
 
+    # Extract item info for logging
+    item_id = (
+        item.get("id", "unknown")
+        if isinstance(item, dict)
+        else getattr(item, "id", "unknown")
+    )
+    item_datetime = (
+        item.get("properties", {}).get("datetime", "unknown")
+        if isinstance(item, dict)
+        else getattr(item, "datetime", None) or "unknown"
+    )
+
+    logger.debug(f"Loading STAC item: {item_id} (datetime: {item_datetime})")
+
     while True:
         try:
             with STACReader(item) as src_dst:  # type: ignore
                 img = src_dst.part(bbox, **kwargs)
+
+                requested = kwargs.get("assets")
+                if requested:
+                    # getattr, not a direct attribute access: some tests
+                    # substitute a minimal stand-in for STACReader that does
+                    # not carry this (SimpleSTACReader-internal) attribute --
+                    # treat that the same as "no derived bands".
+                    img = _inherit_derived_band_masks(
+                        img, getattr(src_dst, "_derived_bands", {}), requested
+                    )
 
                 # IMPORTANT: We intentionally do NOT set cutline_mask on individual tiles.
                 #
@@ -291,15 +311,24 @@ def _reader(item: dict[str, Any], bbox: BBox, **kwargs: Any) -> ImageData:
                 # correctly tracks which pixels have valid data vs nodata, and this
                 # mask is properly combined during mosaicking via FirstMethod.feed().
 
+                logger.debug(
+                    f"  Loaded {item_id}: {img.width}x{img.height}, "
+                    f"bands={img.count}, dtype={img.data.dtype}"
+                )
+
                 return img
         except RasterioIOError as e:
             retries += 1
             if retries >= max_retries:
                 # If we've reached max retries, re-raise the exception
+                logger.error(
+                    f"Failed to load {item_id} after {max_retries} retries: {e}"
+                )
                 raise
             # Log the error and retry after a delay
             logger.warning(
-                f"RasterioIOError encountered: {str(e)}. Retrying in {retry_delay} seconds... (Attempt {retries}/{max_retries})"
+                f"RasterioIOError loading {item_id}: {str(e)}. "
+                f"Retrying in {retry_delay}s... (Attempt {retries}/{max_retries})"
             )
             time.sleep(retry_delay)
             # Increase delay for next retry (exponential backoff)

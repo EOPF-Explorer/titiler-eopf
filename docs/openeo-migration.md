@@ -213,7 +213,7 @@ lines and the copy is the whole function.
 | --- | --- | --- | --- |
 | `openeo/main.py` | 107 sig-lines, 79% verbatim upstream | EOPF backend + loaders, `load_nodes_ids`, description | **keep** — app entrypoint |
 | `_reader` | 57L vs 94L | **one line** — `STACReader` instead of `SimpleSTACReader` | **drop, or minimise** |
-| `STACReader.part` | 141L vs 81L | bbox pre-check, widened `allowed_exceptions`, OVH URL rewrite | **keep** — narrow the exceptions, propose the guard upstream |
+| `STACReader.part` | 141L vs 81L | bbox pre-check, widened `allowed_exceptions`, OVH URL rewrite | **done — §7.16** (exceptions narrowed, OVH rewrite deleted; bbox guard stays, propose upstream) |
 | `STACReader._get_options` | 73L vs 48L | Zarr `bands`→`variables` branch, `variables`/`sel` pass-through | **done — §7.11** |
 | `LoadCollection.load_collection` | 84L vs 189L | `_parse_asset(bands)` and the EOPF `_reader` — that is all | **narrow hard** |
 | `processes/data/load_collection.json` | — | nothing (verified: no Zarr/notation text) | **done — §7.14, dropped** |
@@ -289,26 +289,29 @@ meet the requested bbox before opening them — and is a reasonable upstream pro
   having no `bands` metadata, get emitted as the bare band name `product` — selecting it resolved to
   `GeoZarrReader` over the entire store with no `variables`, a 500. Same commit also deduplicated the
   composite-asset band aliases (`SR_10m`/`SR_20m`/`SR_60m`/`TCI_10m`).
-- **`_fix_collection` drops `_add_band_summaries()`.** The override calls `_normalize_summaries` and
-  `replace_bands_in_summaries_dict` only, so the new upstream derivation of `summaries.bands` from
-  `item_assets` never runs.
-- **Band dimension shape differs.** This repo publishes a `bands` cube dimension whose values look like
-  `reflectance|bands=b04`; upstream 0.17.0 publishes a `spectral` dimension with sorted `item_assets`
-  keys. openEO Studio's band parser fix
-  ([openeo-studio#103](https://github.com/developmentseed/openeo-studio/pull/103)) targets the upstream
-  shape. Reconcile, or the Studio band picker stays wrong for EOPF collections.
+- ~~**`_fix_collection` drops `_add_band_summaries()`.**~~ **Turned out to be a non-issue, and the
+  real bug was elsewhere — §7.15.** Upstream's `_add_band_summaries()` early-returns if
+  `summaries.bands` is already populated, and EOPF's own `replace_bands_in_summaries_dict` always
+  populates it — so wiring the upstream helper in would just be a guaranteed no-op. Not worth adding.
+- ~~**Band dimension shape differs.**~~ **Was based on not having read `openeo-studio#103`'s actual
+  diff — corrected in §7.15.** [`openeo-studio#103`](https://github.com/developmentseed/openeo-studio/pull/103)
+  (still open, unmerged) checks `summaries.bands` *first*, and its own code comment names "the EOPF
+  explorer backend" as the shape it is written for — its test fixture literally uses
+  `reflectance|b02` as the example. The dimension *name* (`bands` vs `spectral`) does not matter to it
+  either: its `cube:dimensions` fallback matches on `type === "bands"`, not on a specific key, and
+  EOPF's dimension already has `type: "bands"`. No reconciliation needed here — but reading the PR's
+  actual test fixtures surfaced a real, unrelated bug in what EOPF puts in `summaries.bands`: see §7.15.
 
 ### 3.2 `titiler/eopf/openeo/reader.py` — highest risk
 
 - **The module-level `_reader` is a stale copy** of upstream's (57L vs 94L), and **exactly one line is a
-  real override**: `STACReader(item)` where upstream has `SimpleSTACReader(item)`. Everything else the
-  copy does is lose something. There is no hook — upstream hardcodes the class — so the copy cannot be
-  removed until upstream accepts a `reader_cls` parameter (§3.0). Three losses:
-  - `_inherit_derived_band_masks` — needed for band-source/SAR bands. **Port it.**
-  - Item-id and datetime logging. Upstream logs the item being read at DEBUG and names it in the retry
-    warning and the final error; the copy's messages say only "RasterioIOError encountered". Across a
-    mosaic of many items that is the difference between a diagnosable failure and a wall of identical
-    lines. **Port it.**
+  real override**: `STACReader(item)` where upstream has `SimpleSTACReader(item)`. There is no hook —
+  upstream hardcodes the class — so the copy cannot be removed until upstream accepts a `reader_cls`
+  parameter (§3.0). Three losses, two now fixed:
+  - ~~`_inherit_derived_band_masks` — needed for band-source/SAR bands.~~ **Ported — §7.16.**
+  - ~~Item-id and datetime logging.~~ **Ported — §7.16.** Upstream logs the item being read at DEBUG and
+    names it in the retry warning and the final error; the copy's messages used to say only
+    "RasterioIOError encountered", indistinguishable across a mosaic of many items.
   - `_apply_scale_offset` — correctly omitted, but the reasoning is narrower than the code. The
     justification (the GeoZarr `ScaleOffset` codec already applied it) holds **only for Zarr assets**;
     for a COG asset carrying `raster:scale`, upstream would apply it and this copy would not. Checked
@@ -341,25 +344,13 @@ meet the requested bbox before opening them — and is a reasonable upstream pro
   `TileOutsideBounds` conversion, and the OVH URL rewrite below. The pre-check is generic and worth
   proposing upstream; until it is accepted, the copy has to stay, because the guard sits inside `part`'s
   inner `_reader` closure and cannot be added from a subclass.
-- **The `allowed_exceptions` tuple is too broad, and it swallows real errors.** `part` passes
-  `allowed_exceptions=(TileOutsideBounds, ValueError, IndexError)` to `multi_arrays`, one level below
-  `mosaic_reader`, which allows only `(TileOutsideBounds,)`. `rio_tiler.tasks.filter_tasks` discards an
-  allowed exception with nothing but `logger.info(err)`, so a genuine option error is dropped silently.
-  Traced end to end for a mistyped band name on a COG asset:
-
-  1. `_get_options` raises `ValueError: Band 'nope' not found in asset metadata`
-  2. `filter_tasks` swallows it — INFO log only — and drops the asset
-  3. with every asset dropped, `ImageData.create_from_list([])` raises
-     `ValueError: not enough values to unpack (expected 2, got 0)` (verified)
-  4. `part`'s outer handler turns that into `TileOutsideBounds("No valid data found…")`
-  5. `mosaic_reader` allows `TileOutsideBounds` → `EmptyMosaicError` → converted again in
-     `_make_mosaic_task`
-
-  The user gets a generic no-data failure; the sentence naming the bad band never leaves the log. On the
-  live backend this class of error already surfaces as HTTP 500. Narrow the tuple to
-  `(TileOutsideBounds,)` so option errors propagate, and keep the empty-list conversion, which is a
-  genuine rio-tiler wart. Note this compounds §3.5's Zarr passthrough: for a Zarr asset the typo does
-  not even raise — it becomes a bogus variable name.
+- ~~**The `allowed_exceptions` tuple is too broad, and it swallows real errors.**~~ **Fixed — §7.16.**
+  `part` passed `allowed_exceptions=(TileOutsideBounds, ValueError, IndexError)` to `multi_arrays`, one
+  level below `mosaic_reader`, which allows only `(TileOutsideBounds,)`. `rio_tiler.tasks.filter_tasks`
+  discards an allowed exception with nothing but `logger.info(err)`, so a genuine option error was
+  dropped silently — a mistyped band name on a COG asset degraded, through five layers of exception
+  conversion, into a generic no-data failure with the actually-useful error message never leaving the
+  log. Narrowed to `(TileOutsideBounds,)`, keeping the `EmptyMosaicError` conversion around it.
 - **`part` also forwards derived-band `reader_options`.** `_get_derived_asset_info` puts `fetcher`,
   `quantity`, `sibling_href` and the inverse-map cache into `reader_options`, and `part` splats them
   into the reader class returned by `_get_reader`. With the `_get_reader` bug above that class is
@@ -368,9 +359,12 @@ meet the requested bbox before opening them — and is a reasonable upstream pro
 - Two incidental improvements over rio-tiler worth keeping when re-syncing: `stacklevel=2` on both
   `warnings.warn` calls (rio-tiler omits it, so its warnings point at library frames), and
   `reader(input=uri, …)` as a keyword.
-- **Hard-coded OVH host rewrite.** The `https://esa-zarr-sentinel-explorer-fra… → s3://` substitution is
-  already marked `TODO` in the source. 0.17.0 added `_resolve_asset_href`, which honours STAC
-  `alternate` hrefs — the right home for this. Removing it is what lets `part` shrink to the two guards.
+- ~~**Hard-coded OVH host rewrite.**~~ **Removed — §7.16.** Verified against live data first: the
+  substitution already matched nothing on current hrefs (production's domain moved to
+  `s3.explorer.eopf.copernicus.eu`, not the hardcoded `esa-zarr-sentinel-explorer-fra.s3.de.io.cloud.ovh.net`),
+  and `alternate.s3.href` is populated and already resolved automatically by `_get_asset_info`
+  (inherited, unmodified — it calls `_resolve_asset_href` internally). Pure dead-code deletion, not a
+  behaviour change.
 - ~~**`STACReader._get_options` (73L vs 48L) is the one copy that is genuinely EOPF.**~~ **Narrowed
   in §7.11** — the non-Zarr branch (verbatim upstream logic) now delegates to
   `super()._get_options()`; only the genuinely EOPF-specific parts stay local:
@@ -561,14 +555,17 @@ corrupts values if left at its new default.
 
 Scope: titiler-eopf · the real work
 
-Two things at once, and the order matters. **First narrow the copies** per the §3.0 verdicts — delete
-`load_collection.json`, strip `part` down to its two guards, extract the shared Zarr band helper.
-(`_get_options`'s non-Zarr delegation is done — §7.11.)
-**Then apply the remaining fixes** — `_add_band_summaries`, the band-dimension shape, mask inheritance
-in `_reader`, the asset-href rewrite, plus health endpoints in `main.py` — plus the band-notation
-cleanup: migrate the 11 stale references in `services/eopf-explorer.json` and fix the five docstrings
-that still document `asset|band`. (`max_items`, task `items` metadata, and `_get_reader`'s derived-band
-fallthrough are done — §7.9.)
+Two things at once, and the order matters. **First narrow the copies** per the §3.0 verdicts — strip
+`part` down to its two guards. (`load_collection.json` deletion is done — §7.14; `_get_options`'s
+non-Zarr delegation is done — §7.11; the shared Zarr band helper is extracted — §7.12.)
+**Then apply the remaining fixes** — health endpoints in `main.py` — plus the band-notation cleanup:
+migrate the 11 stale references in `services/eopf-explorer.json`.
+(`max_items`, task `items` metadata, `_get_reader`'s derived-band fallthrough, mask inheritance in
+`_reader`, and the asset-href rewrite are done — §7.9/§7.16; the stale docstrings are fixed — §7.17,
+which also caught a third instance of the same parsing bug fixed in §7.15, this time in
+`getzarrvariables`;
+`replace_bands_in_summaries_dict`'s two bugs are fixed — §7.15; `_add_band_summaries`/band-dimension
+shape turned out to need no work at all — §7.15.)
 
 Narrowing first is what makes the fixes small: `max_items` and the missing `items` metadata are one-line
 changes against upstream's `load_collection`, and only became hand-ports because a 189-line function had
@@ -616,8 +613,10 @@ and the narratives only read tiles anyway.
 ### developmentseed/openeo-studio
 
 - [PR #103](https://github.com/developmentseed/openeo-studio/pull/103) ("Fix STAC band parsing for cube
-  dimensions") is open and is *referenced by name* in upstream's 0.17.0 source as the reason
-  `_add_band_summaries` exists. Land it, or keep the workaround.
+  dimensions") is open, unmerged. Worth landing regardless of this migration — it already targets
+  EOPF's `summaries.bands` shape directly (§7.15), and EOPF's side of that contract is now actually
+  correct (two real bugs fixed there this migration; previously every qualified band's metadata was
+  silently dropped).
 - Emit `<asset>|bands=<band>`, not `<asset>|<band>`, wherever the Studio builds a band reference for an
   EOPF collection. The old form is rejected, not tolerated.
 - Update spec-driven form generation for `ndwi`: band *names*, not indices, plus `target_band`.
@@ -1036,3 +1035,101 @@ unchanged from §3.3's original finding). `load_zarr.json` in the same directory
 genuinely EOPF-only.
 
 Full suite: 119/119.
+
+### 7.15 Two real bugs in `replace_bands_in_summaries_dict`, found by actually reading `openeo-studio#103`
+
+Started this as "reconcile the band dimension shape for Studio compatibility" (§3.1's original framing).
+Reading `openeo-studio#103`'s actual diff — not just its title — showed that framing was wrong: the PR's
+`extractBandsFromSummaries` checks `summaries.bands` *first*, its own code comment names "the EOPF
+explorer backend" as the shape it targets, and its test fixture uses `reflectance|b02` as the literal
+example. No dimension-name reconciliation was ever needed.
+
+But verifying that claim — building the real `summaries.bands` output end to end
+(`add_data_cubes_if_missing` → `.to_dict()` → `_fix_collection`, not just calling `_fix_collection` on a
+raw dict, which skips the step that populates `cube:dimensions` and made an earlier check of mine
+silently test the wrong thing) — surfaced two real, independent bugs in
+`replace_bands_in_summaries_dict`:
+
+1. **The qualified-band branch never matched anything, for every band, on every collection.**
+   `cube_band_name.split("|", 1)` on `"B01_20m|bands=B01"` gives `band_name = "bands=B01"` — the
+   `bands=` notation change from §2.1 (0.8.0) was never propagated into this function. The lookup
+   against the original `summaries.bands` (named plain `"B01"`) never matched, so *every* qualified
+   band's description/`eo:common_name`/wavelength was silently dropped, replaced by a bare
+   `{"name": "B01_20m|bands=B01"}`. Fixed by parsing through `_parse_asset` (`titiler/eopf/stac.py`,
+   the single place that already owns this notation) instead of hand-splitting on `"|"` again.
+2. **The asset-only branch (bands with no `|`) read the wrong dict.** It looked up
+   `collection_dict["assets"]` — the collection-level assets (a thumbnail, nothing else) — never
+   `item_assets`, where a band's actual description (as `title`, occasionally `description`) lives. So
+   `AOT_10m`/`SCL_20m`/`WVP_10m` always fell through to the generic `"Data from X asset"` filler.
+
+Both verified against real data, both catalogue shapes: `stac.core.eopf.eodc.eu`'s per-band-plus-composite
+collection and production's older single-`reflectance`-asset one. Simulated Studio's own label/wavelength
+extraction against the fixed output — correct on both.
+
+**Also deleted `replace_bands_in_summaries`** (the non-dict, `pystac.Collection`-typed sibling of the
+function above) — same two bugs, but genuinely dead code: zero call sites anywhere in the repo, and its
+own last line's comment already said so — `# Set the bands in summaries (though this won't be used)`.
+
+New tests: `tests/test_band_summaries.py` (4 tests — the two bug fixes, plus the two paths' existing
+fallback behaviour, confirmed to still work). Confirmed both bug-catching tests fail on the pre-fix code
+and pass after. Full suite: 123/123.
+
+### 7.16 `_reader`/`part` narrowed further: two ports, one narrowing, one deletion
+
+Four of §3.2's remaining items, landed together since they touch the same two functions:
+
+- **`_inherit_derived_band_masks` ported into `_reader`.** Restores upstream's mask-inheritance step
+  for band-source-derived bands (SAR noise/calibration LUTs, S2 view/sun angles) when `assets` is
+  requested. Verified as a safe no-op for EOPF's normal case first (`_inherit_derived_band_masks(img, {},
+  requested)` returns the identical object unchanged, confirmed by identity check) — EOPF's own STAC
+  data isn't in upstream's `BAND_SOURCES` registry, so `_derived_bands` is always empty here today; the
+  port is there for when that changes, not because it does anything yet.
+- **Item-id/datetime logging ported into `_reader`.** Matches upstream: item and datetime logged at
+  DEBUG on load, both DEBUG and the retry/failure WARNING/ERROR messages now name the item, instead of
+  a bare "RasterioIOError encountered" indistinguishable across a mosaic of many items.
+- **`part`'s `allowed_exceptions` narrowed** from `(TileOutsideBounds, ValueError, IndexError)` to
+  `(TileOutsideBounds,)`, matching `mosaic_reader`'s own default one level up — stops a genuine option
+  error (e.g. an unknown band name) from being silently swallowed and degrading into a generic
+  no-data failure five layers down.
+- **The hard-coded OVH host rewrite deleted.** Verified against live data before touching it, not
+  assumed: production's current hrefs use `s3.explorer.eopf.copernicus.eu`, a domain the hardcoded
+  string never matched in the first place, and `alternate.s3.href` is populated and already resolved
+  automatically by inherited, unmodified `_get_asset_info`. Confirmed pure dead-code deletion.
+
+New tests: `tests/test_io.py` — `test_part_allowed_exceptions_is_narrow`,
+`test_reader_calls_inherit_derived_band_masks_when_assets_requested`,
+`test_reader_skips_inherit_derived_band_masks_without_assets` (3 tests). All three confirmed to fail
+against the pre-change code (the first two by direct stash-and-rerun; the third's counterpart
+implicitly, since `_inherit_derived_band_masks` didn't exist to import). Full suite: 126/126.
+
+The bbox pre-check inside `part`'s inner `_reader` closure is the one thing left in §3.2 that cannot be
+removed without an upstream `reader_cls`/hook change (§3.0) — it lives inside a closure a subclass
+cannot reach independently.
+
+### 7.17 Stale docstrings fixed — and a third instance of §7.15's parsing bug found in the process
+
+Of the "five stale docstrings" §3.1 flagged, only three were genuinely stale documentation of *current*
+behaviour, in `getzarrvariables` (`titiler/eopf/openeo/stacapi.py`): its docstring and two inline
+comments still said `"asset|band"`. Fixed to `"asset|bands=band"`.
+
+The other two are correctly left alone: the 0.4.0 `CHANGELOG.md` entry is a historical record of a past
+release and should not be rewritten to describe a scheme it didn't ship with; and a comment added in
+this same migration (§7.15, explaining *why* `replace_bands_in_summaries_dict` used to be broken)
+correctly references the old `"asset|band"` shape as historical context, not as current documentation.
+
+While fixing the docstring, found `getzarrvariables` had the **same parsing bug** as §7.15's, a third
+independent instance of it: `band_ref.split("|")` on `"reflectance|bands=b04"` (no `maxsplit`, no
+stripping of the `bands=` option key) gave `band_name = "bands=b04"`, not `"b04"`. Lower severity than
+§7.15's — the extracted value is only used as a *fallback* description string
+(`f"{band_name} band from {asset_name}"`, when a band has no `description` of its own) — but real
+STAC-visible client output (`cube:variables`, published via `GET /collections/{id}`) whenever that
+fallback is hit. Fixed with the same approach: parse through `_parse_asset` instead of hand-splitting.
+
+Verified directly: old vs. new logic compared side by side for both the piped and bare-name shapes
+(`reflectance|bands=b04` → `b04` not `bands=b04`; `AOT_10m` → `AOT_10m` unchanged, matching the original
+fallback exactly). New test: `tests/test_band_summaries.py::test_getzarrvariables_uses_band_name_not_bands_equals_prefix`
+— confirmed to fail on the pre-fix code. Full suite: 127/127.
+
+Still open from Phase 3's band-notation cleanup: the 11 stale `asset|band` references in
+`services/eopf-explorer.json` — housekeeping for fresh deployments, not the actual Phase 0 cutover
+(§4's own finding: that file never affects users who already have services, i.e. anyone in production).
