@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788869739556,
+  "lastUpdate": 1788872501591,
   "repoUrl": "https://github.com/EOPF-Explorer/titiler-eopf",
   "entries": {
     "titiler-eopf Benchmarks": [
@@ -1768,6 +1768,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.03326819954299539",
             "extra": "mean: 396.7644679400041 msec\nrounds: 50"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "emmanuel.mathot@gmail.com",
+            "name": "Emmanuel Mathot",
+            "username": "emmanuelmathot"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "657abe4cdff44c3d48805f1f26f82ebb77b9412f",
+          "message": "fix(reader): pick a multiscale level that actually has the requested band (#156)\n\n* fix(reader): GeoZarr multiscale level selection must only pick scales that carry the variable\n\nget_multiscale_level() picked a resolution level by proximity alone,\nignoring whether the requested band even exists there (its `variable`\nparameter was accepted but never used). EOPF's Sentinel-2 GeoZarr layout\nstores 10m-native bands (b02/b03/b04/b08) only at r10m; every other band\n(e.g. b05) starts at r20m. A high-resolution request for b05 computed a\ntarget resolution near 10m, selected r10m anyway, and\n`tree[scale][variable]` raised a raw KeyError('Could not find node at\nb05') instead of falling back to r20m -- surfacing as an uncaught 500\nthrough apply_pixel_selection's first-pixel mosaic (not a titiler-openeo\nissue: EOPF's own zarr/datatree reader is the actual source).\n\nFixed by filtering candidate scales to those containing the variable\nbefore the resolution match. Reproduced and verified with the existing\n`geozarr` (v1) fixture, which already models this exact per-scale band\nlayout; new regression test confirmed to fail pre-fix. Full suite:\n111/111.\n\nCo-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>\n\n* docs(openeo): record the multiscale fallback fix and the main rebase\n\n§7.19: PR #156 (get_multiscale_level ignoring the variable parameter).\n§7.20: rebasing the 4-PR stack onto main after PR #114/#158 landed, and\nreconciling the one real conflict in titiler/eopf/stac.py (upstream's own\nparallel _get_options extraction vs. our _resolve_zarr_bands dedup).\n\nCo-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Sonnet 5 <noreply@anthropic.com>",
+          "timestamp": "2026-09-08T14:57:52+02:00",
+          "tree_id": "bb01b9b294e04a144d74383683e8d0f93e0a7121",
+          "url": "https://github.com/EOPF-Explorer/titiler-eopf/commit/657abe4cdff44c3d48805f1f26f82ebb77b9412f"
+        },
+        "date": 1788872501029,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "GeoZarrReader-Open",
+            "value": 50.340294298280796,
+            "unit": "iter/sec",
+            "range": "stddev: 0.017433527533653015",
+            "extra": "mean: 19.86480241999999 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Info",
+            "value": 53.18945525274821,
+            "unit": "iter/sec",
+            "range": "stddev: 0.001995304367464503",
+            "extra": "mean: 18.800718962962716 msec\nrounds: 54"
+          },
+          {
+            "name": "GeoZarrReader-Preview",
+            "value": 2.8463576830716204,
+            "unit": "iter/sec",
+            "range": "stddev: 0.02664650264447884",
+            "extra": "mean: 351.3261899400005 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Tile",
+            "value": 2.2208791134003256,
+            "unit": "iter/sec",
+            "range": "stddev: 0.06090954765346739",
+            "extra": "mean: 450.2721440199994 msec\nrounds: 50"
           }
         ]
       }
