@@ -1,6 +1,8 @@
 """Custom stacApiBackend for EOPF."""
 
-from attrs import define, field
+from typing import Optional
+
+from attrs import define
 from openeo_pg_parser_networkx.pg_schema import BoundingBox, TemporalInterval
 from pystac import Collection, Item
 from pystac.extensions import datacube as dc
@@ -74,23 +76,80 @@ def get_band_names(asset_name: str, asset) -> list[str]:
     return [f"{asset_name}|bands={band['name']}" for band in bands if band.get("name")]
 
 
-def get_all_band_names(collection: Collection) -> list[str]:
+def get_all_band_names(collection: Collection) -> list[str]:  # noqa: C901
     """Get all unique band references from collection item assets.
+
+    Some EOPF collections publish the same band several times over: once as
+    its own single-band, single-resolution asset (e.g. Sentinel-2's
+    ``B02_10m``, declaring one band named ``B02``), and again inside a
+    multi-band composite covering the same or another resolution (``SR_10m``,
+    ``SR_20m``, ``SR_60m``, and the true-colour ``TCI_10m``, none of which
+    carry a rendering role in this catalogue's metadata, so a naive per-asset
+    walk cannot tell them apart from real per-band data). Left unfiltered,
+    that means up to four different names for one physical band
+    (``B02_10m|bands=B02``, ``SR_10m|bands=B02``, ``SR_20m|bands=B02``,
+    ``SR_60m|bands=B02``) -- all reading the identical pixels at whatever
+    resolution their asset happens to be, which is confusing to advertise and
+    doubles as an easy way to end up mixing resolutions across a request
+    without noticing.
+
+    When a band name is available from a **single-band** asset, that is
+    always the preferred, and only advertised, source for it: a composite
+    asset's copy of the same band is dropped. A band that is *only* ever
+    published inside a composite (no single-band asset declares it) keeps
+    every composite that carries it -- dropping those would make the band
+    unreachable rather than just less redundantly named, which this function
+    must never do.
 
     Returns:
         List of band references in format 'asset_name|bands=band_name' if bands exist,
         or just asset names if no bands are defined for those assets
     """
-    all_band_names = set()
+    bare_names: set[str] = set()
+    # band display name -> asset names that publish it as their one declared band
+    single_band_sources: dict[str, set[str]] = {}
+    # band display name -> {asset_name: full "asset|bands=band" reference}
+    composite_candidates: dict[str, dict[str, str]] = {}
 
-    # First try to get from item_assets
     for asset_name, asset in collection.item_assets.items():
-        # Skip non-data assets
-        if not asset.roles or "data" not in asset.roles:
+        roles = asset.roles or []
+        # Skip non-data assets, and a "data" asset that is also flagged
+        # "metadata" -- the whole underlying store packaged as one asset
+        # (EOPF's `product`), which has no bands of its own to select.
+        if "data" not in roles or "metadata" in roles:
             continue
 
-        band_refs = get_band_names(asset_name, asset)
-        all_band_names.update(band_refs)
+        bands = extract_bands_from_asset(asset)
+        if not bands:
+            bare_names.add(asset_name)
+            continue
+
+        if len(bands) == 1:
+            band_name = bands[0].get("name")
+            if band_name:
+                single_band_sources.setdefault(band_name, set()).add(asset_name)
+                bare_names.add(f"{asset_name}|bands={band_name}")
+            continue
+
+        # A composite (2+ declared bands): hold each of its bands as a
+        # candidate rather than adding it directly, so the dedup pass below
+        # can drop it in favour of a single-band asset if one exists.
+        for band in bands:
+            band_name = band.get("name")
+            if band_name:
+                composite_candidates.setdefault(band_name, {})[asset_name] = (
+                    f"{asset_name}|bands={band_name}"
+                )
+
+    all_band_names = bare_names
+    for band_name, by_asset in composite_candidates.items():
+        if band_name in single_band_sources:
+            # A single-band asset already covers this band -- the composite's
+            # copy is pure redundancy, drop it.
+            continue
+        # No single-band alternative: keep every composite that carries this
+        # band, exactly as before this function started deduplicating.
+        all_band_names.update(by_asset.values())
 
     # If no bands found from item_assets, try to infer from summaries for EOPF collections
     if not all_band_names and collection.summaries and collection.summaries.bands:
@@ -406,7 +465,10 @@ def _make_mosaic_task(
             "height": int(height) if height else height,
             "buffer": float(tile_buffer) if tile_buffer is not None else tile_buffer,
             "pixel_selection": PixelSelectionMethod["first"].value(),
-            "allowed_exceptions": (TileOutsideBounds,),
+            # No explicit allowed_exceptions: mosaic_reader's own default is
+            # already (TileOutsideBounds,) (rio-tiler 9.4.2). The
+            # EmptyMosaicError -> TileOutsideBounds conversion below is the
+            # real content here.
         }
 
         try:
@@ -469,6 +531,14 @@ def _build_tasks(
                     "id": date,
                     "datetime": date_items[0].datetime if date_items else None,
                     "geometry": geometries if geometries else None,
+                    # The source items behind this date group's mosaic. Carried
+                    # so processes that need per-item STAC metadata (asset
+                    # hrefs, properties) can reach it -- notably
+                    # sar_backscatter, whose calibration LUTs and GCP geometry
+                    # are per source item. Retrieve via
+                    # RasterStack.get_source_items, never by reaching into task
+                    # metadata directly. Matches upstream's own load_collection.
+                    "items": date_items,
                 },
             )
         )
@@ -481,9 +551,17 @@ class LoadCollection(BaseLoadCollection):
 
     This class inherits from the base LoadCollection and uses our custom
     _reader that supports both COG and Zarr assets.
-    """
 
-    stac_api: stacApiBackend = field()
+    NOTE: `stac_api` is inherited from `BaseLoadCollection` rather than
+    redeclared here. Upstream 0.18.0 added `signer_key: Optional[str] =
+    field(default=None)` to the base class; attrs orders an overridden field
+    at the *subclass's* declaration position, so redeclaring `stac_api` here
+    (mandatory, no default) put it after `signer_key` (has a default) and
+    attrs refused to build the class ("No mandatory attributes allowed after
+    an attribute with a default value"). EOPF's `stacApiBackend` subclasses
+    the upstream one, so passing an instance of it still satisfies the
+    inherited (upstream-typed) `stac_api` field.
+    """
 
     def _validate_limits(
         self, items: list[Item], width: int | None, height: int | None
@@ -507,8 +585,21 @@ class LoadCollection(BaseLoadCollection):
     def load_collection(
         self,
         id: str,
-        spatial_extent: BoundingBox | None = None,
-        temporal_extent: TemporalInterval | None = None,
+        # NOTE: spatial_extent/temporal_extent stay `Optional[X]` (old-style),
+        # not `X | None`, deliberately. titiler.openeo's process-graph
+        # ParameterReference resolution (core._is_optional_type) only
+        # recognises `typing.Union` -- `typing.get_origin(X | None)` returns
+        # `types.UnionType`, a different object, so `X | None` silently skips
+        # the BoundingBox/TemporalInterval coercion and a raw dict/list from a
+        # UDP parameter default reaches this function unconverted (then fails
+        # deeper, e.g. `temporal_extent.start` on a plain list in
+        # LoadCollection._get_items). Confirmed this affects both parameters
+        # identically; upstream's own load_collection dodges it only because
+        # it happens to use `Optional[X]` already. See EOPF-Explorer/titiler-eopf
+        # migration notes and the upstream fix this should eventually make
+        # unnecessary.
+        spatial_extent: Optional[BoundingBox] = None,
+        temporal_extent: Optional[TemporalInterval] = None,
         bands: list[str] | None = None,
         properties: dict | None = None,
         # private arguments
@@ -532,6 +623,12 @@ class LoadCollection(BaseLoadCollection):
             named_parameters: Named parameters for process graph evaluation
             target_crs: Target CRS for output. If None, uses native CRS from source images.
         """
+        # Retrieve up to one item beyond the configured processing limit so the
+        # guard below (_validate_limits) can detect genuine overflow. Without an
+        # explicit max_items, upstream's get_items silently caps at the first
+        # page (limit=100, newest-first), which drops whole months/years from
+        # wide temporal extents instead of raising ItemsLimitExceeded. Matches
+        # upstream's own load_collection (titiler-openeo#302).
         items = self._get_items(
             id,
             spatial_extent=spatial_extent,
@@ -539,6 +636,7 @@ class LoadCollection(BaseLoadCollection):
             properties=properties,
             named_parameters=named_parameters,
             limit=100,
+            max_items=processing_settings.max_items + 1,
         )
         if not items:
             raise NoDataAvailable("There is no data available for the given extents.")
