@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788862191424,
+  "lastUpdate": 1788869739556,
   "repoUrl": "https://github.com/EOPF-Explorer/titiler-eopf",
   "entries": {
     "titiler-eopf Benchmarks": [
@@ -1716,6 +1716,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.03375608296662954",
             "extra": "mean: 396.5262719799992 msec\nrounds: 50"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "vincent.sarago@gmail.com",
+            "name": "Vincent Sarago",
+            "username": "vincentsarago"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8b582a42b69bb84077f1b9040c1bb8d3e75f04e1",
+          "message": "Merge pull request #114 from EOPF-Explorer/feat/stac-item-endpoint\n\nfeat: use stac api to access EOPF item",
+          "timestamp": "2026-09-08T14:11:09+02:00",
+          "tree_id": "bfab2a190ac0cd5a5051bd02a5c54b72cae5ca8a",
+          "url": "https://github.com/EOPF-Explorer/titiler-eopf/commit/8b582a42b69bb84077f1b9040c1bb8d3e75f04e1"
+        },
+        "date": 1788869738605,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "GeoZarrReader-Open",
+            "value": 49.20556822806932,
+            "unit": "iter/sec",
+            "range": "stddev: 0.010004939909735874",
+            "extra": "mean: 20.32290319999902 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Info",
+            "value": 51.48467797139713,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0003041678701135755",
+            "extra": "mean: 19.423254440001756 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Preview",
+            "value": 2.5779840666099596,
+            "unit": "iter/sec",
+            "range": "stddev: 0.016590576513530148",
+            "extra": "mean: 387.89999245999866 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Tile",
+            "value": 2.520386982211353,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03326819954299539",
+            "extra": "mean: 396.7644679400041 msec\nrounds: 50"
           }
         ]
       }
