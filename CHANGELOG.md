@@ -11,6 +11,20 @@
 
 **Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.8.0...v0.9.0
 
+## 0.12.0 (2026-09-09)
+
+## What's Changed
+* fix: better handle group in stac-model by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/158
+* feat: use stac api to access EOPF item by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/114
+* chore(openeo): bump to titiler-openeo 0.18.x, fix what it broke, dedupe copies by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/152
+* fix(openeo): restore per-band metadata dropped since the |bands= notation by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/153
+* feat(openeo): wire /healthz and /readyz by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/155
+* fix(reader): pick a multiscale level that actually has the requested band by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/156
+* fix(openeo): install titiler-openeo's oidc extra so httpx reaches production by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/162
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.11.0...v0.12.0
+
 ## 0.11.0 (2026-09-04)
 
 ## What's Changed
