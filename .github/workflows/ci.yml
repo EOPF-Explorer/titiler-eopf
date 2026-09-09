@@ -61,6 +61,33 @@ jobs:
           name: ${{ matrix.python-version }}
           fail_ci_if_error: false
 
+  # The `tests` job above runs `uv sync`, which installs the dev group. The Docker
+  # image does not. A runtime dependency that only reaches the tests through the
+  # dev group is therefore missing in production while CI stays green -- which is
+  # how the 0.12.0 candidate shipped an openEO app that could not import.
+  runtime-imports:
+    name: production dependency closure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.9.*"
+          enable-cache: false
+          python-version: ${{ env.LATEST_PY_VERSION }}
+
+      # Same flags as the Dockerfile, so this closure is what production gets.
+      - name: Install dependencies without the dev group
+        run: |
+          uv sync --frozen --no-dev --extra server --extra cache --extra openeo --no-install-project
+          uv pip install --no-deps .
+
+      - name: Import every deployed app
+        run: |
+          uv run --no-sync python .github/workflows/scripts/check_runtime_imports.py
+
   benchmark:
     if: github.repository == 'EOPF-Explorer/titiler-eopf'
     needs: [tests]
