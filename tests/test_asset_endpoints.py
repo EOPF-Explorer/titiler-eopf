@@ -17,6 +17,11 @@ def test_dataset(get_stac_item, app, geozarr_stac):
 
     get_stac_item.return_value = geozarr_stac
 
+    response = app.get(
+        f"/collections/{collection}/items/{item}/assets/bad_asset/dataset"
+    )
+    assert response.status_code == 404
+
     response = app.get(f"/collections/{collection}/items/{item}/assets/{asset}/dataset")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
@@ -446,3 +451,21 @@ def test_statistics(get_stac_item, app, geozarr_stac):
     infos = response.json()
     assert infos["b1"]
     assert infos["b1"]["description"] == "b02+b04"
+
+
+@patch("titiler.eopf.stac.get_stac_item")
+def test_asset_array(get_stac_item, app, geozarr_stac_array):
+    """Test /statistics routes."""
+    collection = geozarr_stac_array.collection_id
+    item = geozarr_stac_array.id
+    get_stac_item.return_value = geozarr_stac_array
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/assets/reflectance/info",
+    )
+    assert response.status_code == 200
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/assets/b02_r10m/info",
+    )
+    assert response.status_code == 400

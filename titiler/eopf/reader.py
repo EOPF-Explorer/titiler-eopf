@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 import attr
 import obstore
 import xarray
+import zarr
 from affine import Affine
 from morecantile import Tile, TileMatrixSet
 from rasterio import windows
@@ -71,6 +72,10 @@ def cache_settings() -> EOPFCacheSettings:
 
 class MissingVariables(RioTilerError):
     """Missing Variables."""
+
+
+class InvalidGeoZarrStore(RioTilerError):
+    """GeoZarr Store is not group."""
 
 
 # Bound the in-process datatree memo. Unbounded caching + version-keying would
@@ -165,17 +170,22 @@ def _cache_token(src_path: str) -> tuple[str | None, int | None]:
 def _open_from_store(src_path: str) -> xarray.DataTree:
     """Open the datatree from the store (no caching)."""
     zarr_store = ObjectStore(store=_get_store(src_path), read_only=True)
-    return xarray.open_datatree(
-        zarr_store,
-        decode_times=True,
-        decode_coords="all",
-        create_default_indexes=False,
-        # By default xarray will try to load the consolidated metadata
-        # consolidated=True,
-        # See https://github.com/pydata/xarray/issues/11361
-        # use_zarr_fill_value_as_mask=True,
-        engine="zarr",
-    )
+    try:
+        return xarray.open_datatree(
+            zarr_store,
+            decode_times=True,
+            decode_coords="all",
+            create_default_indexes=False,
+            # By default xarray will try to load the consolidated metadata
+            # consolidated=True,
+            # See https://github.com/pydata/xarray/issues/11361
+            # use_zarr_fill_value_as_mask=True,
+            engine="zarr",
+        )
+    except zarr.errors.ContainsArrayError as e:
+        raise InvalidGeoZarrStore(
+            f"{src_path} does not appear to be a valid GeoZarr store."
+        ) from e
 
 
 @lru_cache(maxsize=DATASET_CACHE_MAXSIZE)
