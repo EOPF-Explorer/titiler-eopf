@@ -350,3 +350,29 @@ def test_info_measurements(get_stac_item, app, geozarr_stac_measurements):
     )
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/png"
+
+
+@patch("titiler.stacapi.dependencies.get_stac_item")
+def test_item_array(get_stac_item, app, geozarr_stac_array):
+    """Test /info routes."""
+    collection = geozarr_stac_array.collection_id
+    item = geozarr_stac_array.id
+
+    get_stac_item.return_value = geozarr_stac_array
+
+    response = app.get(f"/collections/{collection}/items/{item}/assets")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+    assert response.json() == ["reflectance"]
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/info", params={"assets": ":all:"}
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+    assert "reflectance_b02" in response.json()
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/info", params={"assets": "b02_r10m"}
+    )
+    assert response.status_code == 404
