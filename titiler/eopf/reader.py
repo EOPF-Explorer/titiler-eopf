@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 import attr
 import obstore
 import xarray
+import zarr
 from affine import Affine
 from morecantile import Tile, TileMatrixSet
 from rasterio import windows
@@ -176,6 +177,14 @@ def _open_from_store(src_path: str) -> xarray.DataTree:
         # use_zarr_fill_value_as_mask=True,
         engine="zarr",
     )
+
+
+@lru_cache(maxsize=DATASET_CACHE_MAXSIZE)
+def _is_zarr_group(src_path: str) -> bool:
+    """Check if the source path is a Zarr group."""
+    zarr_store = ObjectStore(store=_get_store(src_path), read_only=True)
+    zarr_ds = zarr.open(store=zarr_store, mode="r")
+    return isinstance(zarr_ds, zarr.Group)
 
 
 @lru_cache(maxsize=DATASET_CACHE_MAXSIZE)
