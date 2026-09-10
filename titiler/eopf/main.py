@@ -10,6 +10,7 @@ import xarray
 import zarr
 from fastapi import FastAPI, Query
 from pydantic import SecretStr
+from starlette import status
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.templating import Jinja2Templates
@@ -56,6 +57,7 @@ from .extensions import (
     EOPFwmtsExtension,
 )
 from .factory import TilerFactory
+from .reader import InvalidGeoZarrStore
 from .settings import ApiSettings, EOPFCacheSettings, STACAPISettings
 from .stac import (
     AssetsExprParams,
@@ -307,7 +309,12 @@ app.include_router(
 TITILER_CONFORMS_TO.update(cmaps.conforms_to)
 
 # Error handlers
-ERRORS = {**DEFAULT_STATUS_CODES, **MOSAIC_STATUS_CODES, **STACAPI_STATUS_CODES}
+ERRORS = {
+    **DEFAULT_STATUS_CODES,
+    **MOSAIC_STATUS_CODES,
+    **STACAPI_STATUS_CODES,
+    InvalidGeoZarrStore: status.HTTP_400_BAD_REQUEST,
+}
 add_exception_handlers(app, ERRORS)
 
 # Set all CORS enabled origins
