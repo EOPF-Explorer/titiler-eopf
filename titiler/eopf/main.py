@@ -399,14 +399,18 @@ if settings.debug:
 
 
 # Health Check Endpoints
+# Both are `async` on purpose: a sync route runs in the anyio threadpool, the same
+# 40-token pool the sync tile renders occupy, so under load the liveness probe could
+# not answer within kubelet's 1s timeout and the container was killed for being busy.
+# See EOPF-Explorer/data-pipeline#416.
 @app.get("/_mgmt/ping", description="Liveliness", tags=["Liveliness/Readiness"])
-def ping():
+async def ping():
     """Ping."""
     return {"message": "PONG"}
 
 
 @app.get("/_mgmt/health", description="Readiness", tags=["Liveliness/Readiness"])
-def health():
+async def health():
     """Health check."""
     return {
         "status": "UP",

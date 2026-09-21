@@ -4,6 +4,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Optional, Pattern, Union
 
+from anyio import CapacityLimiter, to_thread
+
 from ..backends.base import CacheBackend, CacheBackendUnavailable, CacheError
 from ..settings import CacheS3Settings
 
@@ -40,6 +42,18 @@ except ImportError:  # pragma: nocover
 
 
 logger = logging.getLogger(__name__)
+
+# boto3 is synchronous, and this backend is awaited from TileCacheMiddleware on
+# every tile (directly, or through the s3-redis backend). Calling it on the event
+# loop parks the whole worker for a round-trip to the object store, which delays
+# the liveness probe until kubelet kills a pod for being busy — measured at ~1 s
+# probe latency under a staging-shaped load, see EOPF-Explorer/data-pipeline#416.
+# So every public method below awaits its blocking half in a worker thread.
+#
+# The limiter is this backend's own, not anyio's default one: cache I/O waiting
+# on the network must not consume the 40 threadpool tokens the synchronous tile
+# renders are queueing for.
+_S3_THREADS = CapacityLimiter(16)
 
 
 class S3StorageBackend(CacheBackend):
@@ -206,6 +220,10 @@ class S3StorageBackend(CacheBackend):
 
     async def get(self, key: str) -> Optional[bytes]:
         """Retrieve data from S3."""
+        return await to_thread.run_sync(self._get, key, limiter=_S3_THREADS)
+
+    def _get(self, key: str) -> Optional[bytes]:
+        """Retrieve data from S3 (blocking — runs in a worker thread)."""
         try:
             client = self._get_client()
             self._stats["total_operations"] += 1
@@ -251,6 +269,10 @@ class S3StorageBackend(CacheBackend):
 
     async def set(self, key: str, value: bytes, ttl: Optional[int] = None) -> bool:
         """Store data in S3 with TTL metadata."""
+        return await to_thread.run_sync(self._set, key, value, ttl, limiter=_S3_THREADS)
+
+    def _set(self, key: str, value: bytes, ttl: Optional[int] = None) -> bool:
+        """Store data in S3 (blocking — runs in a worker thread)."""
         try:
             client = self._get_client()
             self._stats["total_operations"] += 1
@@ -306,6 +328,10 @@ class S3StorageBackend(CacheBackend):
             return False
 
     async def delete(self, key: str) -> bool:
+        """Delete data from S3."""
+        return await to_thread.run_sync(self._delete, key, limiter=_S3_THREADS)
+
+    def _delete(self, key: str) -> bool:
         """Delete single object from S3."""
         try:
             client = self._get_client()
@@ -336,6 +362,10 @@ class S3StorageBackend(CacheBackend):
             return False
 
     async def exists(self, key: str) -> bool:
+        """Check whether a key exists in S3."""
+        return await to_thread.run_sync(self._exists, key, limiter=_S3_THREADS)
+
+    def _exists(self, key: str) -> bool:
         """Check if object exists in S3."""
         try:
             client = self._get_client()
@@ -359,7 +389,13 @@ class S3StorageBackend(CacheBackend):
             logger.error(f"S3 exists error for key {key}: {e}")
             return False
 
-    async def clear_pattern(self, pattern: Union[str, Pattern]) -> int:  # noqa: C901
+    async def clear_pattern(self, pattern: Union[str, Pattern]) -> int:
+        """Delete every key matching a pattern."""
+        return await to_thread.run_sync(
+            self._clear_pattern, pattern, limiter=_S3_THREADS
+        )
+
+    def _clear_pattern(self, pattern: Union[str, Pattern]) -> int:  # noqa: C901
         """Delete S3 objects matching pattern using list operations."""
         try:
             client = self._get_client()
@@ -435,6 +471,10 @@ class S3StorageBackend(CacheBackend):
         return fnmatch.fnmatch(text, pattern)
 
     async def health_check(self) -> dict[str, Any]:
+        """Report S3 backend health."""
+        return await to_thread.run_sync(self._health_check, limiter=_S3_THREADS)
+
+    def _health_check(self) -> dict[str, Any]:
         """Check S3 health and return metrics."""
         try:
             client = self._get_client()

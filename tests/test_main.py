@@ -1,5 +1,7 @@
 """Test titiler.eopf.main.app."""
 
+import inspect
+
 import pytest
 
 
@@ -40,6 +42,17 @@ def test_health(app):
         "zarr",
         "xarray",
     }
+
+
+def test_mgmt_routes_are_async(app):
+    """/_mgmt probes must not queue behind sync tile renders (EOPF-Explorer/data-pipeline#416)."""
+    routes = {
+        r.path: r.endpoint
+        for r in app.app.routes
+        if getattr(r, "path", "").startswith("/_mgmt/")
+    }
+    for path in ("/_mgmt/ping", "/_mgmt/health"):
+        assert inspect.iscoroutinefunction(routes[path]), path
 
 
 def test_landing(app):
