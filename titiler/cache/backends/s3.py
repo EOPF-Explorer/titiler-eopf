@@ -44,14 +44,11 @@ except ImportError:  # pragma: nocover
 
 logger = logging.getLogger(__name__)
 
-# boto3 is synchronous and TileCacheMiddleware awaits this backend on every tile, so
-# each method runs its blocking half in a thread: on the event loop it would park the
-# worker until the liveness probe missed kubelet's 1s timeout
-# (EOPF-Explorer/data-pipeline#416). The limiter caps how many of those threads do S3
-# work at once; it is separate from anyio's default pool so cache I/O and tile renders
-# cannot starve each other, and small because botocore's response parsing holds the GIL.
-# Built on first use, not at import: constructing one outside a running loop needs
-# anyio >= 4.2, and anyio reaches us transitively (via starlette) with a >= 3.6 floor.
+# boto3 is synchronous and TileCacheMiddleware awaits this backend on every tile, so each
+# method runs its blocking half in a thread: on the loop it would park the worker until the
+# liveness probe missed kubelet's 1s timeout (EOPF-Explorer/data-pipeline#416). Its own
+# limiter, kept small because botocore's response parsing holds the GIL, and built on first
+# use because constructing one outside a running loop needs anyio >= 4.2 (we get >= 3.6).
 _S3_THREADS: Optional[CapacityLimiter] = None
 
 
@@ -63,8 +60,8 @@ def _s3_threads() -> CapacityLimiter:
     return _S3_THREADS
 
 
-# anyio shields an offloaded call from cancellation, so a stalled request would hold its
-# thread and its token until boto3 gave up — 60s connect + 60s read by default.
+# anyio shields the offloaded call from cancellation, so without these a stalled request
+# holds its thread and its token for boto3's default 60s connect + 60s read.
 _TIMEOUTS = {"connect_timeout": 3, "read_timeout": 15}
 
 

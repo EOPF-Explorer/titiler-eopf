@@ -153,8 +153,7 @@ class TilerFactory(BaseTilerFactory):
             operation_id=f"{self.operation_prefix}getTileSetList",
         )
         # Sync on purpose: the body opens the store, so as a coroutine it blocked the
-        # event loop the probes now live on (EOPF-Explorer/data-pipeline#416). FastAPI
-        # runs it in the threadpool, like every other render route.
+        # event loop the probes live on (EOPF-Explorer/data-pipeline#416).
         def tileset_list(
             request: Request,
             src_path=Depends(self.path_dependency),

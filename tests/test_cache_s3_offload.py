@@ -46,7 +46,6 @@ async def test_blocking_call_runs_off_the_event_loop(backend, method, blocking, 
     assert (
         seen["thread"] != threading.get_ident()
     ), f"{method} ran its blocking body on the event loop thread"
-    # Drop the limiter= argument and this lands in anyio's default pool instead,
-    # competing with the tile renders — the thing the offload exists to prevent.
+    # Without limiter=, this lands in anyio's default pool with the tile renders.
     assert seen["s3_tokens"] == 1, f"{method} did not use the S3 limiter"
     assert result is sentinel, f"{method} dropped the return value of {blocking}"
