@@ -1,17 +1,14 @@
 """The S3 cache backend must not run boto3 on the event loop.
 
-boto3 is synchronous and this backend is awaited from TileCacheMiddleware on every
-tile, so a body left in the coroutine blocks the worker for a full object-store
-round-trip — which is what starved the liveness probe in
-EOPF-Explorer/data-pipeline#416. Each public method must hand its blocking half to
-a worker thread; these tests fail if one is ever inlined back.
+A blocking body left in a coroutine parks the worker for an object-store round-trip,
+which starved the liveness probe in EOPF-Explorer/data-pipeline#416.
 """
 
 import threading
 
 import pytest
 
-from titiler.cache.backends.s3 import S3StorageBackend
+from titiler.cache.backends.s3 import S3StorageBackend, _s3_threads
 
 
 @pytest.fixture
@@ -33,14 +30,23 @@ def backend():
     ],
 )
 async def test_blocking_call_runs_off_the_event_loop(backend, method, blocking, args):
-    """Every blocking S3 method runs in a worker thread, not on the loop."""
-    ran_in = {}
-    setattr(
-        backend, blocking, lambda *_: ran_in.setdefault("thread", threading.get_ident())
-    )
+    """Every blocking S3 method runs in a worker thread, under the S3 limiter."""
+    seen = {}
 
-    await getattr(backend, method)(*args)
+    def record(*_):
+        seen["thread"] = threading.get_ident()
+        seen["s3_tokens"] = _s3_threads().borrowed_tokens
+        return sentinel
+
+    sentinel = object()
+    setattr(backend, blocking, record)
+
+    result = await getattr(backend, method)(*args)
 
     assert (
-        ran_in["thread"] != threading.get_ident()
+        seen["thread"] != threading.get_ident()
     ), f"{method} ran its blocking body on the event loop thread"
+    # Drop the limiter= argument and this lands in anyio's default pool instead,
+    # competing with the tile renders — the thing the offload exists to prevent.
+    assert seen["s3_tokens"] == 1, f"{method} did not use the S3 limiter"
+    assert result is sentinel, f"{method} dropped the return value of {blocking}"

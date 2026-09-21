@@ -1,6 +1,7 @@
 """S3 storage backend implementation."""
 
 import logging
+import threading
 from datetime import datetime, timezone
 from typing import Any, Optional, Pattern, Union
 
@@ -43,17 +44,28 @@ except ImportError:  # pragma: nocover
 
 logger = logging.getLogger(__name__)
 
-# boto3 is synchronous, and this backend is awaited from TileCacheMiddleware on
-# every tile (directly, or through the s3-redis backend). Calling it on the event
-# loop parks the whole worker for a round-trip to the object store, which delays
-# the liveness probe until kubelet kills a pod for being busy — measured at ~1 s
-# probe latency under a staging-shaped load, see EOPF-Explorer/data-pipeline#416.
-# So every public method below awaits its blocking half in a worker thread.
-#
-# The limiter is this backend's own, not anyio's default one: cache I/O waiting
-# on the network must not consume the 40 threadpool tokens the synchronous tile
-# renders are queueing for.
-_S3_THREADS = CapacityLimiter(16)
+# boto3 is synchronous and TileCacheMiddleware awaits this backend on every tile, so
+# each method runs its blocking half in a thread: on the event loop it would park the
+# worker until the liveness probe missed kubelet's 1s timeout
+# (EOPF-Explorer/data-pipeline#416). The limiter caps how many of those threads do S3
+# work at once; it is separate from anyio's default pool so cache I/O and tile renders
+# cannot starve each other, and small because botocore's response parsing holds the GIL.
+# Built on first use, not at import: constructing one outside a running loop needs
+# anyio >= 4.2, and anyio reaches us transitively (via starlette) with a >= 3.6 floor.
+_S3_THREADS: Optional[CapacityLimiter] = None
+
+
+def _s3_threads() -> CapacityLimiter:
+    """The limiter guarding concurrent S3 calls."""
+    global _S3_THREADS
+    if _S3_THREADS is None:
+        _S3_THREADS = CapacityLimiter(8)
+    return _S3_THREADS
+
+
+# anyio shields an offloaded call from cancellation, so a stalled request would hold its
+# thread and its token until boto3 gave up — 60s connect + 60s read by default.
+_TIMEOUTS = {"connect_timeout": 3, "read_timeout": 15}
 
 
 class S3StorageBackend(CacheBackend):
@@ -91,6 +103,8 @@ class S3StorageBackend(CacheBackend):
         self.region = region
         self.endpoint_url = endpoint_url
         self._client = None
+        # The methods below run in worker threads, so client creation needs a lock.
+        self._client_lock = threading.Lock()
         self.client_kwargs = kwargs
 
         # Store credentials for client creation
@@ -116,87 +130,96 @@ class S3StorageBackend(CacheBackend):
 
     def _get_client(self):
         """Get S3 client with isolated credentials."""
-        if self._client is None:
-            try:
-                import os
+        if self._client is not None:
+            return self._client
 
-                from botocore.config import Config
-
-                # Completely bypass credential chain if AWS_EC2_METADATA_DISABLED is set
-                if os.getenv("AWS_EC2_METADATA_DISABLED", "").lower() == "true":
-                    logger.debug(
-                        "EC2 metadata disabled - using explicit credential configuration"
-                    )
-
-                    # Configuration to completely disable EC2 metadata service
-                    client_config = Config(
-                        region_name=self.region,
-                        retries={
-                            "max_attempts": 0
-                        },  # Disable retries for faster failure
-                        parameter_validation=False,  # Skip parameter validation
-                    )
-
-                    # Use explicit credentials only, no credential chain
-                    client_kwargs = {
-                        "service_name": "s3",
-                        "region_name": self.region,
-                        "config": client_config,
-                    }
-
-                    # Add endpoint URL if specified
-                    if self.endpoint_url:
-                        client_kwargs["endpoint_url"] = self.endpoint_url
-
-                    # Add explicit credentials if provided
-                    if self._credentials:
-                        client_kwargs.update(self._credentials)
-                    else:
-                        # If no explicit credentials, try environment variables only
-                        env_access_key = os.getenv("AWS_ACCESS_KEY_ID")
-                        env_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-                        env_session_token = os.getenv("AWS_SESSION_TOKEN")
-
-                        if env_access_key and env_secret_key:
-                            client_kwargs["aws_access_key_id"] = env_access_key
-                            client_kwargs["aws_secret_access_key"] = env_secret_key
-                            if env_session_token:
-                                client_kwargs["aws_session_token"] = env_session_token
-                        else:
-                            # If no credentials available at all, create client anyway and let boto3 handle it
-                            logger.warning(
-                                "No explicit credentials found with EC2 metadata disabled - boto3 will handle credential resolution"
-                            )
-
-                    # Add any additional client kwargs
-                    client_kwargs.update(self.client_kwargs)
-
-                    # Create client directly without going through credential chain
-                    self._client = boto3.client(**client_kwargs)
-
-                else:
-                    # Use normal boto3 credential chain
-                    logger.debug("Using standard boto3 credential chain")
-                    client_config = Config(region_name=self.region)
-
-                    self._client = boto3.client(
-                        "s3",
-                        region_name=self.region,
-                        endpoint_url=self.endpoint_url,
-                        config=client_config,
-                        **self._credentials,
-                        **self.client_kwargs,
-                    )
-
-                # Test access to bucket
-                self._client.head_bucket(Bucket=self.bucket)
-                logger.debug(f"Connected to S3 bucket: {self.bucket}")
-
-            except (BotoCoreError, ClientError, NoCredentialsError) as e:
-                logger.error(f"Failed to connect to S3: {e}")
-                raise CacheBackendUnavailable(f"S3 unavailable: {e}") from e
+        with self._client_lock:
+            if self._client is None:
+                self._client = self._build_client()
 
         return self._client
+
+    def _build_client(self):
+        """Create and validate an S3 client. Caller holds the lock."""
+        try:
+            import os
+
+            from botocore.config import Config
+
+            # Completely bypass credential chain if AWS_EC2_METADATA_DISABLED is set
+            if os.getenv("AWS_EC2_METADATA_DISABLED", "").lower() == "true":
+                logger.debug(
+                    "EC2 metadata disabled - using explicit credential configuration"
+                )
+
+                # Configuration to completely disable EC2 metadata service
+                client_config = Config(
+                    region_name=self.region,
+                    retries={"max_attempts": 0},  # Disable retries for faster failure
+                    parameter_validation=False,  # Skip parameter validation
+                    **_TIMEOUTS,
+                )
+
+                # Use explicit credentials only, no credential chain
+                client_kwargs = {
+                    "service_name": "s3",
+                    "region_name": self.region,
+                    "config": client_config,
+                }
+
+                # Add endpoint URL if specified
+                if self.endpoint_url:
+                    client_kwargs["endpoint_url"] = self.endpoint_url
+
+                # Add explicit credentials if provided
+                if self._credentials:
+                    client_kwargs.update(self._credentials)
+                else:
+                    # If no explicit credentials, try environment variables only
+                    env_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+                    env_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+                    env_session_token = os.getenv("AWS_SESSION_TOKEN")
+
+                    if env_access_key and env_secret_key:
+                        client_kwargs["aws_access_key_id"] = env_access_key
+                        client_kwargs["aws_secret_access_key"] = env_secret_key
+                        if env_session_token:
+                            client_kwargs["aws_session_token"] = env_session_token
+                    else:
+                        # If no credentials available at all, create client anyway and let boto3 handle it
+                        logger.warning(
+                            "No explicit credentials found with EC2 metadata disabled - boto3 will handle credential resolution"
+                        )
+
+                # Add any additional client kwargs
+                client_kwargs.update(self.client_kwargs)
+
+                # Create client directly without going through credential chain
+                client = boto3.client(**client_kwargs)
+
+            else:
+                # Use normal boto3 credential chain
+                logger.debug("Using standard boto3 credential chain")
+                client_config = Config(region_name=self.region, **_TIMEOUTS)
+
+                client = boto3.client(
+                    "s3",
+                    region_name=self.region,
+                    endpoint_url=self.endpoint_url,
+                    config=client_config,
+                    **self._credentials,
+                    **self.client_kwargs,
+                )
+
+            # Test access to bucket
+            client.head_bucket(Bucket=self.bucket)
+            logger.debug(f"Connected to S3 bucket: {self.bucket}")
+
+        except (BotoCoreError, ClientError, NoCredentialsError) as e:
+            logger.error(f"Failed to connect to S3: {e}")
+            raise CacheBackendUnavailable(f"S3 unavailable: {e}") from e
+
+        return client
 
     def _get_object_key(self, key: str) -> str:
         """Convert cache key to S3 object key.
@@ -220,7 +243,7 @@ class S3StorageBackend(CacheBackend):
 
     async def get(self, key: str) -> Optional[bytes]:
         """Retrieve data from S3."""
-        return await to_thread.run_sync(self._get, key, limiter=_S3_THREADS)
+        return await to_thread.run_sync(self._get, key, limiter=_s3_threads())
 
     def _get(self, key: str) -> Optional[bytes]:
         """Retrieve data from S3 (blocking — runs in a worker thread)."""
@@ -269,7 +292,9 @@ class S3StorageBackend(CacheBackend):
 
     async def set(self, key: str, value: bytes, ttl: Optional[int] = None) -> bool:
         """Store data in S3 with TTL metadata."""
-        return await to_thread.run_sync(self._set, key, value, ttl, limiter=_S3_THREADS)
+        return await to_thread.run_sync(
+            self._set, key, value, ttl, limiter=_s3_threads()
+        )
 
     def _set(self, key: str, value: bytes, ttl: Optional[int] = None) -> bool:
         """Store data in S3 (blocking — runs in a worker thread)."""
@@ -329,7 +354,7 @@ class S3StorageBackend(CacheBackend):
 
     async def delete(self, key: str) -> bool:
         """Delete data from S3."""
-        return await to_thread.run_sync(self._delete, key, limiter=_S3_THREADS)
+        return await to_thread.run_sync(self._delete, key, limiter=_s3_threads())
 
     def _delete(self, key: str) -> bool:
         """Delete single object from S3."""
@@ -363,7 +388,7 @@ class S3StorageBackend(CacheBackend):
 
     async def exists(self, key: str) -> bool:
         """Check whether a key exists in S3."""
-        return await to_thread.run_sync(self._exists, key, limiter=_S3_THREADS)
+        return await to_thread.run_sync(self._exists, key, limiter=_s3_threads())
 
     def _exists(self, key: str) -> bool:
         """Check if object exists in S3."""
@@ -392,7 +417,7 @@ class S3StorageBackend(CacheBackend):
     async def clear_pattern(self, pattern: Union[str, Pattern]) -> int:
         """Delete every key matching a pattern."""
         return await to_thread.run_sync(
-            self._clear_pattern, pattern, limiter=_S3_THREADS
+            self._clear_pattern, pattern, limiter=_s3_threads()
         )
 
     def _clear_pattern(self, pattern: Union[str, Pattern]) -> int:  # noqa: C901
@@ -472,7 +497,7 @@ class S3StorageBackend(CacheBackend):
 
     async def health_check(self) -> dict[str, Any]:
         """Report S3 backend health."""
-        return await to_thread.run_sync(self._health_check, limiter=_S3_THREADS)
+        return await to_thread.run_sync(self._health_check, limiter=_s3_threads())
 
     def _health_check(self) -> dict[str, Any]:
         """Check S3 health and return metrics."""
