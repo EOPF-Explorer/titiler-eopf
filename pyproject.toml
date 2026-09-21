@@ -30,6 +30,9 @@ dependencies = [
     "rioxarray>=0.22",
     "zarr[cast-value-rs]>=3.2.0",
     "obstore",
+    # Imported directly by titiler.cache.backends.s3. Floor is the fix for
+    # CVE-2026-63374, which Trivy fails the image build on.
+    "anyio>=4.14.2",
     "pydantic-settings~=2.0",
     "starlette-cramjam>=0.4,<1.0",
     "rio-tiler>=9.1,<10.0",

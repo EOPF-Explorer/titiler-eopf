@@ -47,17 +47,8 @@ logger = logging.getLogger(__name__)
 # boto3 is synchronous and TileCacheMiddleware awaits this backend on every tile, so each
 # method runs its blocking half in a thread: on the loop it would park the worker until the
 # liveness probe missed kubelet's 1s timeout (EOPF-Explorer/data-pipeline#416). Its own
-# limiter, kept small because botocore's response parsing holds the GIL, and built on first
-# use because constructing one outside a running loop needs anyio >= 4.2 (we get >= 3.6).
-_S3_THREADS: Optional[CapacityLimiter] = None
-
-
-def _s3_threads() -> CapacityLimiter:
-    """The limiter guarding concurrent S3 calls."""
-    global _S3_THREADS
-    if _S3_THREADS is None:
-        _S3_THREADS = CapacityLimiter(8)
-    return _S3_THREADS
+# limiter, kept small because botocore's response parsing holds the GIL.
+_S3_THREADS = CapacityLimiter(8)
 
 
 # anyio shields the offloaded call from cancellation, so without these a stalled request
@@ -240,7 +231,7 @@ class S3StorageBackend(CacheBackend):
 
     async def get(self, key: str) -> Optional[bytes]:
         """Retrieve data from S3."""
-        return await to_thread.run_sync(self._get, key, limiter=_s3_threads())
+        return await to_thread.run_sync(self._get, key, limiter=_S3_THREADS)
 
     def _get(self, key: str) -> Optional[bytes]:
         """Retrieve data from S3 (blocking — runs in a worker thread)."""
@@ -289,9 +280,7 @@ class S3StorageBackend(CacheBackend):
 
     async def set(self, key: str, value: bytes, ttl: Optional[int] = None) -> bool:
         """Store data in S3 with TTL metadata."""
-        return await to_thread.run_sync(
-            self._set, key, value, ttl, limiter=_s3_threads()
-        )
+        return await to_thread.run_sync(self._set, key, value, ttl, limiter=_S3_THREADS)
 
     def _set(self, key: str, value: bytes, ttl: Optional[int] = None) -> bool:
         """Store data in S3 (blocking — runs in a worker thread)."""
@@ -351,7 +340,7 @@ class S3StorageBackend(CacheBackend):
 
     async def delete(self, key: str) -> bool:
         """Delete data from S3."""
-        return await to_thread.run_sync(self._delete, key, limiter=_s3_threads())
+        return await to_thread.run_sync(self._delete, key, limiter=_S3_THREADS)
 
     def _delete(self, key: str) -> bool:
         """Delete single object from S3."""
@@ -385,7 +374,7 @@ class S3StorageBackend(CacheBackend):
 
     async def exists(self, key: str) -> bool:
         """Check whether a key exists in S3."""
-        return await to_thread.run_sync(self._exists, key, limiter=_s3_threads())
+        return await to_thread.run_sync(self._exists, key, limiter=_S3_THREADS)
 
     def _exists(self, key: str) -> bool:
         """Check if object exists in S3."""
@@ -414,7 +403,7 @@ class S3StorageBackend(CacheBackend):
     async def clear_pattern(self, pattern: Union[str, Pattern]) -> int:
         """Delete every key matching a pattern."""
         return await to_thread.run_sync(
-            self._clear_pattern, pattern, limiter=_s3_threads()
+            self._clear_pattern, pattern, limiter=_S3_THREADS
         )
 
     def _clear_pattern(self, pattern: Union[str, Pattern]) -> int:  # noqa: C901
@@ -494,7 +483,7 @@ class S3StorageBackend(CacheBackend):
 
     async def health_check(self) -> dict[str, Any]:
         """Report S3 backend health."""
-        return await to_thread.run_sync(self._health_check, limiter=_s3_threads())
+        return await to_thread.run_sync(self._health_check, limiter=_S3_THREADS)
 
     def _health_check(self) -> dict[str, Any]:
         """Check S3 health and return metrics."""

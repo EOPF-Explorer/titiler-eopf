@@ -8,7 +8,7 @@ import threading
 
 import pytest
 
-from titiler.cache.backends.s3 import S3StorageBackend, _s3_threads
+from titiler.cache.backends.s3 import _S3_THREADS, S3StorageBackend
 
 
 @pytest.fixture
@@ -35,7 +35,7 @@ async def test_blocking_call_runs_off_the_event_loop(backend, method, blocking, 
 
     def record(*_):
         seen["thread"] = threading.get_ident()
-        seen["s3_tokens"] = _s3_threads().borrowed_tokens
+        seen["s3_tokens"] = _S3_THREADS.borrowed_tokens
         return sentinel
 
     sentinel = object()
