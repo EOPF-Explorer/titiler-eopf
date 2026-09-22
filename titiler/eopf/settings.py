@@ -17,6 +17,8 @@ class ApiSettings(BaseSettings):
     cachecontrol: str = "public, max-age=3600"
     root_path: str = ""
     debug: bool = False
+    # 0 disables. Above it, requests get a 503 instead of a queue slot; /_mgmt is exempt.
+    max_concurrent_requests: int = 0
 
     model_config = SettingsConfigDict(
         env_prefix="TITILER_EOPF_API_", env_file=".env", extra="ignore"
