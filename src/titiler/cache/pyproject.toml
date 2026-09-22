@@ -1,0 +1,61 @@
+[project]
+name = "titiler-cache"
+description = "TiTiler cache middleware"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Vincent Sarago", email = "vincent@developmentseed.com"},
+    {name = "Emmanuel Mathot", email = "emmanuel@developmentseed.com"},
+]
+keywords = [
+    "TiTiler",
+    "EOPF",
+]
+classifiers = [
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+dynamic = ["version"]
+dependencies = [
+    "pydantic",
+    "pydantic-settings~=2.0",
+    "fastapi",
+    "starlette>=1.0",
+
+]
+
+[project.optional-dependencies]
+redis = [
+    "redis",
+]
+s3 = [
+    "boto3",
+]
+
+[project.urls]
+Homepage = 'https://github.com/EOPF-Explorer/titiler-eopf'
+Documentation = "https://github.com/EOPF-Explorer/titiler-eopf"
+Issues = "https://github.com/EOPF-Explorer/titiler-eopf/issues"
+Source = "https://github.com/EOPF-Explorer/titiler-eopf"
+Changelog = "https://github.com/EOPF-Explorer/titiler-eopf/CHANGELOG.md"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "titiler/cache/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+only-include = ["titiler"]
+
+[tool.hatch.build.targets.wheel]
+only-include = ["titiler"]
+
+[tool.hatch.metadata]
+allow-direct-references = true

@@ -1,8 +1,9 @@
 """Cache configuration settings."""
 
+from typing import Self
+
 from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing_extensions import Self
 
 
 class CacheSettings(BaseSettings):

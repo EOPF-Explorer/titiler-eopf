@@ -5,7 +5,7 @@
 # "LICENSE"} — dropping either fails inside `pip install .`, not as a missing COPY.
 *
 
-!titiler
+!src/titiler
 !pyproject.toml
 !uv.lock
 !README.md

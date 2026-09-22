@@ -16,10 +16,11 @@ from rio_tiler.types import AssetInfo, AssetType, AssetWithOptions
 from starlette.requests import Request
 
 from titiler.core.dependencies import DefaultDependency, ExpressionParams
-from titiler.eopf.reader import GeoZarrReader
 from titiler.stacapi.backend import STACAPIBackend
 from titiler.stacapi.dependencies import get_stac_item
 from titiler.stacapi.reader import SimpleSTACReader, STACAPIReader
+
+from .reader import GeoZarrReader
 
 _VALID_TYPE = {
     *DEFAULT_VALID_TYPE,
