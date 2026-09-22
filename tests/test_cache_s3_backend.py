@@ -1,11 +1,4 @@
-"""The S3 cache backend's contract, pinned over real HTTP.
-
-`moto`'s in-process `mock_aws` patches botocore, so it can only see an S3 client that
-*is* boto3. Driving a real HTTP endpoint instead keeps these tests valid for any
-implementation of the same contract.
-
-The `xfail(strict=True)` cases are pre-existing bugs, each noted at its test.
-"""
+"""The S3 cache backend's contract, pinned over real HTTP (see `s3_endpoint`)."""
 
 from datetime import datetime, timezone
 
@@ -19,12 +12,8 @@ CREDENTIALS = {"access_key_id": "testing", "secret_access_key": "testing"}
 
 
 @pytest.fixture
-def s3_client(s3_endpoint, monkeypatch):
+def s3_client(s3_endpoint):
     """A raw boto3 client on an empty bucket, for asserting on what was stored."""
-    # Both branches of _build_client work with explicit credentials; pin the branch
-    # so a developer's exported value cannot change what is under test.
-    monkeypatch.delenv("AWS_EC2_METADATA_DISABLED", raising=False)
-
     client = boto3.client(
         "s3",
         region_name="us-east-1",
@@ -51,8 +40,9 @@ def backend(s3_endpoint, s3_client):
     )
 
 
-def test_missing_bucket_is_unavailable_not_a_crash(s3_endpoint, s3_client):
-    """A bucket that does not exist surfaces as CacheBackendUnavailable."""
+@pytest.mark.asyncio
+async def test_missing_bucket_is_unavailable_not_a_miss(s3_endpoint, s3_client):
+    """A missing bucket is unavailable, although S3 answers a GET in it with a 404."""
     from titiler.cache.backends.base import CacheBackendUnavailable
 
     backend = S3StorageBackend(
@@ -62,7 +52,13 @@ def test_missing_bucket_is_unavailable_not_a_crash(s3_endpoint, s3_client):
         **CREDENTIALS,
     )
     with pytest.raises(CacheBackendUnavailable):
-        backend._get_client()
+        await backend.get("titiler:tile:coll:item:9:9:9:absent")
+    assert await backend.set("titiler:tile:coll:item:9:9:9:absent", b"x") is False
+
+
+def test_constructs_without_endpoint_or_credentials():
+    """Plain AWS: no endpoint, credentials left to the environment. No I/O happens."""
+    S3StorageBackend(bucket=BUCKET)
 
 
 def test_object_key_is_a_tile_path(backend):
@@ -91,11 +87,7 @@ async def test_set_then_get_round_trips(backend):
 
 @pytest.mark.asyncio
 async def test_ttl_is_stored_as_user_metadata(backend, s3_client):
-    """TTL travels as user metadata on the object, not in the payload.
-
-    boto3 strips the `x-amz-meta-` prefix and lowercases the names; these are the keys
-    any replacement backend has to keep writing for old objects to stay readable.
-    """
+    """TTL travels as the x-amz-meta-* keys that objects cached by boto3 carry."""
     key = "titiler:tile:coll:item:1:2:3:hash"
     await backend.set(key, b"payload", ttl=1800)
 
@@ -162,11 +154,6 @@ async def test_exists_on_missing_key_is_false(backend):
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason="bug: head_object raises ClientError('404'), not NoSuchKey, so the "
-    "absent-key branch is never taken and a plain miss is counted as an error",
-)
 async def test_exists_on_missing_key_is_not_an_error(backend):
     """Asking about a key that is not there is not a backend error."""
     await backend.exists("titiler:tile:coll:item:9:9:9:absent")
@@ -194,11 +181,6 @@ async def test_delete_on_missing_key_is_false(backend):
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason="bug: same ClientError('404') vs NoSuchKey mismatch as exists(), so the "
-    "head_object miss escapes to the generic handler and counts as an error",
-)
 async def test_delete_on_missing_key_is_not_an_error(backend):
     """Deleting an absent key is a no-op, not a backend error."""
     await backend.delete("titiler:tile:coll:item:9:9:9:absent")
@@ -223,6 +205,17 @@ async def test_clear_pattern_deletes_matching_tiles(backend):
     assert await backend.clear_pattern("titiler:tile:coll:*") == 2
     assert await backend.get("titiler:tile:coll:item:1:1:1:a") is None
     assert await backend.get("titiler:tile:other:item:3:3:3:c") == b"c"
+
+
+@pytest.mark.asyncio
+async def test_clear_pattern_wildcard_inside_a_key_segment(backend):
+    """A glob whose wildcard falls mid-segment still matches the longer segment."""
+    await backend.set("titiler:meta:collection:a", b"a")
+    await backend.set("titiler:meta:collection:b", b"b")
+    await backend.set("titiler:other:collection:c", b"c")
+
+    assert await backend.clear_pattern("titiler:meta:coll*") == 2
+    assert await backend.get("titiler:other:collection:c") == b"c"
 
 
 @pytest.mark.asyncio

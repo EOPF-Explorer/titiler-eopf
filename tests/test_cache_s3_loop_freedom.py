@@ -1,13 +1,6 @@
-"""A slow object store must not stall the event loop.
+"""A slow object store must not stall the event loop (EOPF-Explorer/data-pipeline#416).
 
-`TileCacheMiddleware` awaits this backend on every tile, so a blocking body inside a
-coroutine parks the worker for a whole object-store round-trip. That is what starved the
-liveness probe until kubelet killed both replicas in
-EOPF-Explorer/data-pipeline#416.
-
-The guard is stated as the property itself -- the loop keeps running while a cache read
-is in flight -- rather than as "the call happens on a thread", so it survives any change
-of S3 client. Latency is injected at the socket, below whatever library is in use.
+Latency is injected at the socket, so this holds whatever S3 client the backend uses.
 """
 
 import asyncio
@@ -26,21 +19,13 @@ from titiler.cache.backends.s3 import S3StorageBackend
 BUCKET = "loopcache"
 CREDENTIALS = {"access_key_id": "testing", "secret_access_key": "testing"}
 LATENCY = 0.1
-# A tick this slow means the loop is not being serviced; it is well under the injected
-# latency, so a backend that blocks for one round-trip cannot slip under it.
+# Well under LATENCY, so a backend that blocks for one round-trip cannot slip under it.
 MAX_TICK_GAP = 0.05
-
-
-class _SlowProxy(socketserver.ThreadingTCPServer):
-    """A TCP relay that adds `delay` to everything the upstream sends back."""
-
-    daemon_threads = True
-    allow_reuse_address = True
 
 
 class _SlowHandler(socketserver.BaseRequestHandler):
     def handle(self):
-        """Pipe both directions, delaying each chunk on its way back to the client."""
+        """Relay to `server.target`, delaying each chunk on its way back by LATENCY."""
         upstream = socket.create_connection(self.server.target)
         sel = selectors.DefaultSelector()
         sel.register(self.request, selectors.EVENT_READ, "client")
@@ -57,7 +42,7 @@ class _SlowHandler(socketserver.BaseRequestHandler):
                         data = upstream.recv(65536)
                         if not data:
                             return
-                        time.sleep(self.server.delay)
+                        time.sleep(LATENCY)
                         self.request.sendall(data)
         except OSError:
             return
@@ -70,12 +55,10 @@ class _SlowHandler(socketserver.BaseRequestHandler):
 def slow_endpoint(s3_endpoint):
     """`s3_endpoint`, reachable only through a relay that adds LATENCY per response."""
     target = urlparse(s3_endpoint)
-    proxy = _SlowProxy(("127.0.0.1", 0), _SlowHandler)
+    proxy = socketserver.ThreadingTCPServer(("127.0.0.1", 0), _SlowHandler)
+    proxy.daemon_threads = True
     proxy.target = (target.hostname, target.port)
-    proxy.delay = LATENCY
-
-    thread = threading.Thread(target=proxy.serve_forever, daemon=True)
-    thread.start()
+    threading.Thread(target=proxy.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{proxy.server_address[1]}"
     proxy.shutdown()
     proxy.server_close()
@@ -106,9 +89,7 @@ async def test_a_slow_store_does_not_stall_the_event_loop(slow_endpoint, seeded_
     backend = S3StorageBackend(
         bucket=BUCKET, region="us-east-1", endpoint_url=slow_endpoint, **CREDENTIALS
     )
-    # Connect and validate the bucket before timing, so head_bucket's latency is not
-    # attributed to the read.
-    await asyncio.to_thread(backend._get_client)
+    await backend.exists(seeded_key)  # connect and check the bucket before timing
 
     gaps: list[float] = []
     ticking = True
@@ -132,8 +113,7 @@ async def test_a_slow_store_does_not_stall_the_event_loop(slow_endpoint, seeded_
     ticking = False
     await task
 
-    # Guards against the relay silently not delaying, which would make the assertion
-    # below pass for the wrong reason.
+    # Otherwise a relay that failed to delay would pass the test vacuously.
     assert (
         elapsed > LATENCY
     ), f"latency injection did not take: read took {elapsed:.3f}s"

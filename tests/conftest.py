@@ -166,21 +166,11 @@ def parse_img(content: bytes) -> dict[Any, Any]:
 
 @pytest.fixture(scope="session")
 def s3_endpoint() -> Generator[str, Any, Any]:
-    """A real S3 endpoint, spoken over HTTP rather than patched into botocore.
-
-    `moto`'s in-process `mock_aws` patches botocore, so it can only see an S3 client
-    that *is* boto3. A served endpoint keeps the cache-backend tests valid for any
-    implementation of the same contract.
-    """
-    import socket
-
+    """A real S3 endpoint over HTTP: `mock_aws` patches botocore, so sees only boto3."""
     from moto.server import ThreadedMotoServer
 
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
-
-    server = ThreadedMotoServer(ip_address="127.0.0.1", port=port, verbose=False)
+    server = ThreadedMotoServer(ip_address="127.0.0.1", port=0, verbose=False)
     server.start()
-    yield f"http://127.0.0.1:{port}"
+    host, port = server.get_host_and_port()
+    yield f"http://{host}:{port}"
     server.stop()

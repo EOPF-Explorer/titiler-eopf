@@ -24,9 +24,9 @@ os.environ.setdefault(
     "TITILER_OPENEO_STORE_URL", os.path.join(REPO, "services", "eopf-explorer.json")
 )
 # Exercise the cache backend. It is off by default, and while it is off the
-# `cache` extra (redis, boto3) is never imported -- so a dependency dropped there
-# would slip past this check exactly as httpx did. s3-redis is what production
-# runs and it pulls both. Constructing the backends opens no connection.
+# `cache` extra (redis) is never imported -- so a dependency dropped there would
+# slip past this check exactly as httpx did. s3-redis is what production runs and
+# it pulls redis and obstore. Constructing the backends opens no connection.
 os.environ.setdefault("TITILER_EOPF_CACHE_ENABLE", "true")
 os.environ.setdefault("TITILER_EOPF_CACHE_BACKEND", "s3-redis")
 os.environ.setdefault("TITILER_EOPF_CACHE_REDIS_HOST", "localhost")

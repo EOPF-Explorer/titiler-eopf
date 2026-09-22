@@ -2968,7 +2968,6 @@ dependencies = [
 
 [package.optional-dependencies]
 cache = [
-    { name = "boto3" },
     { name = "redis" },
 ]
 openeo = [
@@ -3013,7 +3012,6 @@ performance = [
 [package.metadata]
 requires-dist = [
     { name = "anyio", specifier = ">=4.14.2" },
-    { name = "boto3", marker = "extra == 'cache'" },
     { name = "cryptography", marker = "extra == 'openeo'" },
     { name = "duckdb", marker = "extra == 'openeo'" },
     { name = "gunicorn", marker = "extra == 'server'" },
