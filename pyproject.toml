@@ -63,6 +63,9 @@ dev = [
     "pytest-cov",
     "pytest-asyncio",
     "fakeredis",
+    # Real-HTTP S3 fake: in-process `mock_aws` patches botocore, which cannot
+    # intercept an S3 client that is not boto3.
+    "moto[server]",
     "duckdb",
     "sqlalchemy>=2.0.0",
     "cryptography",
