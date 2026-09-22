@@ -51,7 +51,7 @@ http://127.0.0.1:8000/collections/sentinel-2/items/S2A_MSIL2A_20250704T094051_N0
 ## Launch
 
 ```
-uv run --extra server uvicorn titiler.eopf.main:app --host 127.0.0.1 --port 8080
+uv run --group server uvicorn titiler.eopf.main:app --host 127.0.0.1 --port 8080
 ```
 
 ### Using Docker
