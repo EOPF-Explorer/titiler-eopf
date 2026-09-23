@@ -233,7 +233,7 @@ async def test_health_check_shape(backend):
 
 @pytest.mark.asyncio
 async def test_health_check_reports_a_missing_bucket(s3_endpoint, s3_client):
-    """A bucket that vanished is reported, not raised."""
+    """A bucket that vanished is reported as `error`, which s3_redis passes on."""
     backend = S3StorageBackend(
         bucket="no-such-bucket",
         region="us-east-1",
@@ -242,5 +242,5 @@ async def test_health_check_reports_a_missing_bucket(s3_endpoint, s3_client):
     )
     health = await backend.health_check()
 
-    assert health["status"] in {"disconnected", "error"}
+    assert health["status"] == "error"
     assert health["bucket"] == "no-such-bucket"

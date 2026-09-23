@@ -248,7 +248,7 @@ class S3StorageBackend(CacheBackend):
         except Exception as e:
             logger.error(f"S3 health check error: {_brief(e)}")
             return {
-                "status": "disconnected",
+                "status": "error",
                 "bucket": self.bucket,
                 "region": self.region,
                 "error": _brief(e),
