@@ -162,3 +162,15 @@ def parse_img(content: bytes) -> dict[Any, Any]:
     with MemoryFile(content) as mem:
         with mem.open() as dst:
             return dst.profile
+
+
+@pytest.fixture(scope="session")
+def s3_endpoint() -> Generator[str, Any, Any]:
+    """A real S3 endpoint over HTTP: `mock_aws` patches botocore, so sees only boto3."""
+    from moto.server import ThreadedMotoServer
+
+    server = ThreadedMotoServer(ip_address="127.0.0.1", port=0, verbose=False)
+    server.start()
+    host, port = server.get_host_and_port()
+    yield f"http://{host}:{port}"
+    server.stop()

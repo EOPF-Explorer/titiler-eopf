@@ -399,14 +399,16 @@ if settings.debug:
 
 
 # Health Check Endpoints
+# `async` on purpose: a sync probe queues in the same anyio threadpool as the tile
+# renders and misses kubelet's 1s timeout. See EOPF-Explorer/data-pipeline#416.
 @app.get("/_mgmt/ping", description="Liveliness", tags=["Liveliness/Readiness"])
-def ping():
+async def ping():
     """Ping."""
     return {"message": "PONG"}
 
 
 @app.get("/_mgmt/health", description="Readiness", tags=["Liveliness/Readiness"])
-def health():
+async def health():
     """Health check."""
     return {
         "status": "UP",

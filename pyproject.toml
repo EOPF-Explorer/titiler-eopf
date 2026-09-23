@@ -30,6 +30,9 @@ dependencies = [
     "rioxarray>=0.22",
     "zarr[cast-value-rs]>=3.2.0",
     "obstore",
+    # Not imported by this package; starlette brings it in. Declared only for the
+    # floor, the fix for CVE-2026-63374, which Trivy fails the image build on.
+    "anyio>=4.14.2",
     "pydantic-settings~=2.0",
     "starlette-cramjam>=0.4,<1.0",
     "rio-tiler>=9.1,<10.0",
@@ -46,7 +49,6 @@ openeo = [
 ]
 cache = [
     "redis",
-    "boto3",
 ]
 server = [
     "uvicorn[standard]",
@@ -60,6 +62,7 @@ dev = [
     "pytest-cov",
     "pytest-asyncio",
     "fakeredis",
+    "moto[server]",
     "duckdb",
     "sqlalchemy>=2.0.0",
     "cryptography",

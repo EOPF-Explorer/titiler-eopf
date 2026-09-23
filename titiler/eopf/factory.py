@@ -152,7 +152,9 @@ class TilerFactory(BaseTilerFactory):
             summary="Retrieve a list of available raster tilesets for the specified dataset.",
             operation_id=f"{self.operation_prefix}getTileSetList",
         )
-        async def tileset_list(
+        # Sync on purpose: the body opens the store, so as a coroutine it blocked the
+        # event loop the probes live on (EOPF-Explorer/data-pipeline#416).
+        def tileset_list(
             request: Request,
             src_path=Depends(self.path_dependency),
             reader_params=Depends(self.reader_dependency),
@@ -249,7 +251,7 @@ class TilerFactory(BaseTilerFactory):
             summary="Retrieve the raster tileset metadata for the specified dataset and tiling scheme (tile matrix set).",
             operation_id=f"{self.operation_prefix}getTileSet",
         )
-        async def tileset(
+        def tileset(
             request: Request,
             tileMatrixSetId: Annotated[
                 Literal[tuple(self.supported_tms.list())],
