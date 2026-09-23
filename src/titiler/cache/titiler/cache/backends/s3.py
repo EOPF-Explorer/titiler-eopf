@@ -41,6 +41,7 @@ class CacheS3Settings(BaseSettings):
     session_token: str | None = None
 
     model_config = SettingsConfigDict(
+        env_prefix="TITILER_CACHE_S3_",
         env_file=".env",
         extra="ignore",
     )

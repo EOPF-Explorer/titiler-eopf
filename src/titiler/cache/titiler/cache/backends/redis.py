@@ -25,6 +25,7 @@ class CacheRedisSettings(BaseSettings):
     db: int = 0
 
     model_config = SettingsConfigDict(
+        env_prefix="TITILER_CACHE_REDIS_",
         env_file=".env",
         extra="ignore",
     )
