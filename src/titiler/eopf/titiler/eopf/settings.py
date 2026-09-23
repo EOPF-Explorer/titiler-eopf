@@ -4,8 +4,9 @@ from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing_extensions import Self
 
-from titiler.cache import CacheRedisSettings, CacheS3Settings
 from titiler.cache import CacheSettings as BaseCacheSettings
+from titiler.cache.backends.redis import CacheRedisSettings
+from titiler.cache.backends.s3 import CacheS3Settings
 
 
 class ApiSettings(BaseSettings):

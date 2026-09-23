@@ -3,10 +3,9 @@
 import logging
 from typing import Any, Optional, Pattern, Union
 
-from ..settings import CacheRedisSettings, CacheS3Settings
 from .base import CacheBackend, CacheBackendUnavailable, CacheError
-from .redis import RedisCacheBackend
-from .s3 import S3StorageBackend
+from .redis import CacheRedisSettings, RedisCacheBackend
+from .s3 import CacheS3Settings, S3StorageBackend
 
 logger = logging.getLogger(__name__)
 

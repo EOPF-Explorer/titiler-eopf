@@ -1,8 +1,5 @@
 """Cache configuration settings."""
 
-from typing import Self
-
-from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -44,43 +41,3 @@ class CacheSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="TITILER_CACHE_", env_file=".env", extra="ignore"
     )
-
-
-class CacheRedisSettings(BaseSettings):
-    """Redis cache backend configuration."""
-
-    host: str | None = None
-    port: int = 6379
-    password: SecretStr | None = None
-    db: int = 0
-
-    model_config = SettingsConfigDict(
-        env_prefix="TITILER_CACHE_REDIS_", env_file=".env", extra="ignore"
-    )
-
-
-class CacheS3Settings(BaseSettings):
-    """S3 cache storage configuration.
-
-    Separate from EOPF data source S3 settings to allow different
-    buckets, regions, and credentials for cache storage.
-    """
-
-    bucket: str | None = None
-    region: str = "us-east-1"
-    endpoint_url: str | None = None
-    access_key_id: str | None = None
-    secret_access_key: SecretStr | None = None
-    session_token: str | None = None
-
-    model_config = SettingsConfigDict(
-        env_prefix="TITILER_CACHE_S3_", env_file=".env", extra="ignore"
-    )
-
-    @model_validator(mode="after")
-    def validate_s3_config(self) -> Self:
-        """Validate S3 configuration."""
-        if self.bucket and not self.access_key_id:
-            # Allow using default AWS credentials chain if no explicit key provided
-            pass
-        return self

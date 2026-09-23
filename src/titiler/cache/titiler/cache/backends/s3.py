@@ -2,10 +2,12 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Optional, Pattern, Union
+from typing import Any, Optional, Pattern, Self, Union
 
-from ..backends.base import CacheBackend, CacheBackendUnavailable, CacheError
-from ..settings import CacheS3Settings
+from pydantic import SecretStr, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from .base import CacheBackend, CacheBackendUnavailable, CacheError
 
 try:
     import boto3
@@ -22,6 +24,34 @@ except ImportError:  # pragma: nocover
 
 
 logger = logging.getLogger(__name__)
+
+
+class CacheS3Settings(BaseSettings):
+    """S3 cache storage configuration.
+
+    Separate from EOPF data source S3 settings to allow different
+    buckets, regions, and credentials for cache storage.
+    """
+
+    bucket: str | None = None
+    region: str = "us-east-1"
+    endpoint_url: str | None = None
+    access_key_id: str | None = None
+    secret_access_key: SecretStr | None = None
+    session_token: str | None = None
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore",
+    )
+
+    @model_validator(mode="after")
+    def validate_s3_config(self) -> Self:
+        """Validate S3 configuration."""
+        if self.bucket and not self.access_key_id:
+            # Allow using default AWS credentials chain if no explicit key provided
+            pass
+        return self
 
 
 class S3StorageBackend(CacheBackend):

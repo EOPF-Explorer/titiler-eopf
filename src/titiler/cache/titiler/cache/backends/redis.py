@@ -3,8 +3,10 @@
 import logging
 from typing import Any, Optional, Pattern, Union
 
-from ..backends.base import CacheBackend, CacheBackendUnavailable, CacheError
-from ..settings import CacheRedisSettings
+from pydantic import SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from .base import CacheBackend, CacheBackendUnavailable, CacheError
 
 try:
     import redis.asyncio as redis
@@ -12,6 +14,20 @@ except ImportError:  # pragma: nocover
     redis = None  # type: ignore
 
 logger = logging.getLogger(__name__)
+
+
+class CacheRedisSettings(BaseSettings):
+    """Redis cache backend configuration."""
+
+    host: str | None = None
+    port: int = 6379
+    password: SecretStr | None = None
+    db: int = 0
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore",
+    )
 
 
 class RedisCacheBackend(CacheBackend):

@@ -11,14 +11,12 @@ from .admin import create_cache_admin_router
 from .backends.base import CacheBackend
 from .decorators import CacheManager, cache_control, cached_metadata, cached_tile
 from .middleware import CacheControlMiddleware, TileCacheMiddleware
-from .settings import CacheRedisSettings, CacheS3Settings, CacheSettings
+from .settings import CacheSettings
 from .utils import CacheKeyGenerator
 
 __all__ = [
     "CacheBackend",
     "CacheSettings",
-    "CacheRedisSettings",
-    "CacheS3Settings",
     "TileCacheMiddleware",
     "CacheControlMiddleware",
     "CacheKeyGenerator",

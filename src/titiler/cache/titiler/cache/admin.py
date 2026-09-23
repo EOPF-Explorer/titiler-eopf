@@ -7,8 +7,8 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from titiler.cache.backends.base import CacheBackend
-from titiler.cache.utils import CacheKeyGenerator
+from .backends.base import CacheBackend
+from .utils import CacheKeyGenerator
 
 logger = logging.getLogger(__name__)
 
