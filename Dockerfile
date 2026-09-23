@@ -60,16 +60,21 @@ ENV UV_LINK_MODE=copy \
 
 WORKDIR /tmp/app
 
-# Copy project metadata and install dependencies from the lockfile (--frozen:
-# uv.lock is authoritative, out-of-date fails the build). The `server` extra
-# carries uvicorn/gunicorn/uvicorn-worker — the chart and the CMD below need
-# them as locked deps, not ad-hoc installs.
+# Copy project metadata and dependencies
 COPY pyproject.toml uv.lock README.md LICENSE ./
-RUN uv sync --frozen --no-dev --extra server --extra cache --extra openeo --no-install-project
+COPY src/titiler/ ./src/titiler/
 
-# Copy and install runtime source code to the builder image
-COPY titiler/ titiler/
-RUN uv pip install --no-deps .
+# Install project dependencies into the uv-managed virtual environment.
+# --no-editable: the runtime stage only copies /opt/venv (and /opt/uv-python),
+# not this /tmp/app source tree, so editable installs (.pth files pointing
+# back at /tmp/app) would leave `import titiler...` broken at runtime.
+RUN uv sync --frozen --no-dev --no-editable --group server
+RUN uv pip install --no-deps --no-editable .
+
+# uv skips downloading its own managed interpreter when the apk python already
+# satisfies UV_PYTHON, leaving UV_PYTHON_INSTALL_DIR absent. Make sure it
+# exists (even empty) so the unconditional COPY below never fails.
+RUN mkdir -p /opt/uv-python
 
 # Runtime stage
 FROM base
@@ -85,6 +90,7 @@ ENV PATH="/opt/venv/bin:${PATH}"
 
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /opt/uv-python /opt/uv-python
 
 WORKDIR /tmp
 

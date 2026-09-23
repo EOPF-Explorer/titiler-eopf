@@ -2,10 +2,12 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Optional, Pattern, Union
+from typing import Any, Optional, Pattern, Self, Union
 
-from ..backends.base import CacheBackend, CacheBackendUnavailable, CacheError
-from ..settings import CacheS3Settings
+from pydantic import SecretStr, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from .base import CacheBackend, CacheBackendUnavailable, CacheError
 
 try:
     import boto3
@@ -14,32 +16,43 @@ try:
     BOTO3_AVAILABLE = True
 except ImportError:  # pragma: nocover
     boto3 = None  # type: ignore
+    BotoCoreError = None
+    ClientError = None
+    NoCredentialsError = None
+
     BOTO3_AVAILABLE = False
-
-    # Only create fallback classes if boto3 is not available
-    class BotoCoreError(Exception):  # type: ignore
-        """Fallback BotoCoreError when boto3 is not available."""
-
-        def __init__(self, *args, **kwargs):
-            """Initialize fallback exception."""
-            super().__init__(*args, **kwargs)
-
-    class ClientError(Exception):  # type: ignore
-        """Fallback ClientError when boto3 is not available."""
-
-        def __init__(self, *args, **kwargs):
-            """Initialize fallback exception."""
-            super().__init__(*args, **kwargs)
-
-    class NoCredentialsError(Exception):  # type: ignore
-        """Fallback NoCredentialsError when boto3 is not available."""
-
-        def __init__(self, *args, **kwargs):
-            """Initialize fallback exception."""
-            super().__init__(*args, **kwargs)
 
 
 logger = logging.getLogger(__name__)
+
+
+class CacheS3Settings(BaseSettings):
+    """S3 cache storage configuration.
+
+    Separate from EOPF data source S3 settings to allow different
+    buckets, regions, and credentials for cache storage.
+    """
+
+    bucket: str | None = None
+    region: str = "us-east-1"
+    endpoint_url: str | None = None
+    access_key_id: str | None = None
+    secret_access_key: SecretStr | None = None
+    session_token: str | None = None
+
+    model_config = SettingsConfigDict(
+        env_prefix="TITILER_CACHE_S3_",
+        env_file=".env",
+        extra="ignore",
+    )
+
+    @model_validator(mode="after")
+    def validate_s3_config(self) -> Self:
+        """Validate S3 configuration."""
+        if self.bucket and not self.access_key_id:
+            # Allow using default AWS credentials chain if no explicit key provided
+            pass
+        return self
 
 
 class S3StorageBackend(CacheBackend):
@@ -178,7 +191,7 @@ class S3StorageBackend(CacheBackend):
                 self._client.head_bucket(Bucket=self.bucket)
                 logger.debug(f"Connected to S3 bucket: {self.bucket}")
 
-            except (BotoCoreError, ClientError, NoCredentialsError) as e:
+            except (BotoCoreError, ClientError, NoCredentialsError) as e:  # type: ignore
                 logger.error(f"Failed to connect to S3: {e}")
                 raise CacheBackendUnavailable(f"S3 unavailable: {e}") from e
 
@@ -319,7 +332,7 @@ class S3StorageBackend(CacheBackend):
                 client.delete_object(Bucket=self.bucket, Key=object_key)
                 logger.debug(f"S3 Cache DELETE for key: {key}")
                 return True
-            except (BotoCoreError, ClientError) as e:
+            except (BotoCoreError, ClientError) as e:  # type: ignore
                 if (
                     hasattr(e, "response")
                     and e.response["Error"]["Code"] == "NoSuchKey"
@@ -345,7 +358,7 @@ class S3StorageBackend(CacheBackend):
             client.head_object(Bucket=self.bucket, Key=object_key)
             return True
 
-        except (BotoCoreError, ClientError) as e:
+        except (BotoCoreError, ClientError) as e:  # type: ignore
             if hasattr(e, "response") and e.response["Error"]["Code"] == "NoSuchKey":
                 return False
             self._stats["errors"] += 1

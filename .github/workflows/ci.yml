@@ -81,8 +81,7 @@ jobs:
       # Same flags as the Dockerfile, so this closure is what production gets.
       - name: Install dependencies without the dev group
         run: |
-          uv sync --frozen --no-dev --extra server --extra cache --extra openeo --no-install-project
-          uv pip install --no-deps .
+          uv sync --frozen --no-dev --group server
 
       - name: Import every deployed app
         run: |
