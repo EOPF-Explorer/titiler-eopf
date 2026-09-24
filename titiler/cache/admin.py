@@ -1,22 +1,32 @@
 """Cache management API endpoints for administrative operations."""
 
 import logging
+import secrets
 import time
-from typing import List, Optional
+from typing import Annotated, List, Optional
 
-from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException, Response, Security, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, Field, SecretStr, StringConstraints
 
 from titiler.cache.backends.base import CacheBackend
 from titiler.cache.utils import CacheKeyGenerator
 
 logger = logging.getLogger(__name__)
 
+MIN_TOKEN_LENGTH = 16
+
 
 class InvalidateRequest(BaseModel):
     """Request model for cache invalidation."""
 
-    patterns: List[str] = Field(description="Cache key patterns to invalidate")
+    patterns: List[Annotated[str, StringConstraints(min_length=1, max_length=256)]] = (
+        Field(
+            min_length=1,
+            max_length=100,
+            description="Cache key patterns to invalidate",
+        )
+    )
 
 
 class InvalidateResponse(BaseModel):
@@ -41,22 +51,6 @@ class CacheStats(BaseModel):
     uptime_seconds: Optional[int] = Field(description="Backend uptime", default=None)
 
 
-class CacheKey(BaseModel):
-    """Cache key information model."""
-
-    key: str = Field(description="Full cache key")
-    cache_type: str = Field(description="Type of cached content (tile, tilejson, etc.)")
-    created_at: Optional[str] = Field(
-        description="ISO timestamp when key was created", default=None
-    )
-    ttl_seconds: Optional[int] = Field(
-        description="Time to live in seconds", default=None
-    )
-    size_bytes: Optional[int] = Field(
-        description="Size of cached data in bytes", default=None
-    )
-
-
 def _create_status_endpoint(
     cache_backend: CacheBackend, key_generator: CacheKeyGenerator
 ):
@@ -65,120 +59,129 @@ def _create_status_endpoint(
     async def get_cache_status():
         """Get cache status and statistics."""
         try:
-            stats = CacheStats(
+            backend_stats = await cache_backend.get_stats()
+            return CacheStats(
                 backend_type=type(cache_backend)
                 .__name__.replace("Backend", "")
                 .lower(),
                 namespace=key_generator.namespace,
+                total_keys=backend_stats.get("total_keys"),
+                cache_size_bytes=backend_stats.get("cache_size_bytes"),
+                hit_rate=backend_stats.get("hit_rate"),
+                uptime_seconds=backend_stats.get("uptime_seconds"),
             )
-
-            if hasattr(cache_backend, "get_stats"):
-                backend_stats = await cache_backend.get_stats()
-                if isinstance(backend_stats, dict):
-                    stats.total_keys = backend_stats.get("total_keys")
-                    stats.cache_size_bytes = backend_stats.get("cache_size_bytes")
-                    stats.hit_rate = backend_stats.get("hit_rate")
-                    stats.uptime_seconds = backend_stats.get("uptime_seconds")
-
-            return stats
-
         except Exception as e:
             logger.error(f"Error getting cache status: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error retrieving cache status: {str(e)}",
+                detail="Error retrieving cache status",
             ) from e
 
     return get_cache_status
 
 
-def _create_invalidate_endpoint(cache_backend: CacheBackend):
-    """Create cache invalidation endpoint."""
+def _create_invalidate_endpoint(cache_backend: CacheBackend, namespace: str):
+    """Create cache invalidation endpoint.
+
+    Every pattern is confined to `namespace`: a pattern that does not already
+    start with `<namespace>:` gets that prefix, so `*` means "this app's keys",
+    never the whole Redis DB or S3 bucket.
+    """
+    ns = f"{namespace}:"
 
     async def invalidate_cache(request: InvalidateRequest):
         """Invalidate cache entries by patterns."""
-        try:
-            start_time = time.time()
-            invalidated_count = 0
-            failed_patterns = []
+        start_time = time.time()
+        invalidated_count = 0
+        failed_patterns = []
 
+        # clear_pattern swallows backend errors and returns 0, so check the
+        # backend is reachable first instead of reporting a silent success.
+        health = await cache_backend.health_check()
+        if health.get("status") != "connected":
+            logger.error("Cache invalidation skipped: backend unhealthy")
+            failed_patterns = list(request.patterns)
+        else:
             for pattern in request.patterns:
+                scoped = pattern if pattern.startswith(ns) else ns + pattern
                 try:
-                    if hasattr(cache_backend, "delete_pattern"):
-                        count = await cache_backend.delete_pattern(pattern)
-                        invalidated_count += count
-                    elif hasattr(cache_backend, "clear_pattern"):
-                        count = await cache_backend.clear_pattern(pattern)
-                        invalidated_count += count
-                    elif hasattr(cache_backend, "scan_keys"):
-                        keys = await cache_backend.scan_keys(pattern)
-                        for key in keys:
-                            try:
-                                await cache_backend.delete(key)
-                                invalidated_count += 1
-                            except Exception as e:
-                                logger.error(
-                                    "Failed to delete cache key %s for pattern %s: %s",
-                                    key,
-                                    pattern,
-                                    e,
-                                )
-                                failed_patterns.append(pattern)
-                    else:
-                        failed_patterns.append(pattern)
-                        logger.warning(f"Pattern deletion not supported for: {pattern}")
+                    invalidated_count += await cache_backend.clear_pattern(scoped)
                 except Exception as e:
                     failed_patterns.append(pattern)
-                    logger.error(f"Failed to invalidate pattern {pattern}: {e}")
+                    logger.error(f"Failed to invalidate pattern {scoped}: {e}")
 
-            execution_time = (time.time() - start_time) * 1000
-
-            return InvalidateResponse(
-                success=len(failed_patterns) == 0,
-                invalidated_count=invalidated_count,
-                failed_patterns=failed_patterns,
-                execution_time_ms=execution_time,
-            )
-
-        except Exception as e:
-            logger.error(f"Error invalidating cache: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error invalidating cache: {str(e)}",
-            ) from e
+        return InvalidateResponse(
+            success=not failed_patterns,
+            invalidated_count=invalidated_count,
+            failed_patterns=failed_patterns,
+            execution_time_ms=(time.time() - start_time) * 1000,
+        )
 
     return invalidate_cache
 
 
 def create_cache_admin_router(
-    cache_backend: Optional[CacheBackend] = None,
-    key_generator: Optional[CacheKeyGenerator] = None,
-    require_auth: bool = False,
+    cache_backend: CacheBackend,
+    key_generator: CacheKeyGenerator,
+    token: SecretStr,
+    prefix: str = "/admin/cache",
 ) -> APIRouter:
     """Create cache administration router.
+
+    Every route requires `Authorization: Bearer <token>` and answers with
+    `Cache-Control: no-store`. The router is left out of the OpenAPI schema.
 
     Args:
         cache_backend: Cache backend instance
         key_generator: Cache key generator instance
-        require_auth: Whether to require authentication (set False for development)
+        token: Bearer token every request must present
+        prefix: Path prefix the routes are mounted under
 
     Returns:
         FastAPI router with cache management endpoints
+
+    Raises:
+        ValueError: if the token or prefix is unusable, so the router can never
+            be built open, nor crash the app at import.
     """
-    router = APIRouter(prefix="/admin/cache", tags=["Cache Administration"])
+    expected = token.get_secret_value().strip()
+    if len(expected) < MIN_TOKEN_LENGTH or not expected.isascii():
+        raise ValueError(
+            f"admin token must be at least {MIN_TOKEN_LENGTH} ASCII characters "
+            "(surrounding whitespace is ignored)"
+        )
+    if not prefix.startswith("/") or prefix.endswith("/"):
+        raise ValueError(
+            f"admin prefix {prefix!r} must start with '/', must not end with '/' "
+            "and must not be '/'"
+        )
+    expected_bytes = expected.encode()
 
-    if not cache_backend or not key_generator:
-        # Return empty router if dependencies not available
-        @router.get("/status")
-        async def unavailable():
+    async def verify_token(
+        response: Response,
+        credentials: Annotated[
+            Optional[HTTPAuthorizationCredentials],
+            Security(HTTPBearer(auto_error=False)),
+        ],
+    ) -> None:
+        """Reject requests without the expected bearer token."""
+        if credentials is None or not secrets.compare_digest(
+            credentials.credentials.encode(), expected_bytes
+        ):
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Cache backend not available",
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or missing bearer token",
+                headers={"WWW-Authenticate": "Bearer", "Cache-Control": "no-store"},
             )
+        response.headers["Cache-Control"] = "no-store"
 
-        return router
+    router = APIRouter(
+        prefix=prefix,
+        tags=["Cache Administration"],
+        dependencies=[Security(verify_token)],
+        include_in_schema=False,
+    )
 
-    # Add endpoints
     router.add_api_route(
         "/status",
         _create_status_endpoint(cache_backend, key_generator),
@@ -188,7 +191,7 @@ def create_cache_admin_router(
 
     router.add_api_route(
         "/invalidate",
-        _create_invalidate_endpoint(cache_backend),
+        _create_invalidate_endpoint(cache_backend, key_generator.namespace),
         methods=["POST"],
         response_model=InvalidateResponse,
     )

@@ -30,11 +30,6 @@ cache:
     - "user_id"
     - "session"
   
-  # Admin API
-  admin:
-    enabled: true
-    path_prefix: "/admin/cache"
-
 # Application environment
 env:
   LOG_LEVEL: "DEBUG"

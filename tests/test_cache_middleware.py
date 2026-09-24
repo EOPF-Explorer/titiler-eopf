@@ -111,6 +111,28 @@ class TestTileCacheMiddleware:
         assert not middleware._should_cache_request(MockRequest("GET", "/health"))
         assert not middleware._should_cache_request(MockRequest("GET", "/admin/"))
 
+    def test_should_cache_request_exclude_paths(self):
+        """Test excluded paths are never cached, even if they match cache_paths."""
+        middleware = TileCacheMiddleware(
+            app=None,
+            cache_backend=MockCacheBackend(),
+            key_generator=CacheKeyGenerator("test-app"),
+            exclude_paths=["/tiles/admin"],
+        )
+
+        class MockRequest:
+            def __init__(self, method, path):
+                self.method = method
+                self.url = MagicMock()
+                self.url.path = path
+
+        assert not middleware._should_cache_request(
+            MockRequest("GET", "/raster/tiles/admin/status")
+        )
+        assert middleware._should_cache_request(
+            MockRequest("GET", "/raster/tiles/1/2/3.png")
+        )
+
     def test_determine_cache_type(self):
         """Test cache type determination from paths."""
         cache_backend = MockCacheBackend()
