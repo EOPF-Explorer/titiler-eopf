@@ -138,3 +138,15 @@ true
 false
 {{- end -}}
 {{- end -}}
+
+{{/*
+Tolerates a missing cache.admin block and string values ("true"/"false")
+from --set-string or HelmRelease values.
+*/}}
+{{- define "titiler-eopf.cache.admin.enabled" -}}
+{{- if eq (toString (dig "admin" "enabled" false (.Values.cache | default dict))) "true" -}}
+true
+{{- else -}}
+false
+{{- end -}}
+{{- end -}}

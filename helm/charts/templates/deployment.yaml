@@ -144,11 +144,16 @@ spec:
               {{- end }}
             {{- end }}
             {{- /* Admin API Configuration */ -}}
-            {{- if .Values.cache.admin.enabled }}
+            {{- if eq (include "titiler-eopf.cache.admin.enabled" .) "true" }}
             - name: TITILER_EOPF_CACHE_ADMIN_ENABLE
               value: "true"
             - name: TITILER_EOPF_CACHE_ADMIN_PREFIX
-              value: {{ .Values.cache.admin.path_prefix | quote }}
+              value: {{ .Values.cache.admin.path_prefix | default "/admin/cache" | quote }}
+            - name: TITILER_EOPF_CACHE_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.cache.admin.auth.existingSecret | quote }}
+                  key: {{ .Values.cache.admin.auth.existingSecretKey | default "admin-token" | quote }}
             {{- end }}
           ports:
             - name: http

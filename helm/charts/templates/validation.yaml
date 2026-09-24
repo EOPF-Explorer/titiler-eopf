@@ -6,6 +6,11 @@ Validation: internal Redis and external Redis cannot both be enabled.
 {{- fail "Invalid configuration: redis.enabled=true and redis.external.enabled=true cannot both be set. Choose one." }}
 {{- end }}
 
+{{- /* Cache admin API needs a token Secret: never deploy it open */ -}}
+{{- if and (eq (include "titiler-eopf.cache.admin.enabled" .) "true") (not (dig "admin" "auth" "existingSecret" "" .Values.cache)) }}
+{{- fail "cache.admin.auth.existingSecret is required when cache.admin.enabled=true" }}
+{{- end }}
+
 {{- /*
 Cache Configuration Validations
 */ -}}
