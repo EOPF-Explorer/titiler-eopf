@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790175151262,
+  "lastUpdate": 1790263231876,
   "repoUrl": "https://github.com/EOPF-Explorer/titiler-eopf",
   "entries": {
     "titiler-eopf Benchmarks": [
@@ -1924,6 +1924,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.035159775792085506",
             "extra": "mean: 400.4834619400003 msec\nrounds: 50"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "10154151+lhoupert@users.noreply.github.com",
+            "name": "Loïc Houpert",
+            "username": "lhoupert"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5fbea81ff7b6cfd556c46be5bf1bf6671fb5ac58",
+          "message": "Merge pull request #174 from EOPF-Explorer/fix/cache-admin-auth\n\nfix(cache): make the cache admin API opt-in and token-protected",
+          "timestamp": "2026-09-24T16:14:58+01:00",
+          "tree_id": "b5f099dee434d76c79d635bf2a7a187d855d7353",
+          "url": "https://github.com/EOPF-Explorer/titiler-eopf/commit/5fbea81ff7b6cfd556c46be5bf1bf6671fb5ac58"
+        },
+        "date": 1790263231034,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "GeoZarrReader-Open",
+            "value": 56.89643804444762,
+            "unit": "iter/sec",
+            "range": "stddev: 0.012527708887295113",
+            "extra": "mean: 17.57579269230875 msec\nrounds: 52"
+          },
+          {
+            "name": "GeoZarrReader-Info",
+            "value": 61.721555462483444,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000379323686173741",
+            "extra": "mean: 16.201795183334866 msec\nrounds: 60"
+          },
+          {
+            "name": "GeoZarrReader-Preview",
+            "value": 2.965748619551238,
+            "unit": "iter/sec",
+            "range": "stddev: 0.022732118327901805",
+            "extra": "mean: 337.1829943399973 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Tile",
+            "value": 2.5746159031780715,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04185597965153793",
+            "extra": "mean: 388.40745090000155 msec\nrounds: 50"
           }
         ]
       }
