@@ -9,6 +9,7 @@ import rasterio
 import xarray
 import zarr
 from fastapi import FastAPI, Query
+from pydantic import SecretStr
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.templating import Jinja2Templates
@@ -288,6 +289,27 @@ app.add_middleware(
     compression_level=6,
 )
 
+
+# Cache admin API: opt-in, needs the cache and a valid token; never mounted
+# open, and a bad token/prefix never takes the tile server down.
+cache_admin_router = None
+if cache_settings.admin_enable:
+    if not (cache_backend and cache_key_generator):
+        logger.warning(
+            "TITILER_EOPF_CACHE_ADMIN_ENABLE is set but the cache is disabled: "
+            "cache admin API NOT mounted"
+        )
+    else:
+        try:
+            cache_admin_router = create_cache_admin_router(
+                cache_backend,
+                cache_key_generator,
+                token=cache_settings.admin_token or SecretStr(""),
+                prefix=cache_settings.admin_prefix,
+            )
+        except ValueError as e:
+            logger.error(f"Cache admin API NOT mounted: {e}")
+
 # Add tile cache middleware if caching is enabled
 if cache_backend and cache_key_generator:
     app.add_middleware(
@@ -295,54 +317,30 @@ if cache_backend and cache_key_generator:
         cache_backend=cache_backend,
         key_generator=cache_key_generator,
         cache_paths=cache_settings.cache_paths,
+        exclude_paths=[cache_admin_router.prefix] if cache_admin_router else None,
         default_ttl=cache_settings.default_ttl,
         cache_status_header="X-Cache",
     )
     logger.info("Tile cache middleware enabled")
 
-    # Cache Admin endpoints
-    cache_admin = create_cache_admin_router(cache_backend, cache_key_generator)
-    app.include_router(cache_admin)
+    if cache_admin_router:
+        app.include_router(cache_admin_router)
+        logger.info(f"Cache admin API mounted at {cache_admin_router.prefix}")
 
     @app.get("/_mgmt/cache", description="Cache Status", tags=["Cache Management"])
     async def cache_status():
-        """Get cache system status."""
-        if not cache_backend:
-            return {"cache": {"status": "disabled"}}
-
+        """Get cache system status (public: no connection details or errors)."""
         try:
-            # Try to get cache health
-            is_healthy = await cache_backend.health_check()
-            stats = (
-                await cache_backend.get_stats()
-                if hasattr(cache_backend, "get_stats")
-                else {}
-            )
-
+            health = await cache_backend.health_check()
             return {
                 "cache": {
                     "status": "enabled",
-                    "backend": cache_settings.backend,
-                    "healthy": is_healthy,
-                    "namespace": cache_settings.namespace,
-                    "default_ttl": cache_settings.default_ttl,
-                    "stats": stats,
-                    "settings": {
-                        "tile_ttl": cache_settings.tile_ttl,
-                        "metadata_ttl": cache_settings.metadata_ttl,
-                        "exclude_params": cache_settings.exclude_params,
-                        "cache_paths": cache_settings.cache_paths,
-                    },
+                    "healthy": health.get("status") == "connected",
                 }
             }
         except Exception as e:
-            return {
-                "cache": {
-                    "status": "error",
-                    "error": str(e),
-                    "backend": cache_settings.backend,
-                }
-            }
+            logger.error(f"Cache health check failed: {e}")
+            return {"cache": {"status": "error"}}
 
 
 app.add_middleware(
