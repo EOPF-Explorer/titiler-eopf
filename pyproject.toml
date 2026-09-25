@@ -74,6 +74,7 @@ dev = [
     "matplotlib",
     "folium",
     "owslib",
+    "moto[s3]>=5.2.3",
 ]
 
 performance = [
