@@ -11,6 +11,14 @@
 
 **Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.8.0...v0.9.0
 
+## 0.11.1 (2026-09-25)
+
+## What's Changed
+* fix(cache): make the cache admin API opt-in and token-protected (0.11.x backport) by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/176
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.11.0...v0.11.1
+
 ## 0.11.0 (2026-09-04)
 
 ## What's Changed
