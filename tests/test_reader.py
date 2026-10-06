@@ -786,7 +786,7 @@ def test_sub_group(geozarr_dataset):
 
 
 def test_array(geozarr_dataset):
-    """test GeoZarrReader open."""
+    """Test GeoZarrReader raises InvalidGeoZarrStore for a Zarr array path."""
     with pytest.raises(InvalidGeoZarrStore):
         with GeoZarrReader(
             input=f"{geozarr_dataset}/measurements/reflectance/r10m/b02"
