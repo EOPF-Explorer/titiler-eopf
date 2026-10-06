@@ -75,7 +75,7 @@ class MissingVariables(RioTilerError):
 
 
 class InvalidGeoZarrStore(RioTilerError):
-    """GeoZarr Store is not group."""
+    """The GeoZarr store is not a Zarr group."""
 
 
 # Bound the in-process datatree memo. Unbounded caching + version-keying would
