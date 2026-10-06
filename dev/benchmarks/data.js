@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790759707280,
+  "lastUpdate": 1791326224533,
   "repoUrl": "https://github.com/EOPF-Explorer/titiler-eopf",
   "entries": {
     "titiler-eopf Benchmarks": [
@@ -2028,6 +2028,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.041195708142711354",
             "extra": "mean: 388.17463256000224 msec\nrounds: 50"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "49699333+dependabot[bot]@users.noreply.github.com",
+            "name": "dependabot[bot]",
+            "username": "dependabot[bot]"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "50e0e1c9cd9718cb0dac68f279d05a69f52dfb5e",
+          "message": "chore(deps): bump the all group across 1 directory with 8 updates (#169)\n\nBumps the all group with 8 updates in the / directory:\n\n| Package | From | To |\n| --- | --- | --- |\n| [astral-sh/setup-uv](https://github.com/astral-sh/setup-uv) | `10.0.1` | `10.2.0` |\n| [codecov/codecov-action](https://github.com/codecov/codecov-action) | `7.0.0` | `7.1.1` |\n| [benchmark-action/github-action-benchmark](https://github.com/benchmark-action/github-action-benchmark) | `1.22.1` | `1.22.2` |\n| [docker/setup-qemu-action](https://github.com/docker/setup-qemu-action) | `4.2.0` | `4.4.0` |\n| [docker/setup-buildx-action](https://github.com/docker/setup-buildx-action) | `4.3.0` | `4.4.1` |\n| [docker/build-push-action](https://github.com/docker/build-push-action) | `7.3.0` | `7.4.0` |\n| [github/codeql-action/upload-sarif](https://github.com/github/codeql-action) | `4.37.8` | `4.38.2` |\n| [helm/kind-action](https://github.com/helm/kind-action) | `1.14.0` | `1.15.0` |\n\n\n\nUpdates `astral-sh/setup-uv` from 10.0.1 to 10.2.0\n- [Release notes](https://github.com/astral-sh/setup-uv/releases)\n- [Commits](https://github.com/astral-sh/setup-uv/compare/20cfd1bf945f4377ade1205e4dbc17946fc9a30d...c18668ad3cf93ea998bef934396af7bb5c839dc7)\n\nUpdates `codecov/codecov-action` from 7.0.0 to 7.1.1\n- [Release notes](https://github.com/codecov/codecov-action/releases)\n- [Changelog](https://github.com/codecov/codecov-action/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/codecov/codecov-action/compare/fb8b3582c8e4def4969c97caa2f19720cb33a72f...303a32d7a59b442fa8d48b6a1cc6825c09c847a5)\n\nUpdates `benchmark-action/github-action-benchmark` from 1.22.1 to 1.22.2\n- [Release notes](https://github.com/benchmark-action/github-action-benchmark/releases)\n- [Changelog](https://github.com/benchmark-action/github-action-benchmark/blob/master/CHANGELOG.md)\n- [Commits](https://github.com/benchmark-action/github-action-benchmark/compare/52576c92bccf6ac60c8223ec7eb2565637cae9ba...4322e5726e6334590d251fc4f92bec0efafc45dc)\n\nUpdates `docker/setup-qemu-action` from 4.2.0 to 4.4.0\n- [Release notes](https://github.com/docker/setup-qemu-action/releases)\n- [Commits](https://github.com/docker/setup-qemu-action/compare/96fe6ef7f33517b61c61be40b68a1882f3264fb8...99012661954931238ded8c8b007157a8430204e1)\n\nUpdates `docker/setup-buildx-action` from 4.3.0 to 4.4.1\n- [Release notes](https://github.com/docker/setup-buildx-action/releases)\n- [Commits](https://github.com/docker/setup-buildx-action/compare/37fe631027851001ddb9b187196cc803df7f5f0e...f87e5991a6d7451dcb8d9637bfbc97413f497069)\n\nUpdates `docker/build-push-action` from 7.3.0 to 7.4.0\n- [Release notes](https://github.com/docker/build-push-action/releases)\n- [Commits](https://github.com/docker/build-push-action/compare/53b7df96c91f9c12dcc8a07bcb9ccacbed38856a...c3c9e263c25d99ce0380d002d59b67737d91b0dc)\n\nUpdates `github/codeql-action/upload-sarif` from 4.37.8 to 4.38.2\n- [Release notes](https://github.com/github/codeql-action/releases)\n- [Changelog](https://github.com/github/codeql-action/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/github/codeql-action/compare/db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28...2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2)\n\nUpdates `helm/kind-action` from 1.14.0 to 1.15.0\n- [Release notes](https://github.com/helm/kind-action/releases)\n- [Commits](https://github.com/helm/kind-action/compare/ef37e7f390d99f746eb8b610417061a60e82a6cc...06c1ae10762d3b9c1644e7fe69596ae519e015a2)\n\n---\nupdated-dependencies:\n- dependency-name: astral-sh/setup-uv\n  dependency-version: 10.1.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n  dependency-group: all\n- dependency-name: benchmark-action/github-action-benchmark\n  dependency-version: 1.22.2\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n  dependency-group: all\n- dependency-name: codecov/codecov-action\n  dependency-version: 7.1.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n  dependency-group: all\n- dependency-name: docker/build-push-action\n  dependency-version: 7.4.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n  dependency-group: all\n- dependency-name: docker/setup-buildx-action\n  dependency-version: 4.4.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n  dependency-group: all\n- dependency-name: docker/setup-qemu-action\n  dependency-version: 4.4.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n  dependency-group: all\n- dependency-name: github/codeql-action/upload-sarif\n  dependency-version: 4.38.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n  dependency-group: all\n- dependency-name: helm/kind-action\n  dependency-version: 1.15.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n  dependency-group: all\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>\nCo-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>\nCo-authored-by: Emmanuel Mathot <emmanuel.mathot@gmail.com>",
+          "timestamp": "2026-10-06T16:31:27-06:00",
+          "tree_id": "09f277d40f8b4a1e33ccd1e588fc1737d29e77ee",
+          "url": "https://github.com/EOPF-Explorer/titiler-eopf/commit/50e0e1c9cd9718cb0dac68f279d05a69f52dfb5e"
+        },
+        "date": 1791326224154,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "GeoZarrReader-Open",
+            "value": 73.2569470523679,
+            "unit": "iter/sec",
+            "range": "stddev: 0.008914097123035066",
+            "extra": "mean: 13.650582507692377 msec\nrounds: 65"
+          },
+          {
+            "name": "GeoZarrReader-Info",
+            "value": 79.7476635879676,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00028282705879242767",
+            "extra": "mean: 12.539552320513137 msec\nrounds: 78"
+          },
+          {
+            "name": "GeoZarrReader-Preview",
+            "value": 3.669987681287053,
+            "unit": "iter/sec",
+            "range": "stddev: 0.01666832342252915",
+            "extra": "mean: 272.48047864 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Tile",
+            "value": 3.287130576446493,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03654307419337379",
+            "extra": "mean: 304.2166950000009 msec\nrounds: 50"
           }
         ]
       }
