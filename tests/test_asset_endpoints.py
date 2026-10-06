@@ -455,7 +455,7 @@ def test_statistics(get_stac_item, app, geozarr_stac):
 
 @patch("titiler.eopf.stac.get_stac_item")
 def test_asset_array(get_stac_item, app, geozarr_stac_array):
-    """Test /statistics routes."""
+    """Test /info route with an asset that points to a Zarr array."""
     collection = geozarr_stac_array.collection_id
     item = geozarr_stac_array.id
     get_stac_item.return_value = geozarr_stac_array
