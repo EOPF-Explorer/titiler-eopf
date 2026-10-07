@@ -11,6 +11,14 @@
 
 **Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.8.0...v0.9.0
 
+## 0.12.2 (2026-10-07)
+
+## What's Changed
+* fix: set zarr-format=3 for xarray by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/182
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.12.1...v0.12.2
+
 ## 0.12.1 (2026-10-06)
 
 ## What's Changed
