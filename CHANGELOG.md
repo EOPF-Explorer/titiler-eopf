@@ -11,6 +11,17 @@
 
 **Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.8.0...v0.9.0
 
+## 0.12.1 (2026-10-06)
+
+## What's Changed
+* chore(deps): bump astral-sh/uv from 0.12.9 to 0.12.22 by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/179
+* chore(deps): bump the all group across 1 directory with 8 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/169
+* chore(deps): bump chainguard/wolfi-base from `103eb3f` to `6f6d440` by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/167
+* chore(deps): bump the uv group across 1 directory with 6 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/160
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.12.0...v0.12.1
+
 ## 0.12.0 (2026-09-24)
 
 ## What's Changed
