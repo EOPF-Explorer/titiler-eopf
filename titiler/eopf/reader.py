@@ -174,6 +174,7 @@ def _open_from_store(src_path: str) -> xarray.DataTree:
         # consolidated=True,
         # See https://github.com/pydata/xarray/issues/11361
         # use_zarr_fill_value_as_mask=True,
+        zarr_format=3,
         engine="zarr",
     )
 
