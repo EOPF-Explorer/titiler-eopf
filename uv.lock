@@ -1091,6 +1091,15 @@ wheels = [
 ]
 
 [[package]]
+name = "isochron"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fd/42/4b78ba1d5d8bf33306c411b78a316f0a50c6951c51caa4d127794f17f791/isochron-0.1.0.tar.gz", hash = "sha256:5cc88c670f4d07e08552252b9c83b57539cf84d1361df89206ac3687c8f46337", size = 39110, upload-time = "2026-03-14T07:40:26.869Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/56/b5/a9333344453eec36a2d2178f8053a058190ce3ebdbe05cbdfceff9342834/isochron-0.1.0-py3-none-any.whl", hash = "sha256:15d72a6512b8a03aa2c0500eed065dcbb4c489d1daf5f9670b92e4dc0c91ecb5", size = 17932, upload-time = "2026-03-14T07:40:25.665Z" },
+]
+
+[[package]]
 name = "itsdangerous"
 version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1821,7 +1830,7 @@ name = "oschmod"
 version = "0.3.12"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pywin32" },
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9d/64/6e522f0a1b500470ae14dcd1a4bb8f8751f5cf441e85e9fee7dfc712cb7b/oschmod-0.3.12.tar.gz", hash = "sha256:bec99216f31615ee653b2a5c87cacfb4e4b6184c0e9f71da186300dacae974f3", size = 20064, upload-time = "2020-10-30T00:38:42.409Z" }
 wheels = [
@@ -1957,7 +1966,7 @@ name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ptyprocess" },
+    { name = "ptyprocess", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450, upload-time = "2023-11-25T09:07:26.339Z" }
 wheels = [
@@ -2645,13 +2654,14 @@ wheels = [
 
 [[package]]
 name = "rio-tiler"
-version = "9.1.0"
+version = "9.4.11"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
     { name = "cachetools" },
     { name = "color-operations" },
     { name = "httpx2" },
+    { name = "isochron" },
     { name = "morecantile" },
     { name = "numexpr" },
     { name = "numpy" },
@@ -2660,9 +2670,9 @@ dependencies = [
     { name = "rasterio" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b7/28/ebe36fd64d62fd4c8f0f0933ac2a76155a8faa97aa780f2618d3946fc2a6/rio_tiler-9.1.0.tar.gz", hash = "sha256:94bd3feae1de42f8898b7f9f763baa5e6245176ba92940a0b8e904488f843485", size = 211281, upload-time = "2026-06-01T11:30:28.733Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2f/c5/d66b392e79077b64e468d08baf4f9aa78b867ef990d5a6faad3ba44fae53/rio_tiler-9.4.11.tar.gz", hash = "sha256:962c28a7352dddfda2a6c6c38eae66ee5f8b2bb812ea7697bd6002c63543f5ca", size = 216324, upload-time = "2026-10-08T17:35:47.92Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/17/36/531330042b0f3a86c1766822407737c50048457b198f3b7ae20145fd4138/rio_tiler-9.1.0-py3-none-any.whl", hash = "sha256:abe57cdae818b67c81fe6a15f2928df5630bdda912ccb3cefabb0fc1cf460141", size = 314987, upload-time = "2026-06-01T11:30:27.113Z" },
+    { url = "https://files.pythonhosted.org/packages/48/72/333ac5e7aa98bf5d342505244130d28c26927a84b93fc1850bde36145c19/rio_tiler-9.4.11-py3-none-any.whl", hash = "sha256:44d7a2efb6b97ce2fca74d12532f768073818c46a67d53150052bf1d0892a6dc", size = 319785, upload-time = "2026-10-08T17:35:46.262Z" },
 ]
 
 [[package]]
@@ -2932,10 +2942,11 @@ wheels = [
 
 [[package]]
 name = "titiler-eopf"
-version = "0.12.0"
+version = "0.12.2"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
+    { name = "isochron" },
     { name = "obstore" },
     { name = "orjson" },
     { name = "pydantic-settings" },
@@ -2998,6 +3009,7 @@ requires-dist = [
     { name = "cryptography", marker = "extra == 'openeo'" },
     { name = "duckdb", marker = "extra == 'openeo'" },
     { name = "gunicorn", marker = "extra == 'server'" },
+    { name = "isochron" },
     { name = "obstore" },
     { name = "openeo", marker = "extra == 'openeo'" },
     { name = "orjson" },
