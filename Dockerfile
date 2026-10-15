@@ -5,7 +5,7 @@
 # unpinned and built against Wolfi's *current* glibc, while this rootfs keeps
 # the glibc it shipped with (nothing here runs `apk upgrade`). A stale digest
 # fails docker/smoke-test.sh with "version `GLIBC_x.yy' not found".
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:6f6d440fa7d30767525d2a561870a616193e9ed3442aea55d8d9d8aa413ab054 AS base
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:256c88bb066424045021090932d50be93c8e3f2ce3586707702a401b146f3e43 AS base
 
 # Declared AFTER "FROM" on purpose: an ARG before the first FROM is in scope for
 # FROM only, so the RUN below would expand it to "" and run `apk add python-`.
