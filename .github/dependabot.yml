@@ -32,6 +32,9 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # Above the default 5, so the two version groups still open next to the
+    # open security PRs.
+    open-pull-requests-limit: 10
     groups:
       # Dependabot names it "titiler-openeo[oidc]", extra included
       # (dependabot/dependabot-core#16431), so match with a wildcard.
