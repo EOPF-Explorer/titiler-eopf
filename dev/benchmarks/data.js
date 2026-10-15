@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792070924468,
+  "lastUpdate": 1792077352505,
   "repoUrl": "https://github.com/EOPF-Explorer/titiler-eopf",
   "entries": {
     "titiler-eopf Benchmarks": [
@@ -2340,6 +2340,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.040158648107594244",
             "extra": "mean: 417.0924136799988 msec\nrounds: 50"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "vincent.sarago@gmail.com",
+            "name": "Vincent Sarago",
+            "username": "vincentsarago"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8c1313a1111a09dcd8f60babc41a31923ded63d4",
+          "message": "Merge pull request #184 from EOPF-Explorer/fix/add-isochron-deps\n\nfix: add isochron dep to avoid import error with rio-tiler 9.4.12",
+          "timestamp": "2026-10-15T17:10:30+02:00",
+          "tree_id": "b329d60d80276a49af17c2067cf39b2b4d764bc4",
+          "url": "https://github.com/EOPF-Explorer/titiler-eopf/commit/8c1313a1111a09dcd8f60babc41a31923ded63d4"
+        },
+        "date": 1792077351209,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "GeoZarrReader-Open",
+            "value": 98.87656853743262,
+            "unit": "iter/sec",
+            "range": "stddev: 0.009869760859311273",
+            "extra": "mean: 10.113619584415702 msec\nrounds: 77"
+          },
+          {
+            "name": "GeoZarrReader-Info",
+            "value": 108.2669699685452,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00017485468457698102",
+            "extra": "mean: 9.236427326732521 msec\nrounds: 101"
+          },
+          {
+            "name": "GeoZarrReader-Preview",
+            "value": 4.869540325791667,
+            "unit": "iter/sec",
+            "range": "stddev: 0.02043283665075925",
+            "extra": "mean: 205.35819257999975 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Tile",
+            "value": 4.247137150544829,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04399650285616729",
+            "extra": "mean: 235.45272134000157 msec\nrounds: 50"
           }
         ]
       }
