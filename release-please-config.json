@@ -33,6 +33,11 @@
           "type": "yaml",
           "path": "helm/charts/Chart.yaml",
           "jsonpath": "$.version"
+        },
+        {
+          "type": "toml",
+          "path": "uv.lock",
+          "jsonpath": "$.package[?(@.name.value==='titiler-eopf')].version"
         }
       ]
     }
