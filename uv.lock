@@ -3027,7 +3027,7 @@ requires-dist = [
     { name = "starlette-cramjam", specifier = ">=0.4,<1.0" },
     { name = "titiler-core", specifier = ">=2.1,<3.0" },
     { name = "titiler-extensions", specifier = ">=2.1,<3.0" },
-    { name = "titiler-openeo", extras = ["oidc"], marker = "extra == 'openeo'", specifier = ">=0.18.3,<0.19" },
+    { name = "titiler-openeo", extras = ["oidc"], marker = "extra == 'openeo'", specifier = ">=0.18.3,<0.20" },
     { name = "titiler-stacapi", specifier = ">=2.0,<3.0" },
     { name = "titiler-xarray", specifier = ">=2.1,<3.0" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'server'" },
@@ -3055,7 +3055,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
-    { name = "titiler-openeo", extras = ["oidc"], specifier = ">=0.18.3,<0.19" },
+    { name = "titiler-openeo", extras = ["oidc"], specifier = ">=0.18.3,<0.20" },
 ]
 performance = [{ name = "pytest-benchmark" }]
 
@@ -3085,7 +3085,7 @@ wheels = [
 
 [[package]]
 name = "titiler-openeo"
-version = "0.18.3"
+version = "0.19.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "defusedxml" },
@@ -3097,9 +3097,9 @@ dependencies = [
     { name = "starlette-cramjam" },
     { name = "titiler-core" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1f/9d/a3b13f089d8ff27b491fb002ccfdf50a0ad66849e35aef547dbdeb0ea407/titiler_openeo-0.18.3.tar.gz", hash = "sha256:12656ecbd6204c16107251a84adc58b42dcc48f263f62deb90d77cb16bde1ff8", size = 305915, upload-time = "2026-10-06T21:37:58.532Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/40/74/92e348eb5e7ba360a2333f25dfe6ba4c9fc6f3270c895237ecbb9964c81d/titiler_openeo-0.19.0.tar.gz", hash = "sha256:6ab14a3c8bc81d0ca38b42ca4bdd072fd6ff53bb1af734e540b0a173cbaa9af7", size = 313129, upload-time = "2026-10-10T15:37:49.859Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a5/17/7e0b7b3f7e1c22033489610a7f99d801ae36bf9ea6e73fe8f9db97bc4a97/titiler_openeo-0.18.3-py3-none-any.whl", hash = "sha256:55fcea1dc4bc468a1a703eaaa032c4ccac58b7a9d7f33159117d5f60447f57df", size = 391729, upload-time = "2026-10-06T21:37:56.725Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/29/42399b21d8b7fc92be9ed6ae7c5824ea02a0b7af4423ed4da2d5476a7bac/titiler_openeo-0.19.0-py3-none-any.whl", hash = "sha256:67f7cb1fad869d9dafa642bf4d5e195a8ba499dbe056193463778d1acf89bde3", size = 400292, upload-time = "2026-10-10T15:37:47.841Z" },
 ]
 
 [package.optional-dependencies]
