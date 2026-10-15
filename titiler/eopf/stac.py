@@ -10,16 +10,17 @@ import zarr
 from fastapi import Path, Query
 from pydantic import AfterValidator
 from rio_tiler.errors import InvalidAssetName
-from rio_tiler.io.stac import DEFAULT_VALID_TYPE, STAC_ALTERNATE_KEY
+from rio_tiler.io.stac import DEFAULT_VALID_TYPE, STAC_ALTERNATE_KEY, _get_assets
 from rio_tiler.models import Info
 from rio_tiler.types import AssetInfo, AssetType, AssetWithOptions
 from starlette.requests import Request
 
 from titiler.core.dependencies import DefaultDependency, ExpressionParams
-from titiler.eopf.reader import GeoZarrReader
 from titiler.stacapi.backend import STACAPIBackend
 from titiler.stacapi.dependencies import get_stac_item
 from titiler.stacapi.reader import SimpleSTACReader, STACAPIReader
+
+from .reader import GeoZarrReader, _is_zarr_group
 
 _VALID_TYPE = {
     *DEFAULT_VALID_TYPE,
@@ -269,6 +270,22 @@ class EOPFSTACAPIReader(STACAPIReader):
     reader: type[GeoZarrReader] = attr.ib(default=GeoZarrReader)
     include_asset_types: set[str] = attr.ib(default=_VALID_TYPE)
 
+    def get_asset_list(self) -> list[str]:
+        """Get valid asset list"""
+        assets = super().get_asset_list()
+
+        def _get_href(asset_name: str) -> str:
+            asset_info = self.item.assets[asset_name]
+            url = asset_info.get_absolute_href() or asset_info.href
+            if STAC_ALTERNATE_KEY and asset_info.extra_fields.get("alternate"):
+                if alternate := asset_info.extra_fields["alternate"].get(
+                    STAC_ALTERNATE_KEY
+                ):
+                    url = alternate["href"]
+            return url
+
+        return [asset for asset in assets if _is_zarr_group(_get_href(asset))]
+
     def info(
         self,
         assets: Sequence[AssetType] | AssetType | None = None,
@@ -400,16 +417,24 @@ def asset_path_parameter(
         headers=headers,
     )
 
-    if asset_id not in item.assets:
+    valid_assets = _get_assets(item, include_asset_types=_VALID_TYPE)
+
+    # Validate that Assets are Zarr group
+    def _get_href(asset_name: str) -> str:
+        asset_info = item.assets[asset_name]
+        url = asset_info.get_absolute_href() or asset_info.href
+        if STAC_ALTERNATE_KEY and asset_info.extra_fields.get("alternate"):
+            if alternate := asset_info.extra_fields["alternate"].get(
+                STAC_ALTERNATE_KEY
+            ):
+                url = alternate["href"]
+        return url
+
+    valid_assets = [asset for asset in valid_assets if _is_zarr_group(_get_href(asset))]
+
+    if asset_id not in valid_assets:
         raise InvalidAssetName(
-            f"'{asset_id}' is not valid, should be one of {list(item.assets)}"
+            f"'{asset_id}' is not valid, should be one of {list(valid_assets)}"
         )
 
-    asset_info = item.assets[asset_id]
-
-    url = asset_info.get_absolute_href()
-    if STAC_ALTERNATE_KEY and asset_info.extra_fields.get("alternate"):
-        if alternate := asset_info.extra_fields["alternate"].get(STAC_ALTERNATE_KEY):
-            url = alternate["href"]
-
-    return url
+    return _get_href(asset_id)
