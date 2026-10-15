@@ -36,6 +36,7 @@ dependencies = [
     "pydantic-settings~=2.0",
     "starlette-cramjam>=0.4,<1.0",
     "rio-tiler>=9.1,<10.0",
+    "isochron",
 ]
 
 [project.optional-dependencies]
