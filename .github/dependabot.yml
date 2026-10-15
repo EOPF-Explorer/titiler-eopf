@@ -35,6 +35,10 @@ updates:
     # Above the default 5, so the two version groups still open next to the
     # open security PRs.
     open-pull-requests-limit: 10
+    # Otherwise dev dependencies get the scope "deps-dev", which the PR title
+    # check rejects.
+    commit-message:
+      prefix: "chore(deps)"
     groups:
       # Dependabot names it "titiler-openeo[oidc]", extra included
       # (dependabot/dependabot-core#16431), so match with a wildcard.
