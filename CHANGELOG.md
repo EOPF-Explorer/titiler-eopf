@@ -11,6 +11,25 @@
 
 **Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.8.0...v0.9.0
 
+## 0.12.3 (2026-10-15)
+
+## What's Changed
+* fix(deps): require titiler-openeo 0.18.3 by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/190
+* ci: fail builds on a stale uv.lock and track titiler-openeo by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/191
+* ci: group Dependabot security updates for uv into one PR by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/202
+* ci: fix the titiler-openeo Dependabot group and cut weekly PR churn by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/203
+* fix: add isochron dep to avoid import error with rio-tiler 9.4.12 by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/184
+* ci: let the uv Dependabot groups open next to the security PRs by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/205
+* chore(deps): update titiler-openeo[oidc] requirement from <0.19,>=0.18.3 to >=0.18.3,<0.20 in the titiler-openeo group by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/206
+* ci: keep Dependabot's uv PR titles inside the allowed scopes by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/208
+* chore(deps): bump the docker group across 1 directory with 2 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/204
+* chore(deps): bump the python group with 24 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/207
+* chore(deps): bump the all group across 1 directory with 4 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/201
+* fix(deps): bump the seven packages from open security advisories by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/209
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.12.2...v0.12.3
+
 ## 0.12.2 (2026-10-07)
 
 ## What's Changed
