@@ -31,7 +31,7 @@ RUN apk add --no-cache \
 # direct COPY --from=<image> because Dependabot only parses FROM lines — it
 # ignores images in COPY (dependabot-core#5103) — and a digest pin nothing
 # moves would rot.
-FROM ghcr.io/astral-sh/uv:0.12.22@sha256:f513a91fc62fe7c17567eee97230dd198e43edb8a9fbecca843714a4358fe1bc AS uv
+FROM ghcr.io/astral-sh/uv:0.13.1@sha256:4a1f3666816dafadd20ceb71eac9a7d56d7ef30279f7d64048519ab901ada336 AS uv
 
 # Build stage
 FROM base AS builder
