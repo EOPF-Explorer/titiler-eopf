@@ -1,4 +1,5 @@
-# Set update schedule for GitHub Actions and the Dockerfile base image
+# Set update schedule for GitHub Actions, the Dockerfile base image and the
+# Python dependencies in uv.lock
 
 version: 2
 updates:
@@ -19,3 +20,25 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+
+  # titiler-openeo gets its own PR: the openEO deployments depend on its fixes,
+  # and a stale pin once shipped 0.18.0 after 0.18.3 was out.
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      titiler-openeo:
+        patterns:
+        - "titiler-openeo"
+      python:
+        patterns:
+        - "*"
+        exclude-patterns:
+        - "titiler-openeo"
+      # The groups above only apply to version updates, so without this each
+      # security advisory opens its own PR.
+      security:
+        applies-to: security-updates
+        patterns:
+        - "*"

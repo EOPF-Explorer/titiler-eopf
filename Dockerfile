@@ -60,12 +60,13 @@ ENV UV_LINK_MODE=copy \
 
 WORKDIR /tmp/app
 
-# Copy project metadata and install dependencies from the lockfile (--frozen:
-# uv.lock is authoritative, out-of-date fails the build). The `server` extra
+# Copy project metadata and install dependencies from the lockfile (--locked:
+# a uv.lock that no longer matches pyproject.toml fails the build; --frozen would
+# install the stale lock silently). The `server` extra
 # carries uvicorn/gunicorn/uvicorn-worker — the chart and the CMD below need
 # them as locked deps, not ad-hoc installs.
 COPY pyproject.toml uv.lock README.md LICENSE ./
-RUN uv sync --frozen --no-dev --extra server --extra cache --extra openeo --no-install-project
+RUN uv sync --locked --no-dev --extra server --extra cache --extra openeo --no-install-project
 
 # Copy and install runtime source code to the builder image
 COPY titiler/ titiler/

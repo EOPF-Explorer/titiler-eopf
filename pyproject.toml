@@ -41,7 +41,7 @@ dependencies = [
 
 [project.optional-dependencies]
 openeo = [
-    "titiler-openeo[oidc]>=0.18,<0.19",
+    "titiler-openeo[oidc]>=0.18.3,<0.19",
     "openeo",
     "duckdb",
     "sqlalchemy>=2.0.0",
@@ -70,7 +70,7 @@ dev = [
     "pre-commit",
     "bump-my-version",
     "boto3",
-    "titiler-openeo[oidc]>=0.18,<0.19",
+    "titiler-openeo[oidc]>=0.18.3,<0.19",
     "ipython",
     "ipykernel",
     "jupyter-client",

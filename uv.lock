@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12, <3.14"
 resolution-markers = [
     "sys_platform == 'win32'",
@@ -3022,7 +3022,7 @@ requires-dist = [
     { name = "starlette-cramjam", specifier = ">=0.4,<1.0" },
     { name = "titiler-core", specifier = ">=2.1,<3.0" },
     { name = "titiler-extensions", specifier = ">=2.1,<3.0" },
-    { name = "titiler-openeo", extras = ["oidc"], marker = "extra == 'openeo'", specifier = ">=0.18,<0.19" },
+    { name = "titiler-openeo", extras = ["oidc"], marker = "extra == 'openeo'", specifier = ">=0.18.3,<0.19" },
     { name = "titiler-stacapi", specifier = ">=2.0,<3.0" },
     { name = "titiler-xarray", specifier = ">=2.1,<3.0" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'server'" },
@@ -3050,7 +3050,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
-    { name = "titiler-openeo", extras = ["oidc"], specifier = ">=0.18,<0.19" },
+    { name = "titiler-openeo", extras = ["oidc"], specifier = ">=0.18.3,<0.19" },
 ]
 performance = [{ name = "pytest-benchmark" }]
 
@@ -3080,7 +3080,7 @@ wheels = [
 
 [[package]]
 name = "titiler-openeo"
-version = "0.18.0"
+version = "0.18.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "defusedxml" },
@@ -3092,9 +3092,9 @@ dependencies = [
     { name = "starlette-cramjam" },
     { name = "titiler-core" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7d/31/ff51e4a87b3988823bc478e4cbe50f0c6662ae2394ccbe56edb312b89ecb/titiler_openeo-0.18.0.tar.gz", hash = "sha256:539670d669465f6b1cdd99e3aa17e81891076808aca1947b5263291fa2fbd44d", size = 300363, upload-time = "2026-08-31T21:28:03.261Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1f/9d/a3b13f089d8ff27b491fb002ccfdf50a0ad66849e35aef547dbdeb0ea407/titiler_openeo-0.18.3.tar.gz", hash = "sha256:12656ecbd6204c16107251a84adc58b42dcc48f263f62deb90d77cb16bde1ff8", size = 305915, upload-time = "2026-10-06T21:37:58.532Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2a/cc/804b396917228eb9ae94afb52ac33f9ff0e94ad06ba32111117ac1d4a5a0/titiler_openeo-0.18.0-py3-none-any.whl", hash = "sha256:24deffc3bcf1ce599b9f7e4c3615419f1e52319c1c24810921e6a076d698e3a3", size = 385860, upload-time = "2026-08-31T21:28:01.788Z" },
+    { url = "https://files.pythonhosted.org/packages/a5/17/7e0b7b3f7e1c22033489610a7f99d801ae36bf9ea6e73fe8f9db97bc4a97/titiler_openeo-0.18.3-py3-none-any.whl", hash = "sha256:55fcea1dc4bc468a1a703eaaa032c4ccac58b7a9d7f33159117d5f60447f57df", size = 391729, upload-time = "2026-10-06T21:37:56.725Z" },
 ]
 
 [package.optional-dependencies]
