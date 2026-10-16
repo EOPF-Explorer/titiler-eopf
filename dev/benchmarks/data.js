@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792095730213,
+  "lastUpdate": 1792144143403,
   "repoUrl": "https://github.com/EOPF-Explorer/titiler-eopf",
   "entries": {
     "titiler-eopf Benchmarks": [
@@ -2548,6 +2548,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.03696000014226507",
             "extra": "mean: 409.27501675999963 msec\nrounds: 50"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "10154151+lhoupert@users.noreply.github.com",
+            "name": "Loïc Houpert",
+            "username": "lhoupert"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "87605d82be6b683ab3f790885171405a99e573d8",
+          "message": "Merge pull request #212 from EOPF-Explorer/fix--openeo-psycopg3\n\nfix(openeo): install psycopg 3, SQLAlchemy 2.1's default Postgres driver",
+          "timestamp": "2026-10-16T10:45:09+01:00",
+          "tree_id": "4315c52f8b4305c04b9cbb0aa85f8215b7283cfb",
+          "url": "https://github.com/EOPF-Explorer/titiler-eopf/commit/87605d82be6b683ab3f790885171405a99e573d8"
+        },
+        "date": 1792144143031,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "GeoZarrReader-Open",
+            "value": 50.83159410323288,
+            "unit": "iter/sec",
+            "range": "stddev: 0.01271156038491553",
+            "extra": "mean: 19.672804239999238 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Info",
+            "value": 52.71800648056165,
+            "unit": "iter/sec",
+            "range": "stddev: 0.001111882830852643",
+            "extra": "mean: 18.96885081132048 msec\nrounds: 53"
+          },
+          {
+            "name": "GeoZarrReader-Preview",
+            "value": 2.623441319868133,
+            "unit": "iter/sec",
+            "range": "stddev: 0.01724985699388895",
+            "extra": "mean: 381.1787183599993 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Tile",
+            "value": 2.407949143016462,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03777416044052877",
+            "extra": "mean: 415.2911629799996 msec\nrounds: 50"
           }
         ]
       }
