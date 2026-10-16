@@ -11,6 +11,15 @@
 
 **Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.8.0...v0.9.0
 
+## 0.12.4 (2026-10-16)
+
+## What's Changed
+* chore(deps): bump the python group with 2 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/210
+* fix(openeo): install psycopg 3, SQLAlchemy 2.1's default Postgres driver by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/212
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.12.3...v0.12.4
+
 ## 0.12.3 (2026-10-15)
 
 ## What's Changed

@@ -3004,7 +3004,7 @@ wheels = [
 
 [[package]]
 name = "titiler-eopf"
-version = "0.12.3"
+version = "0.12.4"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
