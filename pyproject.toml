@@ -45,6 +45,8 @@ openeo = [
     "openeo",
     "duckdb",
     "sqlalchemy>=2.0.0",
+    # SQLAlchemy 2.1's default driver for plain postgresql:// store URLs.
+    "psycopg[binary]",
     "psycopg2-binary",
     "cryptography",
 ]
