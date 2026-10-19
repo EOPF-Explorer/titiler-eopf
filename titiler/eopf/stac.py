@@ -6,7 +6,6 @@ from typing import Annotated, Any, cast
 
 import attr
 import pystac
-import zarr
 from fastapi import Path, Query
 from pydantic import AfterValidator
 from rio_tiler.errors import InvalidAssetName
@@ -16,7 +15,7 @@ from rio_tiler.types import AssetInfo, AssetType, AssetWithOptions
 from starlette.requests import Request
 
 from titiler.core.dependencies import DefaultDependency, ExpressionParams
-from titiler.eopf.reader import GeoZarrReader
+from titiler.eopf.reader import GeoZarrReader, InvalidGeoZarrStore
 from titiler.stacapi.backend import STACAPIBackend
 from titiler.stacapi.dependencies import get_stac_item
 from titiler.stacapi.reader import SimpleSTACReader, STACAPIReader
@@ -292,9 +291,11 @@ class EOPFSTACAPIReader(STACAPIReader):
         # exception so those non-group assets are skipped instead of failing
         # the whole request.
         allowed_exceptions = kwargs.pop("allowed_exceptions", ())
-        allowed_exceptions += (zarr.errors.ContainsArrayError,)
+        allowed_exceptions += (InvalidGeoZarrStore,)
         infos = super().info(
-            assets=assets, **kwargs, allowed_exceptions=allowed_exceptions
+            assets=assets,
+            **kwargs,
+            allowed_exceptions=allowed_exceptions,
         )
 
         def _key_to_var(v: str) -> str:

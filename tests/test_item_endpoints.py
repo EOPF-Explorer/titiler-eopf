@@ -350,3 +350,40 @@ def test_info_measurements(get_stac_item, app, geozarr_stac_measurements):
     )
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/png"
+
+
+@patch("titiler.stacapi.dependencies.get_stac_item")
+def test_item_with_array(get_stac_item, app, geozarr_stac_array):
+    """Test /info route with an asset that points to a Zarr array."""
+    collection = geozarr_stac_array.collection_id
+    item = geozarr_stac_array.id
+    get_stac_item.return_value = geozarr_stac_array
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/assets",
+    )
+    assert response.status_code == 200
+    assert response.json() == ["b02_r10m", "reflectance"]
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/info?assets=:all:",
+    )
+    assert response.status_code == 200
+    assert "b02_r10m" not in response.json()
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/info?assets=b02_r10m",
+    )
+    assert response.status_code == 200
+    assert response.json() == {}
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/preview?assets=reflectance|bands=red",
+    )
+    assert response.status_code == 200
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/preview?assets=b02_r10m",
+    )
+    assert response.status_code == 400
+    assert "does not appear to be a valid GeoZarr store" in response.text
