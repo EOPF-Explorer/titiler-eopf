@@ -183,7 +183,12 @@ def _open_from_store(src_path: str) -> xarray.DataTree:
             zarr_format=3,
             engine="zarr",
         )
-    except zarr.errors.ContainsArrayError as e:
+    except (
+        zarr.errors.ContainsArrayError,
+        zarr.errors.GroupNotFoundError,
+        zarr.errors.NodeNotFoundError,
+        FileNotFoundError,
+    ) as e:
         raise InvalidGeoZarrStore(
             f"{src_path} does not appear to be a valid GeoZarr store."
         ) from e

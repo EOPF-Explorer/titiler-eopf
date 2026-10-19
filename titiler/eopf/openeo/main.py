@@ -17,6 +17,7 @@ from titiler.openeo.services import get_store, get_tile_store, get_udp_store
 from titiler.openeo.settings import ApiSettings, AuthSettings, BackendSettings
 
 from .. import __version__ as titiler_version
+from ..reader import InvalidGeoZarrStore
 from .processes import PROCESS_SPECIFICATIONS, process_registry
 from .stacapi import LoadCollection, stacApiBackend
 
@@ -145,6 +146,9 @@ exception_handler = ExceptionHandler(logger=logging.getLogger(__name__))
 app.add_exception_handler(OpenEOException, exception_handler.openeo_exception_handler)
 app.add_exception_handler(
     RequestValidationError, exception_handler.validation_exception_handler
+)
+app.add_exception_handler(
+    InvalidGeoZarrStore, exception_handler.general_exception_handler
 )
 app.add_exception_handler(HTTPException, exception_handler.http_exception_handler)
 app.add_exception_handler(Exception, exception_handler.general_exception_handler)
