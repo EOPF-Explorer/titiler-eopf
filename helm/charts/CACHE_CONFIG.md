@@ -109,8 +109,40 @@ The chart automatically generates the following environment variables based on c
 - `TITILER_EOPF_CACHE_S3_SECRET_ACCESS_KEY`: S3 secret key (from secret)
 
 ### Admin API
-- `TITILER_EOPF_CACHE_ADMIN_ENABLE`: "true" when admin API enabled
-- `TITILER_EOPF_CACHE_ADMIN_PREFIX`: Admin API path prefix
+Disabled by default (`cache.admin.enabled: false`). The app mounts the routes
+only when **all** of these hold, and otherwise logs why and leaves them
+unmounted (tiles keep being served):
+
+1. `TITILER_EOPF_CACHE_ADMIN_ENABLE=true`
+2. the cache itself is enabled (`cache.enabled: true`)
+3. the token is at least 16 ASCII characters (surrounding whitespace ignored)
+4. the prefix starts with `/`, does not end with `/` and is not `/`
+
+Every call must send `Authorization: Bearer <token>`; responses carry
+`Cache-Control: no-store` and the routes are not listed in the OpenAPI schema.
+
+- `TITILER_EOPF_CACHE_ADMIN_ENABLE`: "true" when admin API enabled (default: false)
+- `TITILER_EOPF_CACHE_ADMIN_PREFIX`: Admin API path prefix (default: `/admin/cache`)
+- `TITILER_EOPF_CACHE_ADMIN_TOKEN`: Bearer token (from `cache.admin.auth.existingSecret`)
+
+`POST <prefix>/invalidate` accepts 1-100 patterns of 1-256 characters each
+(422 otherwise). Patterns are confined to the cache namespace: a pattern not
+starting with `<namespace>:` is prefixed with it, so `*` clears this app's keys
+only. Deployments that share a Redis DB or S3 bucket must use distinct
+`cache.namespace` values to be isolated from each other.
+
+`GET /_mgmt/cache` is public and only reports `{"status", "healthy"}`.
+
+### Upgrading: the admin API now needs a token
+- Values with `cache.admin.enabled: true` must also set
+  `cache.admin.auth.existingSecret` (key `admin-token` by default), or the
+  chart fails to render. Create the Secret before upgrading:
+  `kubectl create secret generic <name> --from-literal=admin-token="$(openssl rand -hex 32)"`
+- `cache.admin.path_prefix` is now honoured (it was ignored and the API was
+  always at `/admin/cache`). A value such as `/cache-admin` moves the API;
+  update any ingress rules that match the admin path.
+- Upgrade chart and image together: an older image ignores the new settings
+  and keeps serving an unauthenticated `/admin/cache`.
 
 ## Validation Rules
 

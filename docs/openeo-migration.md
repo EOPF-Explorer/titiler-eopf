@@ -481,7 +481,7 @@ branches of `_get_options` and of the band-summary derivation, and only one is u
 - Move both the `openeo` extra and the `dev` group to `titiler-openeo>=0.17,<0.18`. A range rather than
   `==`, so patch fixes flow.
 - Add the `boto3` extra if the SAR annotation fetcher will run under AWS profile/SSO credentials.
-  `boto3` is already present via the `cache` extra and dev group.
+  `boto3` is only in the dev group; the `cache` extra no longer pulls it.
 - The Dockerfile installs `".[cache,openeo]"` — no change needed, but rebuild to pick up `defusedxml`.
 
 ---

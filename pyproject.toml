@@ -1,6 +1,6 @@
 [project]
 name = "titiler.eopf"
-version = "0.11.0"
+version = "0.12.3"
 description = "TiTiler application for EOPF datasets"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
@@ -30,23 +30,28 @@ dependencies = [
     "rioxarray>=0.22",
     "zarr[cast-value-rs]>=3.2.0",
     "obstore",
+    # Not imported by this package; starlette brings it in. Declared only for the
+    # floor, the fix for CVE-2026-63374, which Trivy fails the image build on.
+    "anyio>=4.14.2",
     "pydantic-settings~=2.0",
     "starlette-cramjam>=0.4,<1.0",
     "rio-tiler>=9.1,<10.0",
+    "isochron",
 ]
 
 [project.optional-dependencies]
 openeo = [
-    "titiler-openeo[oidc]>=0.18,<0.19",
+    "titiler-openeo[oidc]>=0.18.3,<0.20",
     "openeo",
     "duckdb",
     "sqlalchemy>=2.0.0",
+    # SQLAlchemy 2.1's default driver for plain postgresql:// store URLs.
+    "psycopg[binary]",
     "psycopg2-binary",
     "cryptography",
 ]
 cache = [
     "redis",
-    "boto3",
 ]
 server = [
     "uvicorn[standard]",
@@ -60,13 +65,14 @@ dev = [
     "pytest-cov",
     "pytest-asyncio",
     "fakeredis",
+    "moto[server]",
     "duckdb",
     "sqlalchemy>=2.0.0",
     "cryptography",
     "pre-commit",
     "bump-my-version",
     "boto3",
-    "titiler-openeo[oidc]>=0.18,<0.19",
+    "titiler-openeo[oidc]>=0.18.3,<0.20",
     "ipython",
     "ipykernel",
     "jupyter-client",

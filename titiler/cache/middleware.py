@@ -32,6 +32,7 @@ class TileCacheMiddleware(BaseHTTPMiddleware):
         cache_methods: Optional[list[str]] = None,
         default_ttl: int = 3600,
         cache_status_header: str = "X-Cache",
+        exclude_paths: Optional[list[str]] = None,
     ):
         """Initialize tile cache middleware.
 
@@ -43,6 +44,8 @@ class TileCacheMiddleware(BaseHTTPMiddleware):
             cache_methods: HTTP methods to cache (defaults to GET only)
             default_ttl: Default cache TTL in seconds
             cache_status_header: Header name for cache status
+            exclude_paths: URL path patterns never cached, even if they also
+                match `cache_paths` (e.g. the cache admin API)
         """
         super().__init__(app)
         self.cache_backend = cache_backend
@@ -56,6 +59,7 @@ class TileCacheMiddleware(BaseHTTPMiddleware):
             "/info.json",
         ]
         self.cache_methods = set(cache_methods or ["GET"])
+        self.exclude_paths = exclude_paths or []
         self.default_ttl = default_ttl
         self.cache_status_header = cache_status_header
 
@@ -144,6 +148,8 @@ class TileCacheMiddleware(BaseHTTPMiddleware):
 
         # Check path patterns
         path = request.url.path
+        if any(excluded in path for excluded in self.exclude_paths):
+            return False
         return any(cache_path in path for cache_path in self.cache_paths)
 
     def _determine_cache_type(self, path: str) -> str:

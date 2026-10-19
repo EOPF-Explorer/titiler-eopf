@@ -1,6 +1,6 @@
 """API settings."""
 
-from pydantic import field_validator, model_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing_extensions import Self
 
@@ -70,12 +70,25 @@ class EOPFCacheSettings(BaseCacheSettings):
         "/info.geojson",
     ]
 
+    # Cache admin API (/status, /invalidate). Off by default. Mounted only when
+    # enabled, the cache is enabled, `admin_token` has >= 16 ASCII chars and
+    # `admin_prefix` is a valid path; otherwise it is logged and left unmounted
+    # (checked in create_cache_admin_router, not here, so a bad admin value
+    # never stops the tile server from starting).
+    admin_enable: bool = False
+    admin_token: SecretStr | None = None
+    admin_prefix: str = "/admin/cache"
+
     # Nested settings for backends
     redis: CacheRedisSettings | None = None
     s3: CacheS3Settings | None = None
 
     model_config = SettingsConfigDict(
-        env_prefix="TITILER_EOPF_CACHE_", env_file=".env", extra="ignore"
+        env_prefix="TITILER_EOPF_CACHE_",
+        env_file=".env",
+        extra="ignore",
+        # keep admin_token / redis password out of ValidationError messages
+        hide_input_in_errors=True,
     )
 
     @model_validator(mode="after")

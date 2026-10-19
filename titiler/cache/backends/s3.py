@@ -1,45 +1,24 @@
 """S3 storage backend implementation."""
 
+import fnmatch
 import logging
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, Pattern, Union
+
+import obstore
+from obstore.store import S3Store
 
 from ..backends.base import CacheBackend, CacheBackendUnavailable, CacheError
 from ..settings import CacheS3Settings
 
-try:
-    import boto3
-    from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError
-
-    BOTO3_AVAILABLE = True
-except ImportError:  # pragma: nocover
-    boto3 = None  # type: ignore
-    BOTO3_AVAILABLE = False
-
-    # Only create fallback classes if boto3 is not available
-    class BotoCoreError(Exception):  # type: ignore
-        """Fallback BotoCoreError when boto3 is not available."""
-
-        def __init__(self, *args, **kwargs):
-            """Initialize fallback exception."""
-            super().__init__(*args, **kwargs)
-
-    class ClientError(Exception):  # type: ignore
-        """Fallback ClientError when boto3 is not available."""
-
-        def __init__(self, *args, **kwargs):
-            """Initialize fallback exception."""
-            super().__init__(*args, **kwargs)
-
-    class NoCredentialsError(Exception):  # type: ignore
-        """Fallback NoCredentialsError when boto3 is not available."""
-
-        def __init__(self, *args, **kwargs):
-            """Initialize fallback exception."""
-            super().__init__(*args, **kwargs)
-
-
 logger = logging.getLogger(__name__)
+
+
+def _brief(e: Exception) -> str:
+    """First line only: obstore errors carry a debug dump and the full S3 XML body."""
+    first_line = str(e).split("\n", 1)[0]
+    return f"{type(e).__name__}: {first_line}"
 
 
 class S3StorageBackend(CacheBackend):
@@ -57,9 +36,8 @@ class S3StorageBackend(CacheBackend):
         access_key_id: Optional[str] = None,
         secret_access_key: Optional[str] = None,
         session_token: Optional[str] = None,
-        **kwargs,
     ):
-        """Initialize S3 storage backend.
+        """Initialize S3 storage backend. No network I/O happens here.
 
         Args:
             bucket: S3 bucket name for cache storage
@@ -68,27 +46,30 @@ class S3StorageBackend(CacheBackend):
             access_key_id: AWS access key (optional, uses credential chain if None)
             secret_access_key: AWS secret key
             session_token: AWS session token (for temporary credentials)
-            **kwargs: Additional boto3 client parameters
         """
-        if not BOTO3_AVAILABLE:
-            raise ImportError("boto3 package is required for S3StorageBackend")
-
         self.bucket = bucket
         self.region = region
         self.endpoint_url = endpoint_url
-        self._client = None
-        self.client_kwargs = kwargs
-
-        # Store credentials for client creation
-        self._credentials = {
-            "aws_access_key_id": access_key_id,
-            "aws_secret_access_key": secret_access_key,
-            "aws_session_token": session_token,
+        # S3Store rejects None; left out, these fall back to AWS defaults.
+        optional = {
+            "endpoint": endpoint_url,
+            "access_key_id": access_key_id,
+            "secret_access_key": secret_access_key,
+            "session_token": session_token,
         }
-        # Remove None values
-        self._credentials = {
-            k: v for k, v in self._credentials.items() if v is not None
-        }
+        self._store = S3Store(
+            bucket,
+            region=region,
+            client_options={
+                "allow_http": bool(endpoint_url and endpoint_url.startswith("http://")),
+                "connect_timeout": "3s",
+                "timeout": "15s",
+            },
+            # The default, 10 retries over 3 minutes, would stall the tile waiting on it.
+            retry_config={"max_retries": 2, "retry_timeout": timedelta(seconds=3)},
+            **{k: v for k, v in optional.items() if v is not None},
+        )
+        self._bucket_checked = False
 
         # Statistics tracking
         self._stats = {
@@ -100,89 +81,15 @@ class S3StorageBackend(CacheBackend):
             "bytes_retrieved": 0,
         }
 
-    def _get_client(self):
-        """Get S3 client with isolated credentials."""
-        if self._client is None:
-            try:
-                import os
-
-                from botocore.config import Config
-
-                # Completely bypass credential chain if AWS_EC2_METADATA_DISABLED is set
-                if os.getenv("AWS_EC2_METADATA_DISABLED", "").lower() == "true":
-                    logger.debug(
-                        "EC2 metadata disabled - using explicit credential configuration"
-                    )
-
-                    # Configuration to completely disable EC2 metadata service
-                    client_config = Config(
-                        region_name=self.region,
-                        retries={
-                            "max_attempts": 0
-                        },  # Disable retries for faster failure
-                        parameter_validation=False,  # Skip parameter validation
-                    )
-
-                    # Use explicit credentials only, no credential chain
-                    client_kwargs = {
-                        "service_name": "s3",
-                        "region_name": self.region,
-                        "config": client_config,
-                    }
-
-                    # Add endpoint URL if specified
-                    if self.endpoint_url:
-                        client_kwargs["endpoint_url"] = self.endpoint_url
-
-                    # Add explicit credentials if provided
-                    if self._credentials:
-                        client_kwargs.update(self._credentials)
-                    else:
-                        # If no explicit credentials, try environment variables only
-                        env_access_key = os.getenv("AWS_ACCESS_KEY_ID")
-                        env_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-                        env_session_token = os.getenv("AWS_SESSION_TOKEN")
-
-                        if env_access_key and env_secret_key:
-                            client_kwargs["aws_access_key_id"] = env_access_key
-                            client_kwargs["aws_secret_access_key"] = env_secret_key
-                            if env_session_token:
-                                client_kwargs["aws_session_token"] = env_session_token
-                        else:
-                            # If no credentials available at all, create client anyway and let boto3 handle it
-                            logger.warning(
-                                "No explicit credentials found with EC2 metadata disabled - boto3 will handle credential resolution"
-                            )
-
-                    # Add any additional client kwargs
-                    client_kwargs.update(self.client_kwargs)
-
-                    # Create client directly without going through credential chain
-                    self._client = boto3.client(**client_kwargs)
-
-                else:
-                    # Use normal boto3 credential chain
-                    logger.debug("Using standard boto3 credential chain")
-                    client_config = Config(region_name=self.region)
-
-                    self._client = boto3.client(
-                        "s3",
-                        region_name=self.region,
-                        endpoint_url=self.endpoint_url,
-                        config=client_config,
-                        **self._credentials,
-                        **self.client_kwargs,
-                    )
-
-                # Test access to bucket
-                self._client.head_bucket(Bucket=self.bucket)
-                logger.debug(f"Connected to S3 bucket: {self.bucket}")
-
-            except (BotoCoreError, ClientError, NoCredentialsError) as e:
-                logger.error(f"Failed to connect to S3: {e}")
-                raise CacheBackendUnavailable(f"S3 unavailable: {e}") from e
-
-        return self._client
+    async def _ensure_bucket(self) -> None:
+        """Check the bucket once: a GET in a missing one is a 404, i.e. a silent miss."""
+        if self._bucket_checked:
+            return
+        try:
+            await obstore.list_with_delimiter_async(self._store)
+        except Exception as e:
+            raise CacheBackendUnavailable(f"S3 unavailable: {_brief(e)}") from e
+        self._bucket_checked = True
 
     def _get_object_key(self, key: str) -> str:
         """Convert cache key to S3 object key.
@@ -206,274 +113,155 @@ class S3StorageBackend(CacheBackend):
 
     async def get(self, key: str) -> Optional[bytes]:
         """Retrieve data from S3."""
+        self._stats["total_operations"] += 1
+        object_key = self._get_object_key(key)
         try:
-            client = self._get_client()
-            self._stats["total_operations"] += 1
-
-            object_key = self._get_object_key(key)
-
-            # Get object with metadata
-            response = client.get_object(Bucket=self.bucket, Key=object_key)
-
-            # Check TTL if present in metadata
-            metadata = response.get("Metadata", {})
-            if "ttl-expires-at" in metadata:
-                expires_at = datetime.fromisoformat(metadata["ttl-expires-at"])
-                if datetime.now(timezone.utc) > expires_at:
-                    logger.debug(f"S3 object expired for key: {key}")
-                    # Object expired, delete it and return None
-                    client.delete_object(Bucket=self.bucket, Key=object_key)
-                    self._stats["misses"] += 1
-                    return None
-
-            data = response["Body"].read()
-            self._stats["hits"] += 1
-            self._stats["bytes_retrieved"] += len(data)
-            logger.debug(f"S3 Cache HIT for key: {key} ({len(data)} bytes)")
-            return data
-
-        except (BotoCoreError, ClientError) as e:
-            if hasattr(e, "response") and e.response["Error"]["Code"] == "NoSuchKey":
+            await self._ensure_bucket()
+            result = await obstore.get_async(self._store, object_key)
+            expires_at = result.attributes.get("ttl-expires-at")
+            if expires_at and datetime.now(timezone.utc) > datetime.fromisoformat(
+                expires_at
+            ):
+                logger.debug(f"S3 object expired for key: {key}")
+                await obstore.delete_async(self._store, object_key)
                 self._stats["misses"] += 1
-                logger.debug(f"S3 Cache MISS for key: {key}")
                 return None
-            else:
-                self._stats["errors"] += 1
-                logger.error(f"S3 get error for key {key}: {e}")
-                raise CacheError(f"Failed to get key {key}: {e}") from e
+            data = bytes(await result.bytes_async())
+        except FileNotFoundError:  # obstore raises the builtin, not its NotFoundError
+            self._stats["misses"] += 1
+            logger.debug(f"S3 Cache MISS for key: {key}")
+            return None
         except CacheBackendUnavailable:
             self._stats["errors"] += 1
             raise
         except Exception as e:
             self._stats["errors"] += 1
-            logger.error(f"S3 get error for key {key}: {e}")
-            raise CacheError(f"Failed to get key {key}: {e}") from e
+            logger.error(f"S3 get error for key {key}: {_brief(e)}")
+            raise CacheError(f"Failed to get key {key}: {_brief(e)}") from e
+
+        self._stats["hits"] += 1
+        self._stats["bytes_retrieved"] += len(data)
+        logger.debug(f"S3 Cache HIT for key: {key} ({len(data)} bytes)")
+        return data
 
     async def set(self, key: str, value: bytes, ttl: Optional[int] = None) -> bool:
         """Store data in S3 with TTL metadata."""
+        self._stats["total_operations"] += 1
+        now = datetime.now(timezone.utc)
+        # Unknown attributes become x-amz-meta-* user metadata, as boto3 wrote them.
+        attributes = {
+            "Content-Type": "application/octet-stream",
+            "cache-key": key,
+            "stored-at": now.isoformat(),
+        }
+        if ttl is not None:
+            attributes["ttl-expires-at"] = (now + timedelta(seconds=ttl)).isoformat()
+            attributes["ttl-seconds"] = str(ttl)
+
         try:
-            client = self._get_client()
-            self._stats["total_operations"] += 1
-
-            object_key = self._get_object_key(key)
-
-            # Prepare metadata
-            metadata = {
-                "cache-key": key,
-                "stored-at": datetime.now(timezone.utc).isoformat(),
-                "content-type": "application/octet-stream",
-            }
-
-            # Add TTL metadata if specified
-            if ttl is not None:
-                expires_at = datetime.now(timezone.utc).timestamp() + ttl
-                metadata["ttl-expires-at"] = datetime.fromtimestamp(
-                    expires_at, tz=timezone.utc
-                ).isoformat()
-                metadata["ttl-seconds"] = str(ttl)
-
-            # Store object with metadata
-            client.put_object(
-                Bucket=self.bucket,
-                Key=object_key,
-                Body=value,
-                Metadata=metadata,
-                ContentType="application/octet-stream",
+            await self._ensure_bucket()
+            await obstore.put_async(
+                self._store, self._get_object_key(key), value, attributes=attributes
             )
-
-            self._stats["bytes_stored"] += len(value)
-            logger.debug(
-                f"S3 Cache SET for key: {key} ({len(value)} bytes, TTL: {ttl})"
-            )
-            return True
-
-        except CacheBackendUnavailable:
-            self._stats["errors"] += 1
-            return False
-        except (BotoCoreError, ClientError) as e:
-            self._stats["errors"] += 1
-            import traceback
-
-            logger.error(f"S3 set error for key {key}: {e}")
-            logger.error(f"Full traceback: {traceback.format_exc()}")
-            return False
         except Exception as e:
             self._stats["errors"] += 1
-            import traceback
-
-            logger.error(f"S3 set error for key {key}: {e}")
-            logger.error(f"Full traceback: {traceback.format_exc()}")
+            logger.error(f"S3 set error for key {key}: {_brief(e)}")
             return False
+
+        self._stats["bytes_stored"] += len(value)
+        logger.debug(f"S3 Cache SET for key: {key} ({len(value)} bytes, TTL: {ttl})")
+        return True
 
     async def delete(self, key: str) -> bool:
-        """Delete single object from S3."""
+        """Delete data from S3."""
+        self._stats["total_operations"] += 1
+        object_key = self._get_object_key(key)
         try:
-            client = self._get_client()
-            self._stats["total_operations"] += 1
-
-            object_key = self._get_object_key(key)
-
-            # Check if object exists first
-            try:
-                client.head_object(Bucket=self.bucket, Key=object_key)
-                client.delete_object(Bucket=self.bucket, Key=object_key)
-                logger.debug(f"S3 Cache DELETE for key: {key}")
-                return True
-            except (BotoCoreError, ClientError) as e:
-                if (
-                    hasattr(e, "response")
-                    and e.response["Error"]["Code"] == "NoSuchKey"
-                ):
-                    return False
-                raise
-
-        except CacheBackendUnavailable:
-            self._stats["errors"] += 1
+            await self._ensure_bucket()
+            # DELETE succeeds on a missing key too; HEAD says whether it existed.
+            await obstore.head_async(self._store, object_key)
+            await obstore.delete_async(self._store, object_key)
+        except FileNotFoundError:
             return False
         except Exception as e:
             self._stats["errors"] += 1
-            logger.error(f"S3 delete error for key {key}: {e}")
+            logger.error(f"S3 delete error for key {key}: {_brief(e)}")
             return False
+
+        logger.debug(f"S3 Cache DELETE for key: {key}")
+        return True
 
     async def exists(self, key: str) -> bool:
-        """Check if object exists in S3."""
+        """Check whether a key exists in S3."""
+        self._stats["total_operations"] += 1
         try:
-            client = self._get_client()
-            self._stats["total_operations"] += 1
-
-            object_key = self._get_object_key(key)
-            client.head_object(Bucket=self.bucket, Key=object_key)
-            return True
-
-        except (BotoCoreError, ClientError) as e:
-            if hasattr(e, "response") and e.response["Error"]["Code"] == "NoSuchKey":
-                return False
-            self._stats["errors"] += 1
-            logger.error(f"S3 exists error for key {key}: {e}")
-            return False
-        except CacheBackendUnavailable:
-            self._stats["errors"] += 1
+            await self._ensure_bucket()
+            await obstore.head_async(self._store, self._get_object_key(key))
+        except FileNotFoundError:
             return False
         except Exception as e:
             self._stats["errors"] += 1
-            logger.error(f"S3 exists error for key {key}: {e}")
+            logger.error(f"S3 exists error for key {key}: {_brief(e)}")
             return False
 
-    async def clear_pattern(self, pattern: Union[str, Pattern]) -> int:  # noqa: C901
+        return True
+
+    async def clear_pattern(self, pattern: Union[str, Pattern]) -> int:
         """Delete S3 objects matching pattern using list operations."""
+        self._stats["total_operations"] += 1
+        if isinstance(pattern, str):
+            # obstore lists whole path segments, so list from the last complete one.
+            literal = re.split(r"[*?]", pattern, maxsplit=1)[0]
+            prefix = self._get_object_key(literal).rpartition("/")[0]
+            regex = re.compile(fnmatch.translate(pattern))
+        else:
+            regex = pattern
+            source = pattern.pattern
+            prefix = (
+                source[1:].split("[.*+?^${}()|\\]")[0] if source.startswith("^") else ""
+            )
+
+        deleted = 0
         try:
-            client = self._get_client()
-            self._stats["total_operations"] += 1
-
-            # Convert pattern to S3 prefix if possible
-            if hasattr(pattern, "pattern"):
-                # Regex pattern - convert to prefix if it starts with literal text
-                pattern_str = str(pattern.pattern)
-                if pattern_str.startswith("^"):
-                    prefix = pattern_str[1:].split("[.*+?^${}()|\\]")[0]
-                else:
-                    prefix = ""
-            else:
-                # String pattern - convert Redis glob to S3 prefix
-                pattern_str = str(pattern)
-                # Extract prefix before first wildcard
-                wildcard_pos = min(
-                    [
-                        pos
-                        for pos in [pattern_str.find("*"), pattern_str.find("?")]
-                        if pos >= 0
-                    ]
-                    or [len(pattern_str)]
-                )
-                prefix = self._get_object_key(pattern_str[:wildcard_pos])
-
-            deleted = 0
-            paginator = client.get_paginator("list_objects_v2")
-
-            # List and delete matching objects
-            for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
-                if "Contents" not in page:
-                    continue
-
-                objects_to_delete = []
-                for obj in page["Contents"]:
-                    # Check if object key matches pattern
-                    object_key = obj["Key"]
-                    # Convert back to cache key for pattern matching
-                    cache_key = object_key.replace("/", ":")
-
-                    if hasattr(pattern, "match"):
-                        if pattern.match(cache_key):
-                            objects_to_delete.append({"Key": object_key})
-                    else:
-                        # Simple glob matching
-                        if self._glob_match(cache_key, pattern_str):
-                            objects_to_delete.append({"Key": object_key})
-
-                # Batch delete matching objects
-                if objects_to_delete:
-                    response = client.delete_objects(
-                        Bucket=self.bucket, Delete={"Objects": objects_to_delete}
-                    )
-                    deleted += len(response.get("Deleted", []))
-
-            logger.debug(f"S3 Cache CLEAR pattern: {pattern_str} (deleted: {deleted})")
-            return deleted
-
-        except CacheBackendUnavailable:
-            self._stats["errors"] += 1
-            return 0
+            await self._ensure_bucket()
+            # 1000 keys is the most one DeleteObjects request takes.
+            stream = obstore.list(self._store, prefix=prefix or None, chunk_size=1000)
+            async for chunk in stream:
+                doomed = [
+                    obj["path"]
+                    for obj in chunk
+                    if regex.match(obj["path"].replace("/", ":"))
+                ]
+                if doomed:
+                    await obstore.delete_async(self._store, doomed)
+                    deleted += len(doomed)
         except Exception as e:
             self._stats["errors"] += 1
-            logger.error(f"S3 clear pattern error for {pattern}: {e}")
-            return 0
+            logger.error(f"S3 clear pattern error for {pattern}: {_brief(e)}")
 
-    def _glob_match(self, text: str, pattern: str) -> bool:
-        """Simple glob pattern matching for S3 object filtering."""
-        import fnmatch
-
-        return fnmatch.fnmatch(text, pattern)
+        return deleted
 
     async def health_check(self) -> dict[str, Any]:
         """Check S3 health and return metrics."""
         try:
-            client = self._get_client()
-
-            # Check bucket access
-            client.head_bucket(Bucket=self.bucket)
-
-            # Get bucket location
-            try:
-                location = client.get_bucket_location(Bucket=self.bucket)
-                bucket_region = location.get("LocationConstraint") or "us-east-1"
-            except Exception:
-                bucket_region = "unknown"
-
-            return {
-                "status": "connected",
-                "bucket": self.bucket,
-                "region": self.region,
-                "bucket_region": bucket_region,
-                "endpoint_url": self.endpoint_url or "aws",
-                "total_bytes_stored": self._stats["bytes_stored"],
-                "total_bytes_retrieved": self._stats["bytes_retrieved"],
-            }
-
-        except CacheBackendUnavailable:
-            return {
-                "status": "disconnected",
-                "bucket": self.bucket,
-                "region": self.region,
-                "error": "Backend unavailable",
-            }
+            await obstore.list_with_delimiter_async(self._store)
         except Exception as e:
-            logger.error(f"S3 health check error: {e}")
+            logger.error(f"S3 health check error: {_brief(e)}")
             return {
                 "status": "error",
                 "bucket": self.bucket,
                 "region": self.region,
-                "error": str(e),
+                "error": _brief(e),
             }
+
+        return {
+            "status": "connected",
+            "bucket": self.bucket,
+            "region": self.region,
+            "endpoint_url": self.endpoint_url or "aws",
+            "total_bytes_stored": self._stats["bytes_stored"],
+            "total_bytes_retrieved": self._stats["bytes_retrieved"],
+        }
 
     async def get_stats(self) -> dict[str, Any]:
         """Get S3 storage statistics."""

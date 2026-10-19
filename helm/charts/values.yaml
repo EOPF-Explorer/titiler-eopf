@@ -142,10 +142,17 @@ cache:
       secretAccessKeyKey: "secret-access-key"
       sessionTokenKey: "session-token"
 
-  # Admin API configuration
+  # Cache admin API (GET <path_prefix>/status, POST <path_prefix>/invalidate).
+  # Disabled by default. When enabled, every call needs
+  # `Authorization: Bearer <token>`; the token is read from an existing Secret:
+  #   kubectl create secret generic titiler-eopf-cache-admin \
+  #     --from-literal=admin-token="$(openssl rand -hex 32)"
   admin:
-    enabled: true
+    enabled: false
     path_prefix: "/admin/cache"
+    auth:
+      existingSecret: ""
+      existingSecretKey: "admin-token"
 
   # Monitoring and metrics
   monitoring:

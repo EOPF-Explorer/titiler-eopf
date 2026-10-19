@@ -5,7 +5,7 @@
 # unpinned and built against Wolfi's *current* glibc, while this rootfs keeps
 # the glibc it shipped with (nothing here runs `apk upgrade`). A stale digest
 # fails docker/smoke-test.sh with "version `GLIBC_x.yy' not found".
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:103eb3f4444c68ea2453bf3aad09d860eaa5a698effb3e656cd607f630f0e46d AS base
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:256c88bb066424045021090932d50be93c8e3f2ce3586707702a401b146f3e43 AS base
 
 # Declared AFTER "FROM" on purpose: an ARG before the first FROM is in scope for
 # FROM only, so the RUN below would expand it to "" and run `apk add python-`.
@@ -31,7 +31,7 @@ RUN apk add --no-cache \
 # direct COPY --from=<image> because Dependabot only parses FROM lines — it
 # ignores images in COPY (dependabot-core#5103) — and a digest pin nothing
 # moves would rot.
-FROM ghcr.io/astral-sh/uv:0.12.9@sha256:8b940d3a9d65bed080436972241af2e21c84b5e8c9193f7014ed71479ee795ff AS uv
+FROM ghcr.io/astral-sh/uv:0.13.1@sha256:4a1f3666816dafadd20ceb71eac9a7d56d7ef30279f7d64048519ab901ada336 AS uv
 
 # Build stage
 FROM base AS builder
@@ -60,12 +60,13 @@ ENV UV_LINK_MODE=copy \
 
 WORKDIR /tmp/app
 
-# Copy project metadata and install dependencies from the lockfile (--frozen:
-# uv.lock is authoritative, out-of-date fails the build). The `server` extra
+# Copy project metadata and install dependencies from the lockfile (--locked:
+# a uv.lock that no longer matches pyproject.toml fails the build; --frozen would
+# install the stale lock silently). The `server` extra
 # carries uvicorn/gunicorn/uvicorn-worker — the chart and the CMD below need
 # them as locked deps, not ad-hoc installs.
 COPY pyproject.toml uv.lock README.md LICENSE ./
-RUN uv sync --frozen --no-dev --extra server --extra cache --extra openeo --no-install-project
+RUN uv sync --locked --no-dev --extra server --extra cache --extra openeo --no-install-project
 
 # Copy and install runtime source code to the builder image
 COPY titiler/ titiler/

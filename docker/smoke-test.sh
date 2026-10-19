@@ -319,16 +319,17 @@ PY
 }
 
 # C11 — the openeo release runs against a real Postgres (bitnami subchart).
-# psycopg2-binary is a wheel with a vendored libpq, so assert the extension
-# module loads and reports a libpq version rather than just importing.
+# The chart renders a plain postgresql:// URL, which SQLAlchemy 2.1 maps to
+# psycopg (3). psycopg[binary] vendors libpq, so assert it loads and reports a
+# libpq version rather than just importing.
 check_c11_openeo_extras() {
   pyrun <<'PY'
-import psycopg2
+import psycopg
 import sqlalchemy
 
-assert psycopg2.__libpq_version__ >= 90000, psycopg2.__libpq_version__
-url = sqlalchemy.engine.url.make_url("postgresql+psycopg2://u:p@db:5432/openeo")
-assert sqlalchemy.create_engine(url).dialect.driver == "psycopg2"
+assert psycopg.pq.version() >= 90000, psycopg.pq.version()
+url = sqlalchemy.engine.url.make_url("postgresql://u:p@db:5432/openeo")
+assert sqlalchemy.create_engine(url).dialect.driver == "psycopg"
 
 import duckdb
 
@@ -419,7 +420,7 @@ CHECKS=(
   "C8b  openeo serves /api on :80 with --log-config|check_c8b_openeo_probe_on_80"
   "C9   /config mount is readable and read-only|check_c9_config_mount_readable"
   "C10  osgeo is ABSENT|check_c10_osgeo_absent"
-  "C11  psycopg2 + sqlalchemy + duckdb work|check_c11_openeo_extras"
+  "C11  psycopg + sqlalchemy + duckdb work|check_c11_openeo_extras"
   "NAT  pyproj 4326->3857 numerically correct|check_native_pyproj_transform"
   "NAT  rasterio GTiff write/read roundtrip|check_native_rasterio_gtiff_roundtrip"
   "NAT  zarr write/open roundtrip, obstore imports|check_native_zarr_roundtrip"

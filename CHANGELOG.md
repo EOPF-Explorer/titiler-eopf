@@ -11,6 +11,60 @@
 
 **Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.8.0...v0.9.0
 
+## 0.12.3 (2026-10-15)
+
+## What's Changed
+* fix(deps): require titiler-openeo 0.18.3 by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/190
+* ci: fail builds on a stale uv.lock and track titiler-openeo by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/191
+* ci: group Dependabot security updates for uv into one PR by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/202
+* ci: fix the titiler-openeo Dependabot group and cut weekly PR churn by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/203
+* fix: add isochron dep to avoid import error with rio-tiler 9.4.12 by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/184
+* ci: let the uv Dependabot groups open next to the security PRs by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/205
+* chore(deps): update titiler-openeo[oidc] requirement from <0.19,>=0.18.3 to >=0.18.3,<0.20 in the titiler-openeo group by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/206
+* ci: keep Dependabot's uv PR titles inside the allowed scopes by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/208
+* chore(deps): bump the docker group across 1 directory with 2 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/204
+* chore(deps): bump the python group with 24 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/207
+* chore(deps): bump the all group across 1 directory with 4 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/201
+* fix(deps): bump the seven packages from open security advisories by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/209
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.12.2...v0.12.3
+
+## 0.12.2 (2026-10-07)
+
+## What's Changed
+* fix: set zarr-format=3 for xarray by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/182
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.12.1...v0.12.2
+
+## 0.12.1 (2026-10-06)
+
+## What's Changed
+* chore(deps): bump astral-sh/uv from 0.12.9 to 0.12.22 by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/179
+* chore(deps): bump the all group across 1 directory with 8 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/169
+* chore(deps): bump chainguard/wolfi-base from `103eb3f` to `6f6d440` by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/167
+* chore(deps): bump the uv group across 1 directory with 6 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/160
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.12.0...v0.12.1
+
+## 0.12.0 (2026-09-24)
+
+## What's Changed
+* fix: better handle group in stac-model by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/158
+* feat: use stac api to access EOPF item by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/114
+* chore(openeo): bump to titiler-openeo 0.18.x, fix what it broke, dedupe copies by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/152
+* fix(openeo): restore per-band metadata dropped since the |bands= notation by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/153
+* feat(openeo): wire /healthz and /readyz by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/155
+* fix(reader): pick a multiscale level that actually has the requested band by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/156
+* fix(openeo): install titiler-openeo's oidc extra so httpx reaches production by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/162
+* fix: keep the event loop free so /_mgmt probes answer under load by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/170
+* fix(cache): make the cache admin API opt-in and token-protected by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/174
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.11.0...v0.12.0
+
 ## 0.11.0 (2026-09-04)
 
 ## What's Changed

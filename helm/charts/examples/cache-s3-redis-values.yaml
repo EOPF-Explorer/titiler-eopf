@@ -36,11 +36,6 @@ cache:
 
   namespace: "prod-cache"
   
-  # Admin API
-  admin:
-    enabled: true
-    path_prefix: "/admin/cache"
-
 # Application environment
 env:
   LOG_LEVEL: "INFO"
