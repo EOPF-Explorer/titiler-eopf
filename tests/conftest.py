@@ -99,7 +99,7 @@ def geozarr_stac_measurements(geozarr_dataset) -> pystac.Item:
 
 @pytest.fixture
 def geozarr_stac_array(geozarr_dataset) -> pystac.Item:
-    """Create GeoZARR STAC Item."""
+    """Create GeoZARR STAC Item with an asset that points to a Zarr array."""
     env = jinja2.Environment(
         loader=jinja2.ChoiceLoader(
             [
