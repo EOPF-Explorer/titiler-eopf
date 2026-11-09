@@ -66,6 +66,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import attr
 import numpy
@@ -164,8 +165,13 @@ def product_root(href: Any) -> str | None:
     """
     if not isinstance(href, str):
         return None
-    match = re.match(r"^(.+?\.zarr)(?:/|$)", href)
-    return match.group(1) if match else None
+    # Only the path: a query (e.g. a signature, `?sv=...&sig=...`) and a
+    # fragment stay on the root.
+    parts = urlsplit(href)
+    match = re.match(r"^(.+?\.zarr)(?:/|$)", parts.path)
+    if not match:
+        return None
+    return urlunsplit(parts._replace(path=match.group(1)))
 
 
 def has_angle_bands(
@@ -506,12 +512,20 @@ def _destination_grid(
 
     The buffer uses the same function (`buffer_grid`) as `GeoZarrReader`.
     """
+    # `GeoZarrReader` without a size uses the native resolution of the data,
+    # which these readers do not know: a default here would give a grid
+    # different from the other bands. openEO `load_collection` always gives
+    # both (`_estimate_output_dimensions`).
+    if width is None or height is None:
+        raise AngleDataError(
+            "The angle bands need the output width and height; "
+            f"got width={width}, height={height}"
+        )
+    width, height = int(width), int(height)
+
     dst_crs = CRS.from_user_input(dst_crs or bounds_crs)
     if bounds_crs and CRS.from_user_input(bounds_crs) != dst_crs:
         bbox = transform_bounds(bounds_crs, dst_crs, *bbox, densify_pts=21)
-
-    width = int(width or 256)
-    height = int(height or 256)
 
     if buffer:
         bbox, width, height = buffer_grid(tuple(bbox), width, height, buffer)  # type: ignore[arg-type]

@@ -332,6 +332,13 @@ def test_product_without_geometry(tmp_path):
         ("https://h/p/S2.zarr", "https://h/p/S2.zarr"),
         ("https://h/p/S2.zarr/", "https://h/p/S2.zarr"),
         ("https://h/p/preview.png", None),
+        ("/data/p/S2.zarr/measurements/reflectance", "/data/p/S2.zarr"),
+        # A query (a signature) stays on the root.
+        ("https://h/p/S2.zarr?sv=1&sig=a%2Fb", "https://h/p/S2.zarr?sv=1&sig=a%2Fb"),
+        (
+            "https://h/p/S2.zarr/measurements/reflectance?sv=1&sig=a%2Fb",
+            "https://h/p/S2.zarr?sv=1&sig=a%2Fb",
+        ),
     ],
 )
 def test_product_root(href, root):
@@ -433,6 +440,20 @@ def test_view_angles_unknown_band(product):
     """A band that the product does not have is an error."""
     with pytest.raises(AngleDataError, match="b13"):
         read(ZarrViewAngleGridReader, product, "zenith", band="b13")
+
+
+@pytest.mark.parametrize("width,height", [(None, 10), (10, None), (None, None)])
+def test_size_is_required(product, width, height):
+    """No default size: it would give a grid different from the reflectance."""
+    with ZarrSunAngleGridReader(product, quantity="zenith") as src:
+        with pytest.raises(AngleDataError, match="width and height"):
+            src.part(
+                TILE_BBOX,
+                dst_crs=TILE_CRS,
+                bounds_crs=TILE_CRS,
+                width=width,
+                height=height,
+            )
 
 
 def test_reprojected_output(product):
