@@ -72,6 +72,7 @@ import attr
 import numpy
 import zarr
 from cachetools import LRUCache, cached
+from cachetools.keys import hashkey
 from rasterio.crs import CRS
 from rasterio.warp import transform as warp_transform
 from rasterio.warp import transform_bounds
@@ -85,7 +86,14 @@ from titiler.openeo.bandsources.sentinel2_readers import Sentinel2AngleReader
 from titiler.openeo.grid2d import Grid2D
 from titiler.openeo.reader import _resolve_asset_href
 
-from ..reader import _get_store, _has_proj, _has_spatial, _normalize_path, buffer_grid
+from ..reader import (
+    _get_proj_crs,
+    _get_store,
+    _has_proj,
+    _has_spatial,
+    _normalize_path,
+    buffer_grid,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +157,17 @@ _FOOTPRINT_CACHE_SIZE = 16
 #: `get_tile_metadata` does for `MTD_TL.xml`.
 _angles_cache: LRUCache = LRUCache(maxsize=_ANGLES_CACHE_SIZE)
 _footprint_cache: LRUCache = LRUCache(maxsize=_FOOTPRINT_CACHE_SIZE)
+
+
+def _product_key(root: str) -> tuple:
+    """The cache key of a product: its root without the query and fragment.
+
+    A signer adds a new signature (query) to the root for each reader, and the
+    product is the same: with the query in the key, each request would load
+    the product again.
+    """
+    return hashkey(urlunsplit(urlsplit(root)._replace(query="", fragment="")))
+
 
 #: Footprint pixels (60 m) added at the detector edges, see
 #: `get_detector_footprint`.
@@ -296,13 +315,19 @@ def has_geozarr_conventions(group: zarr.Group) -> bool:
     return _has_spatial(conventions) and _has_proj(conventions)
 
 
+#: The `proj` convention's CRS attributes, in the order `_get_proj_crs` reads them.
+_PROJ_KEYS = ("proj:code", "proj:wkt2", "proj:projjson")
+
+
 def _product_crs(root: zarr.Group) -> CRS:
     """The CRS of the product's tile grid.
 
     `conditions/geometry` has no CRS attribute. The root `proj:code` is not
     the grid CRS: it is the CRS of the geographic root `spatial:bbox`
-    (EPSG:4326). The GeoZarr `proj:code` of `measurements/reflectance` (or of
-    the 60 m footprint group) is the tile CRS.
+    (EPSG:4326). The GeoZarr `proj` attributes of `measurements/reflectance`
+    (or of the 60 m footprint group) give the tile CRS: `proj:code`,
+    `proj:wkt2` or `proj:projjson`, read as `GeoZarrReader` reads them
+    (`_get_proj_crs`).
 
     EOPF-Explorer/data-model#346 asks for the `proj` and `spatial`
     conventions on `conditions/geometry`. With them, read the sun angles and
@@ -310,11 +335,11 @@ def _product_crs(root: zarr.Group) -> CRS:
     """
     for path in ("measurements/reflectance", f"{_FOOTPRINT}/r60m"):
         group = _group(root, path)
-        if group is not None and (code := group.attrs.get("proj:code")):
-            return CRS.from_user_input(code)
+        if group is not None and any(k in group.attrs for k in _PROJ_KEYS):
+            return _get_proj_crs(dict(group.attrs))
     raise AngleDataError(
-        "Cannot find the CRS of the product: no proj:code attribute on "
-        f"measurements/reflectance or {_FOOTPRINT}/r60m"
+        f"Cannot find the CRS of the product: no {', '.join(_PROJ_KEYS)} "
+        f"attribute on measurements/reflectance or {_FOOTPRINT}/r60m"
     )
 
 
@@ -356,7 +381,7 @@ def _detector_number(label: str) -> int:
     return int(digits)
 
 
-@cached(_angles_cache, condition=Condition())
+@cached(_angles_cache, key=_product_key, condition=Condition())
 def get_angle_grids(root: str) -> AngleGrids:
     """Read the `conditions/geometry` arrays of the product at ``root``.
 
@@ -432,7 +457,7 @@ def _grow_footprint(ids: numpy.ndarray, pixels: int) -> numpy.ndarray:
     return out
 
 
-@cached(_footprint_cache, condition=Condition())
+@cached(_footprint_cache, key=_product_key, condition=Condition())
 def get_detector_footprint(root: str) -> DetectorFootprint:
     """Read the 60 m detector footprint of the product at ``root``.
 
@@ -574,6 +599,24 @@ class _ZarrAngleReader(Sentinel2AngleReader):
 
     #: One band label (e.g. `b04`), or None for the mean of all the bands.
     band: str | None = attr.ib(default=None, kw_only=True)
+
+    def __attrs_post_init__(self) -> None:
+        """The extent of the tile's angle grid, in the tile CRS.
+
+        Not the world (upstream `Sentinel2AngleReader`): `STACReader` tests
+        each asset's bounds against the request bbox, and an item that does
+        not intersect it must be skipped for the angle bands as for the
+        reflectance. Otherwise the bands of one item would not be the same.
+        """
+        super().__attrs_post_init__()
+        grids = get_angle_grids(self.input)
+        self.crs = grids.crs
+        self.bounds = (
+            grids.ulx,
+            grids.uly - float(grids.lines[-1]),
+            grids.ulx + float(grids.pixels[-1]),
+            grids.uly,
+        )
 
     def part(
         self,

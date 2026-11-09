@@ -302,32 +302,21 @@ class STACReader(SimpleSTACReader):
 
                     return data
 
-        try:
-            img = multi_arrays(
-                assets,
-                _reader,
-                bbox,
-                # Only TileOutsideBounds -- matches mosaic_reader's own default one
-                # level up. A wider tuple here used to swallow real option
-                # errors (e.g. an unknown band name from _get_options)
-                # silently: filter_tasks logs allowed exceptions at INFO and
-                # drops the asset, so the ValueError naming the bad band
-                # never reached the caller -- with every asset then dropped,
-                # this degraded into a generic "no valid data" failure.
-                allowed_exceptions=(TileOutsideBounds,),
-                **kwargs,
-            )
-        except ValueError as e:
-            # multi_arrays raises ValueError when all assets fail and it tries
-            # to create an ImageData from an empty list. Convert to TileOutsideBounds
-            # so the caller (mosaic_reader) can handle it gracefully.
-            logger.warning(
-                f"All assets failed to load for bbox {bbox}: {e!s}. "
-                "Raising TileOutsideBounds to allow mosaicking to continue."
-            )
-            raise TileOutsideBounds(
-                f"No valid data found in bounds {bbox} for any asset"
-            ) from e
+        # No `allowed_exceptions`: one asset outside the bbox makes the whole
+        # item outside it (`TileOutsideBounds`, which `mosaic_reader` skips).
+        # Dropping only that asset would give this item fewer bands than the
+        # others, in another order: openEO `load_collection` puts the bands
+        # in the requested order in each slice, and a pixel with no data is a
+        # no-data value, not a missing band. All the assets of an EOPF item
+        # cover the same tile, so no data is lost. Any other error (e.g. an
+        # unknown band name from `_get_options`) reaches the caller.
+        img = multi_arrays(
+            assets,
+            _reader,
+            bbox,
+            allowed_exceptions=(),
+            **kwargs,
+        )
 
         img.band_names = [f"b{ix + 1}" for ix in range(img.count)]
         if expression:

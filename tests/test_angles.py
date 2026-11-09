@@ -15,12 +15,14 @@ import warnings
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy
+import pyproj
 import pystac
 import pytest
 import zarr
 from openeo_pg_parser_networkx.pg_schema import BoundingBox
 from rasterio.crs import CRS
 from rasterio.warp import transform_bounds
+from rio_tiler.errors import TileOutsideBounds
 from rio_tiler.models import ImageData
 
 from titiler.eopf.openeo import angles
@@ -104,9 +106,10 @@ def write_angle_product(
 ) -> None:
     """Add the angle groups of an EOPF Sentinel-2 product at ``path``.
 
-    ``crs_on``: the group that has the tile `proj:code`: `reflectance`
-    (`measurements/reflectance`), `footprint` (the 60 m footprint group, as
-    in the EODC products) or `none`.
+    ``crs_on``: where the tile CRS is: `reflectance` (`proj:code` on
+    `measurements/reflectance`), `wkt2` or `projjson` (the other `proj` forms,
+    on the same group), `footprint` (`proj:code` on the 60 m footprint group,
+    as in the EODC products) or `none`.
     """
     # Not from the consolidated metadata: it would not show the groups that
     # this function adds (the GeoZarr fixture is already consolidated).
@@ -115,6 +118,12 @@ def write_angle_product(
     reflectance = root.require_group("measurements").require_group("reflectance")
     if crs_on == "reflectance":
         reflectance.attrs["proj:code"] = crs
+    elif crs_on == "wkt2":
+        reflectance.attrs["proj:wkt2"] = CRS.from_user_input(crs).to_wkt()
+    elif crs_on == "projjson":
+        reflectance.attrs["proj:projjson"] = pyproj.CRS.from_user_input(
+            crs
+        ).to_json_dict()
 
     xs = ulx + STEP * numpy.arange(NODES)
     ys = uly - STEP * numpy.arange(NODES)
@@ -290,6 +299,14 @@ def test_crs_from_footprint_group(tmp_path):
     """The CRS can also come from the 60 m footprint group."""
     path = str(tmp_path / "footprint.zarr")
     write_angle_product(path, crs_on="footprint")
+    assert get_angle_grids(path).crs == TILE_CRS
+
+
+@pytest.mark.parametrize("crs_on", ["wkt2", "projjson"])
+def test_crs_other_proj_forms(tmp_path, crs_on):
+    """`proj:wkt2` and `proj:projjson` are read as `GeoZarrReader` reads them."""
+    path = str(tmp_path / f"{crs_on}.zarr")
+    write_angle_product(path, crs_on=crs_on)
     assert get_angle_grids(path).crs == TILE_CRS
 
 
@@ -563,6 +580,27 @@ def test_stac_reader_href_relative_to_item_in_product(product):
 @pytest.mark.parametrize(
     "load", [angles.get_detector_footprint, angles.get_angle_grids]
 )
+def test_one_load_for_signed_roots(product, monkeypatch, load):
+    """A signer gives a new signature (query) for each reader: the product is
+    the same, so it is loaded one time."""
+    calls = []
+    open_product = angles._open_product
+
+    def open_unsigned(root):
+        calls.append(root)
+        return open_product(root.split("?")[0])
+
+    monkeypatch.setattr(angles, "_open_product", open_unsigned)
+    first = load(f"{product}?sv=1&sig=a")
+    second = load(f"{product}?sv=1&sig=b")
+
+    assert calls == [f"{product}?sv=1&sig=a"]
+    assert second is first
+
+
+@pytest.mark.parametrize(
+    "load", [angles.get_detector_footprint, angles.get_angle_grids]
+)
 def test_one_load_for_concurrent_misses(product, monkeypatch, load):
     """Parallel reads of one product (several angle bands in one read) wait
     for the first load and do not load the product again."""
@@ -580,6 +618,50 @@ def test_one_load_for_concurrent_misses(product, monkeypatch, load):
 
     assert len(calls) == 1
     assert all(r is results[0] for r in results)
+
+
+def test_angle_reader_bounds(product):
+    """The angle readers report the tile's angle grid, not the world."""
+    with ZarrSunAngleGridReader(product, quantity="zenith") as src:
+        assert src.crs == TILE_CRS
+        assert src.bounds == TILE_BBOX
+
+
+def test_stac_reader_item_outside_bbox(product):
+    """An item outside the bbox is skipped (`TileOutsideBounds`), for the
+    angle bands as for the reflectance: it never gives masked angle bands,
+    which would change the band count of the mosaic."""
+    far = (ULX + 50000, ULY - 10000, ULX + 60000, ULY)
+    with STACReader(make_item(product)) as src:
+        with pytest.raises(TileOutsideBounds):
+            src.part(
+                far,
+                assets=_parse_asset(["sunZenithAngles", "viewZenithAngles"]),
+                dst_crs=TILE_CRS,
+                bounds_crs=TILE_CRS,
+                width=10,
+                height=10,
+            )
+
+
+def test_stac_reader_one_asset_outside_skips_item(product, monkeypatch):
+    """One asset outside the bbox makes the whole item outside it: the item
+    never gives fewer bands than requested."""
+
+    def outside(self, *args, **kwargs):
+        raise TileOutsideBounds("no data")
+
+    monkeypatch.setattr(ZarrViewAngleMeanReader, "part", outside)
+    with STACReader(make_item(product)) as src:
+        with pytest.raises(TileOutsideBounds):
+            src.part(
+                TILE_BBOX,
+                assets=_parse_asset(["sunZenithAngles", "viewZenithMean"]),
+                dst_crs=TILE_CRS,
+                bounds_crs=TILE_CRS,
+                width=10,
+                height=10,
+            )
 
 
 @pytest.mark.parametrize("collection", ["sentinel-1-grd-rtc", "sentinel-3-olci-l1"])

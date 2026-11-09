@@ -192,13 +192,13 @@ class TestSTACReaderMethods:
             assert mo["indexes"] == [2]
 
     def test_part_allowed_exceptions_is_narrow(self):
-        """`part` must pass only `TileOutsideBounds` as `allowed_exceptions`
-        to `multi_arrays` -- matching `mosaic_reader`'s own default one level
-        up. A wider tuple used to swallow a genuine option error (e.g. an
-        unknown band name from `_get_options`) silently: `filter_tasks` logs
-        an allowed exception at INFO and drops the asset, so the error
-        naming the bad band never reached the caller."""
-        from rio_tiler.errors import TileOutsideBounds
+        """`part` must pass no `allowed_exceptions` to `multi_arrays`: one
+        asset outside the bbox makes the whole item outside it, so an item
+        never gives fewer bands than requested (the band order of openEO
+        `load_collection`). A wider tuple used to swallow a genuine option
+        error (e.g. an unknown band name from `_get_options`) silently:
+        `filter_tasks` logs an allowed exception at INFO and drops the
+        asset, so the error naming the bad band never reached the caller."""
         from rio_tiler.models import ImageData
 
         with patch("titiler.eopf.openeo.reader.SimpleSTACReader.__attrs_post_init__"):
@@ -214,7 +214,7 @@ class TestSTACReaderMethods:
                 reader.part((0, 0, 1, 1), assets=["a"])
 
             _, kwargs = mock_multi_arrays.call_args
-            assert kwargs["allowed_exceptions"] == (TileOutsideBounds,)
+            assert kwargs["allowed_exceptions"] == ()
 
     def test_get_options_variables_and_sel_pass_through(self):
         """`variables`/`sel` are EOPF-only options with no upstream
