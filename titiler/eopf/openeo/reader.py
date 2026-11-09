@@ -17,7 +17,11 @@ from rio_tiler.tasks import multi_arrays
 from rio_tiler.types import AssetInfo, AssetType, AssetWithOptions, BBox
 from rio_tiler.utils import cast_to_sequence, inherit_rasterio_env
 
-from titiler.openeo.reader import SimpleSTACReader, _inherit_derived_band_masks
+from titiler.openeo.reader import (
+    OpenEOReader,
+    SimpleSTACReader,
+    _inherit_derived_band_masks,
+)
 
 from ..reader import GeoZarrReader
 from ..stac import _resolve_zarr_bands
@@ -47,6 +51,23 @@ class STACReader(SimpleSTACReader):
         # band (SAR noise/calibration LUTs, S2 view/sun angles) would be read
         # with the plain OpenEOReader instead of its own resolved reader.
         return super()._get_reader(asset_info)
+
+    def _get_asset_info(self, asset: AssetType) -> AssetInfo:
+        """Upstream asset info, without the options this asset's reader rejects.
+
+        Upstream (titiler-openeo#464) adds `fallback_nodata` to
+        `reader_options` when the class-level `self.reader` is an
+        `OpenEOReader`. But `_get_reader` selects the reader for each asset,
+        and `GeoZarrReader` does not accept that option. The value comes from
+        Sentinel-2 SAFE product metadata (`MTD_MSIL2A.xml`), which does not
+        apply to a GeoZarr asset, so remove it for each other reader.
+        """
+        info = super()._get_asset_info(asset)
+        if "fallback_nodata" in info["reader_options"] and not issubclass(
+            self._get_reader(info), OpenEOReader
+        ):
+            info["reader_options"].pop("fallback_nodata")
+        return info
 
     def _get_options(
         self,

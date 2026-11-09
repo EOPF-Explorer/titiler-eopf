@@ -118,8 +118,6 @@ def test_load_collection(geozarr_stac):
     img_stack = list(collection.values())
     assert len(img_stack) == 1
     assert isinstance(img_stack[0], ImageData)
-    assert img_stack[0].band_descriptions == [
-        "reflectance_b04",
-        "reflectance_b03",
-        "reflectance_b02",
-    ]
+    # titiler-openeo>=0.20 (#460) labels each image with the stack's
+    # band names, so the band dimension keeps the requested labels.
+    assert img_stack[0].band_descriptions == collection.band_names
