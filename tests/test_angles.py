@@ -10,7 +10,9 @@ the root `spatial:bbox`, not of the grid).
 import json
 import os
 import shutil
+import time
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy
 import pystac
@@ -545,6 +547,39 @@ def test_stac_reader_relative_href(product, tmp_path):
         info = src._get_asset_info("viewZenithMean")
     assert info["url"] == product
     assert info["reader_options"] == {"quantity": "zenith", "band": None}
+
+
+def test_stac_reader_href_relative_to_item_in_product(product):
+    """An item stored in the product, with the href `measurements/reflectance`:
+    the raw href has no `.zarr`, the resolved href has."""
+    item = make_item(product)
+    item.set_self_href(os.path.join(product, "item.json"))
+    item.assets["reflectance"].href = "measurements/reflectance"
+    with STACReader(item) as src:
+        assert "viewZenithMean" in src._derived_bands
+        assert src._get_asset_info("viewZenithMean")["url"] == product
+
+
+@pytest.mark.parametrize(
+    "load", [angles.get_detector_footprint, angles.get_angle_grids]
+)
+def test_one_load_for_concurrent_misses(product, monkeypatch, load):
+    """Parallel reads of one product (several angle bands in one read) wait
+    for the first load and do not load the product again."""
+    calls = []
+    open_product = angles._open_product
+
+    def slow_open(root):
+        calls.append(root)
+        time.sleep(0.2)
+        return open_product(root)
+
+    monkeypatch.setattr(angles, "_open_product", slow_open)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(load, [product] * 4))
+
+    assert len(calls) == 1
+    assert all(r is results[0] for r in results)
 
 
 @pytest.mark.parametrize("collection", ["sentinel-1-grd-rtc", "sentinel-3-olci-l1"])

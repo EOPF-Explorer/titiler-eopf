@@ -43,6 +43,10 @@ dependencies = [
 openeo = [
     "titiler-openeo[oidc]>=0.20.0,<0.21",
     "openeo",
+    # The angle bands' caches (titiler/eopf/openeo/angles.py): 6.0 added the
+    # `condition` option of `cached`. rio-tiler brings it too; declared
+    # because this package imports it.
+    "cachetools>=6.0",
     "duckdb",
     "sqlalchemy>=2.0.0",
     # SQLAlchemy 2.1's default driver for plain postgresql:// store URLs.

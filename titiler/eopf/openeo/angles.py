@@ -64,13 +64,14 @@ import re
 import warnings
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from functools import lru_cache
+from threading import Condition
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 import attr
 import numpy
 import zarr
+from cachetools import LRUCache, cached
 from rasterio.crs import CRS
 from rasterio.warp import transform as warp_transform
 from rasterio.warp import transform_bounds
@@ -82,6 +83,7 @@ from zarr.storage import ObjectStore
 
 from titiler.openeo.bandsources.sentinel2_readers import Sentinel2AngleReader
 from titiler.openeo.grid2d import Grid2D
+from titiler.openeo.reader import _resolve_asset_href
 
 from ..reader import _get_store, _has_proj, _has_spatial, _normalize_path, buffer_grid
 
@@ -142,6 +144,12 @@ _FOOTPRINT = "conditions/mask/detector_footprint"
 _ANGLES_CACHE_SIZE = 64
 _FOOTPRINT_CACHE_SIZE = 16
 
+#: `condition`: concurrent misses for one product wait for the first load
+#: (a read of several angle bands runs them in parallel threads), as upstream
+#: `get_tile_metadata` does for `MTD_TL.xml`.
+_angles_cache: LRUCache = LRUCache(maxsize=_ANGLES_CACHE_SIZE)
+_footprint_cache: LRUCache = LRUCache(maxsize=_FOOTPRINT_CACHE_SIZE)
+
 #: Footprint pixels (60 m) added at the detector edges, see
 #: `get_detector_footprint`.
 _FOOTPRINT_GROWTH = 2
@@ -191,7 +199,10 @@ def angle_source_asset(collection_id: str, assets: Mapping[str, Any]) -> str | N
     """The key of the item asset whose product gives the angle bands, or None.
 
     ``assets`` maps asset keys to `pystac.Asset` objects. `reflectance` is
-    preferred, then the first Zarr data asset in key order.
+    preferred, then the first Zarr data asset in key order. The hrefs are
+    resolved as for the reflectance read (`_resolve_asset_href`): a relative
+    href such as `measurements/reflectance`, from an item in the product, is
+    in a Zarr product only after the resolution.
     """
     if not _is_s2_collection(collection_id):
         return None
@@ -200,7 +211,7 @@ def angle_source_asset(collection_id: str, assets: Mapping[str, Any]) -> str | N
         for key, asset in assets.items()
         if _is_zarr(asset.media_type)
         and "data" in (asset.roles or ())
-        and product_root(asset.href)
+        and product_root(_resolve_asset_href(asset))
     ]
     if not candidates:
         return None
@@ -345,7 +356,7 @@ def _detector_number(label: str) -> int:
     return int(digits)
 
 
-@lru_cache(maxsize=_ANGLES_CACHE_SIZE)
+@cached(_angles_cache, condition=Condition())
 def get_angle_grids(root: str) -> AngleGrids:
     """Read the `conditions/geometry` arrays of the product at ``root``.
 
@@ -421,7 +432,7 @@ def _grow_footprint(ids: numpy.ndarray, pixels: int) -> numpy.ndarray:
     return out
 
 
-@lru_cache(maxsize=_FOOTPRINT_CACHE_SIZE)
+@cached(_footprint_cache, condition=Condition())
 def get_detector_footprint(root: str) -> DetectorFootprint:
     """Read the 60 m detector footprint of the product at ``root``.
 

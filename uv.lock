@@ -3048,6 +3048,7 @@ cache = [
     { name = "redis" },
 ]
 openeo = [
+    { name = "cachetools" },
     { name = "cryptography" },
     { name = "duckdb" },
     { name = "openeo" },
@@ -3090,6 +3091,7 @@ performance = [
 [package.metadata]
 requires-dist = [
     { name = "anyio", specifier = ">=4.14.2" },
+    { name = "cachetools", marker = "extra == 'openeo'", specifier = ">=6.0" },
     { name = "cryptography", marker = "extra == 'openeo'" },
     { name = "duckdb", marker = "extra == 'openeo'" },
     { name = "gunicorn", marker = "extra == 'server'" },
