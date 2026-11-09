@@ -10,7 +10,12 @@ import attr
 import pystac
 from rasterio.errors import RasterioIOError
 from rasterio.warp import transform_bounds
-from rio_tiler.errors import AssetAsBandError, MissingAssets, TileOutsideBounds
+from rio_tiler.errors import (
+    AssetAsBandError,
+    InvalidAssetName,
+    MissingAssets,
+    TileOutsideBounds,
+)
 from rio_tiler.io import BaseReader
 from rio_tiler.models import ImageData
 from rio_tiler.tasks import multi_arrays
@@ -22,6 +27,7 @@ from titiler.openeo.reader import (
     OpenEOReader,
     SimpleSTACReader,
     _inherit_derived_band_masks,
+    _resolve_asset_href,
 )
 
 from ..reader import GeoZarrReader
@@ -75,9 +81,21 @@ class STACReader(SimpleSTACReader):
         if band is None or resolved.reader is not band.reader:
             return super()._get_derived_asset_info(asset_name)
 
+        # The href as the reflectance read resolves it (absolute href, and the
+        # `STAC_ALTERNATE_KEY` alternate), as upstream does for its own
+        # derived bands. The signer applies to the product root, after the
+        # cut, so that the cut does not remove a signature.
         asset = self.input.assets[resolved.asset_key]
+        root = product_root(_resolve_asset_href(asset))
+        if root is None:
+            raise InvalidAssetName(
+                f"Band '{asset_name}': the href of asset '{resolved.asset_key}' "
+                "is not in a Zarr product"
+            )
+        if self.signer is not None:
+            root = self.signer(root)
         return AssetInfo(
-            url=product_root(asset.href),
+            url=root,
             name=asset_name,
             media_type=asset.media_type,
             reader_options={"quantity": band.quantity, "band": band.band},

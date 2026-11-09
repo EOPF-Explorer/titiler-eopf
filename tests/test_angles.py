@@ -10,6 +10,7 @@ the root `spatial:bbox`, not of the grid).
 import json
 import os
 import shutil
+import warnings
 
 import numpy
 import pystac
@@ -513,6 +514,18 @@ def test_stac_reader_angle_bands(product):
     assert numpy.all(img.array[1, 2:, 5:] > 200)
 
 
+def test_stac_reader_relative_href(product, tmp_path):
+    """A relative asset href resolves against the item, as for the
+    reflectance read (not against the server's working directory)."""
+    item = make_item(product)
+    item.set_self_href(str(tmp_path / "item.json"))
+    item.assets["reflectance"].href = "S2B_MSIL2A_TEST.zarr/measurements/reflectance"
+    with STACReader(item) as src:
+        info = src._get_asset_info("viewZenithMean")
+    assert info["url"] == product
+    assert info["reader_options"] == {"quantity": "zenith", "band": None}
+
+
 @pytest.mark.parametrize("collection", ["sentinel-1-grd-rtc", "sentinel-3-olci-l1"])
 def test_stac_reader_no_angle_bands(product, collection):
     """Items of other collections get no angle bands."""
@@ -595,7 +608,10 @@ def test_summaries_describe_angle_bands():
 # load_collection on a GeoZarr product
 
 
-def test_load_collection_with_angle_bands(geozarr_stac, geozarr_dataset, tmp_path):
+@pytest.mark.parametrize("tile_buffer", [None, 1])
+def test_load_collection_with_angle_bands(
+    geozarr_stac, geozarr_dataset, tmp_path, tile_buffer
+):
     """Reflectance and angle bands together, through load_collection.
 
     The GeoZarr fixture is a 10 km tile at (500000, 4200000) in EPSG:32633.
@@ -631,12 +647,24 @@ def test_load_collection_with_angle_bands(geozarr_stac, geozarr_dataset, tmp_pat
         north=37.99616267972812,
     )
     bands = ["reflectance|bands=b04", "viewZenithAngles", "sunZenithAngles"]
-    collection = LoadCollection(FakeBackend()).load_collection(
-        "sentinel-2-l2a", spatial_extent=bbox, width=64, height=64, bands=bands
-    )
-    (img,) = list(collection.values())
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        collection = LoadCollection(FakeBackend()).load_collection(
+            "sentinel-2-l2a",
+            spatial_extent=bbox,
+            width=64,
+            height=64,
+            bands=bands,
+            tile_buffer=tile_buffer,
+        )
+        (img,) = list(collection.values())
     assert img.count == 3
     assert img.band_descriptions == bands
+    # The reflectance and the angle bands have one grid: rio-tiler did not
+    # resize one to the other (that would move the angle bands).
+    size = 64 + 2 * (tile_buffer or 0)
+    assert (img.width, img.height) == (size, size)
+    assert not [w for w in caught if "different sizes" in str(w.message)]
 
     reflectance, view, sun = (img.array[i] for i in range(3))
     tile = ~sun.mask

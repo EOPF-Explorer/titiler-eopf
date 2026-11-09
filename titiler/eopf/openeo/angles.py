@@ -82,7 +82,7 @@ from zarr.storage import ObjectStore
 from titiler.openeo.bandsources.sentinel2_readers import Sentinel2AngleReader
 from titiler.openeo.grid2d import Grid2D
 
-from ..reader import _get_store, _has_proj, _has_spatial, _normalize_path
+from ..reader import _get_store, _has_proj, _has_spatial, _normalize_path, buffer_grid
 
 logger = logging.getLogger(__name__)
 
@@ -501,27 +501,22 @@ def _destination_grid(
     height: int | None,
     buffer: float | None,
 ) -> tuple[BBox, CRS, int, int]:
-    """The output grid, with the same rules as upstream `Sentinel2AngleReader`."""
+    """The output grid: the same as `GeoZarrReader.part` gives for the
+    reflectance in the same read, so that the bands of the cube align.
+
+    The buffer uses the same function (`buffer_grid`) as `GeoZarrReader`.
+    """
     dst_crs = CRS.from_user_input(dst_crs or bounds_crs)
     if bounds_crs and CRS.from_user_input(bounds_crs) != dst_crs:
         bbox = transform_bounds(bounds_crs, dst_crs, *bbox, densify_pts=21)
 
-    width = width or 256
-    height = height or 256
+    width = int(width or 256)
+    height = int(height or 256)
 
     if buffer:
-        px_size = (bbox[2] - bbox[0]) / width
-        py_size = (bbox[3] - bbox[1]) / height
-        bbox = (
-            bbox[0] - buffer * px_size,
-            bbox[1] - buffer * py_size,
-            bbox[2] + buffer * px_size,
-            bbox[3] + buffer * py_size,
-        )
-        width += 2 * round(buffer)
-        height += 2 * round(buffer)
+        bbox, width, height = buffer_grid(tuple(bbox), width, height, buffer)  # type: ignore[arg-type]
 
-    return tuple(bbox), dst_crs, int(width), int(height)  # type: ignore[return-value]
+    return tuple(bbox), dst_crs, width, height  # type: ignore[return-value]
 
 
 def _tile_coordinates(
