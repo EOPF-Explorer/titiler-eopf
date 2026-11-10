@@ -6,14 +6,13 @@ import numpy as np
 import pystac
 import pytest
 from openeo_pg_parser_networkx.pg_schema import BoundingBox
-from rasterio.errors import RasterioIOError
 from rio_tiler.models import ImageData
 from rioxarray.exceptions import NoDataInBounds
 
 from titiler.eopf.openeo.processes.implementations.io import load_zarr
-from titiler.eopf.openeo.reader import STACReader, _reader
+from titiler.eopf.openeo.reader import STACReader
 from titiler.eopf.openeo.stacapi import LoadCollection
-from titiler.openeo.bandsources import ResolvedBand
+from titiler.openeo import reader as upstream_reader
 from titiler.openeo.processes.implementations.data_model import RasterStack
 
 
@@ -199,7 +198,6 @@ class TestSTACReaderMethods:
         error (e.g. an unknown band name from `_get_options`) silently:
         `filter_tasks` logs an allowed exception at INFO and drops the
         asset, so the error naming the bad band never reached the caller."""
-        from rio_tiler.models import ImageData
 
         with patch("titiler.eopf.openeo.reader.SimpleSTACReader.__attrs_post_init__"):
             mock_item = Mock()
@@ -236,193 +234,60 @@ class TestSTACReaderMethods:
             assert mo["sel"] == ["time=2024-01-01"]
 
 
-class TestReader:
-    """Test _reader function."""
+class TestReaderSeam:
+    """The EOPF reader goes through the upstream backend seam (titiler-openeo#462)."""
 
-    def test_reader_success(self):
-        """Test _reader function successful execution."""
-        mock_item = {"id": "test_item"}
-        bbox = [0, 0, 1, 1]
+    def test_reader_cls_default(self):
+        """Every LoadCollection reads with STACReader, without configuration."""
+        assert LoadCollection(stac_api=Mock()).reader_cls is STACReader
 
-        mock_img = ImageData(
-            array=np.ones((3, 256, 256), dtype=np.uint8), crs="EPSG:4326", bounds=bbox
+    def test_bands_to_assets(self):
+        """The EOPF band notation becomes one asset dict per band."""
+        loaders = LoadCollection(stac_api=Mock())
+        assert loaders._bands_to_assets(None) is None
+        assert loaders._bands_to_assets(
+            ["reflectance|bands=b04", "reflectance|bands=b03"]
+        ) == [
+            {"name": "reflectance", "bands": ["b04"]},
+            {"name": "reflectance", "bands": ["b03"]},
+        ]
+
+    def test_upstream_reader_reads_geozarr(self, geozarr_stac):
+        """Upstream `_reader` with `reader_cls=STACReader` reads a GeoZarr asset."""
+        img = upstream_reader._reader(
+            geozarr_stac,
+            (15.0, 37.86, 15.11, 37.94),
+            reader_cls=STACReader,
+            assets=LoadCollection(stac_api=Mock())._bands_to_assets(
+                ["reflectance|bands=b04"]
+            ),
+            bounds_crs="epsg:4326",
+            width=32,
+            height=32,
         )
+        assert img.count == 1
+        assert img.array.shape == (1, 32, 32)
+        assert not img.array.mask.all()
 
-        with patch("titiler.eopf.openeo.reader.STACReader") as mock_stac_reader:
-            mock_reader_instance = Mock()
-            mock_reader_instance.part.return_value = mock_img
-            mock_stac_reader.return_value.__enter__ = Mock(
-                return_value=mock_reader_instance
-            )
-            mock_stac_reader.return_value.__exit__ = Mock(return_value=None)
+    def test_no_double_scale_offset(self, geozarr_stac):
+        """STAC `raster:scale` is not applied on top of the decoded Zarr values."""
+        assert upstream_reader.processing_settings.apply_scale_offset is False
 
-            result = _reader(mock_item, bbox)
+        kwargs = {
+            "reader_cls": STACReader,
+            "assets": [{"name": "reflectance", "bands": ["b04"]}],
+            "bounds_crs": "epsg:4326",
+            "width": 32,
+            "height": 32,
+        }
+        bbox = (15.0, 37.86, 15.11, 37.94)
+        plain = upstream_reader._reader(geozarr_stac, bbox, **kwargs)
 
-            assert isinstance(result, ImageData)
-            mock_reader_instance.part.assert_called_once_with(bbox)
+        scaled = geozarr_stac.clone()
+        scaled.assets["reflectance"].extra_fields["raster:scale"] = 0.0001
+        img = upstream_reader._reader(scaled, bbox, **kwargs)
 
-    def test_reader_retry_logic(self):
-        """Test _reader function retry logic."""
-        mock_item = {"id": "test_item"}
-        bbox = [0, 0, 1, 1]
-
-        with (
-            patch("titiler.eopf.openeo.reader.STACReader") as mock_stac_reader,
-            patch("time.sleep"),
-            patch("builtins.print"),
-        ):  # Suppress print statements
-            mock_reader_instance = Mock()
-            # First two calls fail, third succeeds
-            mock_reader_instance.part.side_effect = [
-                RasterioIOError("Network error"),
-                RasterioIOError("Network error"),
-                ImageData(array=np.ones((3, 256, 256)), crs="EPSG:4326", bounds=bbox),
-            ]
-
-            mock_stac_reader.return_value.__enter__ = Mock(
-                return_value=mock_reader_instance
-            )
-            mock_stac_reader.return_value.__exit__ = Mock(return_value=None)
-
-            result = _reader(mock_item, bbox)
-
-            assert isinstance(result, ImageData)
-            assert mock_reader_instance.part.call_count == 3
-
-    def test_reader_calls_inherit_derived_band_masks_when_assets_requested(self):
-        """`_reader` must call `_inherit_derived_band_masks` when a requested
-        derived band has a sibling -- restored from upstream, previously
-        missing from this repo's copy (band-source-derived bands, e.g. SAR
-        noise/calibration LUTs, would otherwise keep an honestly-unmasked
-        mask and make a slice's nodata region read as valid). The requested
-        `_parse_asset` dicts are given to it as names."""
-        mock_item = {"id": "test_item"}
-        bbox = [0, 0, 1, 1]
-        mock_img = ImageData(
-            array=np.ones((3, 256, 256), dtype=np.uint8), crs="EPSG:4326", bounds=bbox
-        )
-
-        with (
-            patch("titiler.eopf.openeo.reader.STACReader") as mock_stac_reader,
-            patch(
-                "titiler.eopf.openeo.reader._inherit_derived_band_masks",
-                return_value=mock_img,
-            ) as mock_inherit,
-        ):
-            derived = {
-                "vv_noise_lut": ResolvedBand(
-                    asset_key="schema-noise-vv",
-                    sibling_key="vv",
-                    quantity="noise",
-                    reader=Mock,
-                )
-            }
-            mock_reader_instance = Mock()
-            mock_reader_instance.part.return_value = mock_img
-            mock_reader_instance._derived_bands = derived
-            mock_stac_reader.return_value.__enter__ = Mock(
-                return_value=mock_reader_instance
-            )
-            mock_stac_reader.return_value.__exit__ = Mock(return_value=None)
-
-            result = _reader(
-                mock_item,
-                bbox,
-                assets=[{"name": "vv"}, {"name": "vv_noise_lut"}, "b04"],
-            )
-
-            assert isinstance(result, ImageData)
-            mock_inherit.assert_called_once_with(
-                mock_img, derived, ["vv", "vv_noise_lut", "b04"]
-            )
-
-    def test_reader_skips_inherit_derived_band_masks_without_sibling(self):
-        """No requested derived band has a sibling (e.g. the EOPF angle
-        bands, which have their own masks): nothing to copy, and upstream
-        would only log a warning for a multi-band asset."""
-        mock_item = {"id": "test_item"}
-        bbox = [0, 0, 1, 1]
-        mock_img = ImageData(
-            array=np.ones((2, 256, 256), dtype=np.uint8), crs="EPSG:4326", bounds=bbox
-        )
-
-        with (
-            patch("titiler.eopf.openeo.reader.STACReader") as mock_stac_reader,
-            patch(
-                "titiler.eopf.openeo.reader._inherit_derived_band_masks"
-            ) as mock_inherit,
-        ):
-            mock_reader_instance = Mock()
-            mock_reader_instance.part.return_value = mock_img
-            mock_reader_instance._derived_bands = {
-                "viewZenithAngles": ResolvedBand(
-                    asset_key="reflectance",
-                    sibling_key=None,
-                    quantity="zenith",
-                    reader=Mock,
-                )
-            }
-            mock_stac_reader.return_value.__enter__ = Mock(
-                return_value=mock_reader_instance
-            )
-            mock_stac_reader.return_value.__exit__ = Mock(return_value=None)
-
-            _reader(
-                mock_item,
-                bbox,
-                assets=[{"name": "reflectance", "bands": ["b04"]}, "viewZenithAngles"],
-            )
-
-            mock_inherit.assert_not_called()
-
-    def test_reader_skips_inherit_derived_band_masks_without_assets(self):
-        """No `assets` kwarg -- `_inherit_derived_band_masks` is never called."""
-        mock_item = {"id": "test_item"}
-        bbox = [0, 0, 1, 1]
-        mock_img = ImageData(
-            array=np.ones((3, 256, 256), dtype=np.uint8), crs="EPSG:4326", bounds=bbox
-        )
-
-        with (
-            patch("titiler.eopf.openeo.reader.STACReader") as mock_stac_reader,
-            patch(
-                "titiler.eopf.openeo.reader._inherit_derived_band_masks"
-            ) as mock_inherit,
-        ):
-            mock_reader_instance = Mock()
-            mock_reader_instance.part.return_value = mock_img
-            mock_stac_reader.return_value.__enter__ = Mock(
-                return_value=mock_reader_instance
-            )
-            mock_stac_reader.return_value.__exit__ = Mock(return_value=None)
-
-            _reader(mock_item, bbox)
-
-            mock_inherit.assert_not_called()
-
-    def test_reader_max_retries_exceeded(self):
-        """Test _reader function when max retries are exceeded."""
-        mock_item = {"id": "test_item"}
-        bbox = [0, 0, 1, 1]
-
-        with (
-            patch("titiler.eopf.openeo.reader.STACReader") as mock_stac_reader,
-            patch("time.sleep"),
-            patch("builtins.print"),
-        ):  # Suppress print statements
-            mock_reader_instance = Mock()
-            # Always fail
-            mock_reader_instance.part.side_effect = RasterioIOError(
-                "Persistent network error"
-            )
-
-            mock_stac_reader.return_value.__enter__ = Mock(
-                return_value=mock_reader_instance
-            )
-            mock_stac_reader.return_value.__exit__ = Mock(return_value=None)
-
-            with pytest.raises(RasterioIOError):
-                _reader(mock_item, bbox)
+        np.testing.assert_array_equal(img.array, plain.array)
 
 
 class TestLoadCollectionBasic:
