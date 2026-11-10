@@ -10,6 +10,7 @@ from titiler.eopf.reader import (
     GeoZarrReader,
     InvalidGeoZarrStore,
     MissingVariables,
+    _select_item_time,
     buffer_grid,
 )
 
@@ -730,6 +731,68 @@ def test_sel_on_int64_axis_raises_bad_request(geozarr_3d_dataset):
             "b02",
             sel=["time=2022-01-02T00:00:00.000000000"],
         )
+
+
+def _time_of(da: xarray.DataArray) -> str:
+    return numpy.datetime_as_string(da["time"].values, unit="D")
+
+
+def test_item_datetime_selects_the_item_time_slice(geozarr_3d_dataset):
+    """One STAC item per acquisition of a time-stacked store: the reader
+    reads the slice of the item datetime, not every slice."""
+    with GeoZarrReader(geozarr_3d_dataset, item_datetime="2022-01-02T00:00:00") as src:
+        da = src._get_variable("/measurements/reflectance", "b02")
+        assert "time" not in da.dims
+        assert _time_of(da) == "2022-01-02"
+
+        info = src.info(variables=["/measurements/reflectance:b02"])
+        assert info["/measurements/reflectance:b02"].count == 1
+
+
+def test_item_datetime_explicit_sel_wins(geozarr_3d_dataset):
+    """A `sel` on `time` in the request is used, not the item datetime."""
+    with GeoZarrReader(geozarr_3d_dataset, item_datetime="2022-01-02T00:00:00") as src:
+        da = src._get_variable(
+            "/measurements/reflectance", "b02", sel=["time=2022-01-01T00:00:00"]
+        )
+        assert _time_of(da) == "2022-01-01"
+
+
+def test_item_datetime_too_far_raises_bad_request(geozarr_3d_dataset):
+    """No slice within `ITEM_TIME_TOLERANCE`: an error, not another date."""
+    with GeoZarrReader(geozarr_3d_dataset, item_datetime="2022-01-05T00:00:00") as src:
+        with pytest.raises(BadRequestError, match="No time slice"):
+            src._get_variable("/measurements/reflectance", "b02")
+
+
+def test_item_datetime_without_time_dimension(geozarr_dataset):
+    """A store with no `time` dimension (Sentinel-2) reads as before."""
+    with GeoZarrReader(geozarr_dataset, item_datetime="2022-01-02T00:00:00") as src:
+        da = src._get_variable("/measurements/reflectance", "b02")
+        assert da.ndim == 2
+
+
+def test_select_item_time_unsorted_axis():
+    """The `time` axis of an appended store is not always sorted (the
+    Sentinel-1 RTC stores are not): `sel(method="nearest")` would fail."""
+    times = numpy.array(
+        [
+            "2021-09-10T07:10:38",
+            "2021-10-04T07:10:39",
+            "2021-12-03T07:10:38",
+            "2021-11-09T07:10:38",
+        ],
+        dtype="datetime64[ns]",
+    )
+    da = xarray.DataArray(
+        numpy.arange(4 * 2 * 2, dtype="float32").reshape(4, 2, 2),
+        dims=("time", "y", "x"),
+        coords={"time": times},
+    )
+    out = _select_item_time(da, "2021-11-09T07:10:38")
+    assert out.values[0, 0] == 12  # the 4th slice
+    out = _select_item_time(da, "2021-10-04T07:10:38")  # 1 s from the slice
+    assert out.values[0, 0] == 4
 
 
 def test_root_group(geozarr_dataset):
