@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794316891110,
+  "lastUpdate": 1794345477328,
   "repoUrl": "https://github.com/EOPF-Explorer/titiler-eopf",
   "entries": {
     "titiler-eopf Benchmarks": [
@@ -2860,6 +2860,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.053493222974891355",
             "extra": "mean: 428.54447314000026 msec\nrounds: 50"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "emmanuel.mathot@gmail.com",
+            "name": "Emmanuel Mathot",
+            "username": "emmanuelmathot"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "30d4567c4aee1a7603cfcfe295b8ea66979121e3",
+          "message": "fix(openeo): read the time slice of the item datetime (#238)\n\nA Zarr store can stack several acquisitions on a `time` dimension, with\none STAC item per acquisition (Sentinel-1 RTC). `load_collection` did\nnot select the item's slice: the reader returned every slice, and\nopenEO used the first one. So the item of 2021-12-03 showed the data\nof 2021-09-10.\n\n`STACReader` now gives the item datetime to `GeoZarrReader`\n(`item_datetime`). When the variable has a `time` dimension and `sel`\ndoes not select `time`, the reader takes the slice nearest to it, by\nthe smallest difference (the time axis is not always sorted). A slice\nmore than 1 hour away is a 400 error.\n\nCo-authored-by: Claude Opus 5.5 <noreply@anthropic.com>",
+          "timestamp": "2026-11-10T22:13:37+01:00",
+          "tree_id": "4df1b7ca6558972c576bbb6427b8789808eb909e",
+          "url": "https://github.com/EOPF-Explorer/titiler-eopf/commit/30d4567c4aee1a7603cfcfe295b8ea66979121e3"
+        },
+        "date": 1794345476927,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "GeoZarrReader-Open",
+            "value": 52.42303102489893,
+            "unit": "iter/sec",
+            "range": "stddev: 0.01096844992355598",
+            "extra": "mean: 19.075585299999887 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Info",
+            "value": 52.264509690517265,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0008842369865686945",
+            "extra": "mean: 19.1334426730772 msec\nrounds: 52"
+          },
+          {
+            "name": "GeoZarrReader-Preview",
+            "value": 2.567964748449632,
+            "unit": "iter/sec",
+            "range": "stddev: 0.020407695318662697",
+            "extra": "mean: 389.41344525999983 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Tile",
+            "value": 2.4451326471976196,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04115146799853273",
+            "extra": "mean: 408.975767080001 msec\nrounds: 50"
           }
         ]
       }
