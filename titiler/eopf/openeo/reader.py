@@ -42,6 +42,24 @@ if "apply_scale_offset" not in upstream_reader.processing_settings.model_fields_
     upstream_reader.processing_settings.apply_scale_offset = False
 
 
+def _numeric_nodata(value: Any) -> Any:
+    """A STAC `nodata` value as a number.
+
+    JSON has no NaN or infinity, so the STAC raster extension and the
+    common `bands` metadata give them as the strings "nan", "inf" and
+    "-inf" (e.g. the Sentinel-1 RTC items). The readers need a number:
+    rasterio's reprojection checks the value with `numpy.isnan`, which
+    raises a TypeError for a string. Returns None for a string that is
+    not a number.
+    """
+    if not isinstance(value, str):
+        return value
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
 @attr.s
 class STACReader(SimpleSTACReader):
     """STACReader with support of Zarr or COG.
@@ -136,12 +154,29 @@ class STACReader(SimpleSTACReader):
         and `GeoZarrReader` does not accept that option. The value comes from
         Sentinel-2 SAFE product metadata (`MTD_MSIL2A.xml`), which does not
         apply to a GeoZarr asset, so remove it for each other reader.
+
+        Upstream also copies the STAC `nodata` without conversion, so a
+        "nan"/"inf"/"-inf" string reaches the reader. Convert it to a float
+        (`_numeric_nodata`), or remove it when it is not a number.
         """
         info = super()._get_asset_info(asset)
         if "fallback_nodata" in info["reader_options"] and not issubclass(
             self._get_reader(info), OpenEOReader
         ):
             info["reader_options"].pop("fallback_nodata")
+
+        method_options = info.get("method_options", {})
+        if isinstance(method_options.get("nodata"), str):
+            nodata = _numeric_nodata(method_options["nodata"])
+            if nodata is None:
+                logger.warning(
+                    "Asset '%s': STAC nodata %r is not a number, it is ignored.",
+                    info.get("name"),
+                    method_options["nodata"],
+                )
+                method_options.pop("nodata")
+            else:
+                method_options["nodata"] = nodata
         return info
 
     def _get_options(
