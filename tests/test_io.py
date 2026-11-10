@@ -430,3 +430,26 @@ def test_get_asset_info_nodata_invalid_string_is_ignored():
         )
 
     assert "nodata" not in info["method_options"]
+
+
+def test_get_options_zarr_gives_the_item_datetime():
+    """Zarr asset: the item datetime (UTC, no offset) goes to the reader, so
+    that it reads the item's time slice of a time-stacked store."""
+    item = _s1_rtc_item("nan")
+    with STACReader(item) as src:
+        info = src._get_asset_info(
+            {"name": "gamma0-rtc-backscatter-desc", "bands": ["vv"]}
+        )
+    assert info["reader_options"]["item_datetime"] == "2021-12-03T07:10:38"
+
+
+def test_get_options_cog_has_no_item_datetime():
+    """Not Zarr: no `item_datetime` (the rasterio reader does not take it)."""
+    with patch("titiler.eopf.openeo.reader.SimpleSTACReader.__attrs_post_init__"):
+        reader = STACReader(_s1_rtc_item("nan"))
+        metadata = pystac.Asset(
+            href="https://example.com/b04.tif",
+            media_type="image/tiff; application=geotiff",
+        )
+        reader_options, _ = reader._get_options({"name": "b04"}, metadata)
+    assert "item_datetime" not in reader_options

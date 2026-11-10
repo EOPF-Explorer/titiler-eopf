@@ -3,6 +3,7 @@
 import logging
 import warnings
 from collections.abc import Sequence
+from datetime import timezone
 from typing import Any
 
 import attr
@@ -212,6 +213,19 @@ class STACReader(SimpleSTACReader):
             "application/vnd.zarr",
             "application/vnd+zarr",
         )
+
+        # A store can stack several acquisitions on a `time` dimension, with
+        # one item per acquisition (Sentinel-1 RTC). Without a selection, the
+        # reader returned every time slice, and openEO used the first one:
+        # another date than the item's. `GeoZarrReader` uses the item datetime
+        # only when the variable has a `time` dimension and `sel` does not
+        # select `time`.
+        if is_zarr and (item_datetime := self.input.datetime) is not None:
+            if item_datetime.tzinfo is not None:
+                item_datetime = item_datetime.astimezone(timezone.utc).replace(
+                    tzinfo=None
+                )
+            reader_options["item_datetime"] = item_datetime.isoformat()
 
         if is_zarr and (bands := asset.get("bands")):
             stac_bands = (
