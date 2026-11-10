@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794296687948,
+  "lastUpdate": 1794310044871,
   "repoUrl": "https://github.com/EOPF-Explorer/titiler-eopf",
   "entries": {
     "titiler-eopf Benchmarks": [
@@ -2704,6 +2704,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.03874265592647769",
             "extra": "mean: 411.17779753999855 msec\nrounds: 50"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "vincent.sarago@gmail.com",
+            "name": "Vincent Sarago",
+            "username": "vincentsarago"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f56a1ff059450ba1098387a8963514e55296e952",
+          "message": "fix: raise 400 when an asset points to a Zarr array (#165)\n\nGeoZarrReader opens a Zarr group. When a STAC asset points to a Zarr\narray, raise InvalidGeoZarrStore (400) with a clear message, on the\nasset routes, on /info (explicit assets and :all:), and in openEO.\nFileNotFoundError maps to 404.\n\nSquashed and rebased onto main.\n\nCloses #163\n\nCo-authored-by: Emmanuel Mathot <emmanuel.mathot@gmail.com>\nCo-authored-by: Claude Opus 5.5 <noreply@anthropic.com>",
+          "timestamp": "2026-11-10T12:23:40+01:00",
+          "tree_id": "4dc62cdc54a06b514a0db7c61dd9ad5413832198",
+          "url": "https://github.com/EOPF-Explorer/titiler-eopf/commit/f56a1ff059450ba1098387a8963514e55296e952"
+        },
+        "date": 1794310044521,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "GeoZarrReader-Open",
+            "value": 67.77907336261393,
+            "unit": "iter/sec",
+            "range": "stddev: 0.013081672100927422",
+            "extra": "mean: 14.753816338710632 msec\nrounds: 62"
+          },
+          {
+            "name": "GeoZarrReader-Info",
+            "value": 75.07126788934708,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0005595712867467922",
+            "extra": "mean: 13.320675514285591 msec\nrounds: 70"
+          },
+          {
+            "name": "GeoZarrReader-Preview",
+            "value": 3.49198515342285,
+            "unit": "iter/sec",
+            "range": "stddev: 0.02172968759246044",
+            "extra": "mean: 286.3700605999995 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Tile",
+            "value": 3.104283480378048,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04640643468326692",
+            "extra": "mean: 322.1355286399995 msec\nrounds: 50"
           }
         ]
       }
