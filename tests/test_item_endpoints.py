@@ -376,3 +376,68 @@ def test_expression_multidim(get_stac_item, app, geozarr_3d_stac):
         },
     )
     assert response.status_code == 200
+
+
+@patch("titiler.stacapi.dependencies.get_stac_item")
+def test_item_with_array(get_stac_item, app, geozarr_stac_array):
+    """Test /info route with an asset that points to a Zarr array."""
+    collection = geozarr_stac_array.collection_id
+    item = geozarr_stac_array.id
+    get_stac_item.return_value = geozarr_stac_array
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/assets",
+    )
+    assert response.status_code == 200
+    assert response.json() == ["b02_r10m", "reflectance"]
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/info?assets=:all:",
+    )
+    assert "does not appear to be a valid GeoZarr group" in response.text
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/info?assets=b02_r10m&assets=reflectance",
+    )
+    assert response.status_code == 400
+    assert "does not appear to be a valid GeoZarr group" in response.text
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/info?assets=b02_r10m",
+    )
+    assert response.status_code == 400
+    assert "does not appear to be a valid GeoZarr group" in response.text
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/info?assets=reflectance",
+    )
+    assert response.status_code == 200
+    assert {
+        "reflectance_b02",
+        "reflectance_b03",
+        "reflectance_b04",
+        "reflectance_b05",
+        "reflectance_b06",
+        "reflectance_b07",
+        "reflectance_b08",
+        "reflectance_b11",
+        "reflectance_b12",
+        "reflectance_b8a",
+    } == set(response.json().keys())
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/info?assets=reflectance|bands=red",
+    )
+    assert response.status_code == 200
+    assert {"reflectance_b04"} == set(response.json().keys())
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/preview?assets=reflectance|bands=red",
+    )
+    assert response.status_code == 200
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/preview?assets=b02_r10m",
+    )
+    assert response.status_code == 400
+    assert "does not appear to be a valid GeoZarr group" in response.text
