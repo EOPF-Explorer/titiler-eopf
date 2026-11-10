@@ -13,6 +13,7 @@ from rioxarray.exceptions import NoDataInBounds
 from titiler.eopf.openeo.processes.implementations.io import load_zarr
 from titiler.eopf.openeo.reader import STACReader, _reader
 from titiler.eopf.openeo.stacapi import LoadCollection
+from titiler.openeo.bandsources import ResolvedBand
 from titiler.openeo.processes.implementations.data_model import RasterStack
 
 
@@ -191,13 +192,13 @@ class TestSTACReaderMethods:
             assert mo["indexes"] == [2]
 
     def test_part_allowed_exceptions_is_narrow(self):
-        """`part` must pass only `TileOutsideBounds` as `allowed_exceptions`
-        to `multi_arrays` -- matching `mosaic_reader`'s own default one level
-        up. A wider tuple used to swallow a genuine option error (e.g. an
-        unknown band name from `_get_options`) silently: `filter_tasks` logs
-        an allowed exception at INFO and drops the asset, so the error
-        naming the bad band never reached the caller."""
-        from rio_tiler.errors import TileOutsideBounds
+        """`part` must pass no `allowed_exceptions` to `multi_arrays`: one
+        asset outside the bbox makes the whole item outside it, so an item
+        never gives fewer bands than requested (the band order of openEO
+        `load_collection`). A wider tuple used to swallow a genuine option
+        error (e.g. an unknown band name from `_get_options`) silently:
+        `filter_tasks` logs an allowed exception at INFO and drops the
+        asset, so the error naming the bad band never reached the caller."""
         from rio_tiler.models import ImageData
 
         with patch("titiler.eopf.openeo.reader.SimpleSTACReader.__attrs_post_init__"):
@@ -213,7 +214,7 @@ class TestSTACReaderMethods:
                 reader.part((0, 0, 1, 1), assets=["a"])
 
             _, kwargs = mock_multi_arrays.call_args
-            assert kwargs["allowed_exceptions"] == (TileOutsideBounds,)
+            assert kwargs["allowed_exceptions"] == ()
 
     def test_get_options_variables_and_sel_pass_through(self):
         """`variables`/`sel` are EOPF-only options with no upstream
@@ -289,13 +290,12 @@ class TestReader:
             assert mock_reader_instance.part.call_count == 3
 
     def test_reader_calls_inherit_derived_band_masks_when_assets_requested(self):
-        """`_reader` must call `_inherit_derived_band_masks` when `assets` is
-        passed -- restored from upstream, previously missing from this
-        repo's copy (band-source-derived bands, e.g. SAR noise/calibration
-        LUTs, would otherwise keep an honestly-unmasked mask and make a
-        slice's nodata region read as valid). Not called at all when no
-        `assets` is requested -- matches upstream, and is what every other
-        test in this class already exercises without hitting this path."""
+        """`_reader` must call `_inherit_derived_band_masks` when a requested
+        derived band has a sibling -- restored from upstream, previously
+        missing from this repo's copy (band-source-derived bands, e.g. SAR
+        noise/calibration LUTs, would otherwise keep an honestly-unmasked
+        mask and make a slice's nodata region read as valid). The requested
+        `_parse_asset` dicts are given to it as names."""
         mock_item = {"id": "test_item"}
         bbox = [0, 0, 1, 1]
         mock_img = ImageData(
@@ -309,18 +309,71 @@ class TestReader:
                 return_value=mock_img,
             ) as mock_inherit,
         ):
+            derived = {
+                "vv_noise_lut": ResolvedBand(
+                    asset_key="schema-noise-vv",
+                    sibling_key="vv",
+                    quantity="noise",
+                    reader=Mock,
+                )
+            }
             mock_reader_instance = Mock()
             mock_reader_instance.part.return_value = mock_img
-            mock_reader_instance._derived_bands = {}
+            mock_reader_instance._derived_bands = derived
             mock_stac_reader.return_value.__enter__ = Mock(
                 return_value=mock_reader_instance
             )
             mock_stac_reader.return_value.__exit__ = Mock(return_value=None)
 
-            result = _reader(mock_item, bbox, assets=["b04", "b03"])
+            result = _reader(
+                mock_item,
+                bbox,
+                assets=[{"name": "vv"}, {"name": "vv_noise_lut"}, "b04"],
+            )
 
             assert isinstance(result, ImageData)
-            mock_inherit.assert_called_once_with(mock_img, {}, ["b04", "b03"])
+            mock_inherit.assert_called_once_with(
+                mock_img, derived, ["vv", "vv_noise_lut", "b04"]
+            )
+
+    def test_reader_skips_inherit_derived_band_masks_without_sibling(self):
+        """No requested derived band has a sibling (e.g. the EOPF angle
+        bands, which have their own masks): nothing to copy, and upstream
+        would only log a warning for a multi-band asset."""
+        mock_item = {"id": "test_item"}
+        bbox = [0, 0, 1, 1]
+        mock_img = ImageData(
+            array=np.ones((2, 256, 256), dtype=np.uint8), crs="EPSG:4326", bounds=bbox
+        )
+
+        with (
+            patch("titiler.eopf.openeo.reader.STACReader") as mock_stac_reader,
+            patch(
+                "titiler.eopf.openeo.reader._inherit_derived_band_masks"
+            ) as mock_inherit,
+        ):
+            mock_reader_instance = Mock()
+            mock_reader_instance.part.return_value = mock_img
+            mock_reader_instance._derived_bands = {
+                "viewZenithAngles": ResolvedBand(
+                    asset_key="reflectance",
+                    sibling_key=None,
+                    quantity="zenith",
+                    reader=Mock,
+                )
+            }
+            mock_stac_reader.return_value.__enter__ = Mock(
+                return_value=mock_reader_instance
+            )
+            mock_stac_reader.return_value.__exit__ = Mock(return_value=None)
+
+            _reader(
+                mock_item,
+                bbox,
+                assets=[{"name": "reflectance", "bands": ["b04"]}, "viewZenithAngles"],
+            )
+
+            mock_inherit.assert_not_called()
 
     def test_reader_skips_inherit_derived_band_masks_without_assets(self):
         """No `assets` kwarg -- `_inherit_derived_band_masks` is never called."""

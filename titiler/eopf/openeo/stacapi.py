@@ -23,6 +23,7 @@ from titiler.openeo.stacapi import LoadCollection as BaseLoadCollection
 from titiler.openeo.stacapi import stacApiBackend as BaseBackend
 
 from ..stac import _parse_asset
+from .angles import ANGLE_BANDS, has_angle_bands
 from .reader import _reader
 
 processing_settings = ProcessingSettings()
@@ -165,6 +166,14 @@ def get_all_band_names(collection: Collection) -> list[str]:  # noqa: C901
                 else:
                     # Default to reflectance asset for unknown spectral bands
                     all_band_names.add(f"reflectance|bands={band_name}")
+
+    # View and sun angle bands, read from the product's `conditions/geometry`
+    # arrays (titiler/eopf/openeo/angles.py).
+    if has_angle_bands(
+        collection.id,
+        ((asset.media_type, asset.roles) for asset in collection.item_assets.values()),
+    ):
+        all_band_names.update(ANGLE_BANDS)
 
     return sorted(all_band_names)
 
@@ -352,6 +361,14 @@ class stacApiBackend(BaseBackend):
                     updated_band = {"name": cube_band_name}
 
                 updated_bands.append(updated_band)
+            elif angle_band := ANGLE_BANDS.get(cube_band_name):
+                updated_bands.append(
+                    {
+                        "name": cube_band_name,
+                        "description": angle_band.description,
+                        "unit": "deg",
+                    }
+                )
             else:
                 # This is asset-only format (e.g., "AOT_10m", "SCL_20m").
                 # Description lives on the item_assets entry (its `title`,

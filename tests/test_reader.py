@@ -6,7 +6,7 @@ import xarray
 from rio_tiler.errors import ExpressionMixingWarning
 
 from titiler.core.errors import BadRequestError
-from titiler.eopf.reader import GeoZarrReader, MissingVariables
+from titiler.eopf.reader import GeoZarrReader, MissingVariables, buffer_grid
 
 
 def test_open(geozarr_dataset):
@@ -213,6 +213,43 @@ def test_preview(geozarr_dataset):
             dst_crs="epsg:4326",
         )
         assert img.array.shape == (1, 102, 128)
+
+
+@pytest.mark.parametrize("buffer,extra", [(0.5, 1), (1, 2), (2, 4)])
+def test_buffer_grid(buffer, extra):
+    """The grid grows by 2 * buffer pixels; the pixel size does not change."""
+    bbox, width, height = buffer_grid((0.0, 0.0, 256.0, 128.0), 256, 128, buffer)
+    assert (width, height) == (256 + extra, 128 + extra)
+    assert bbox == (-extra / 2, -extra / 2, 256 + extra / 2, 128 + extra / 2)
+
+
+def test_part_buffer(geozarr_dataset):
+    """`buffer` adds pixels on each side, as rio-tiler does (openEO
+    `tile_buffer`). `GeoArrayReader.part` does not apply it."""
+    with GeoZarrReader(geozarr_dataset) as src:
+        bounds = src.bounds
+        lon, lat = (bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2
+        # A tile inside the data: at the data edge, GDAL's warp uses another
+        # source window, which changes some nearest-neighbour picks.
+        bbox = src.tms.xy_bounds(*src.tms.tile(lon, lat, 13))
+        options = {
+            "bounds_crs": "epsg:3857",
+            "dst_crs": "epsg:3857",
+            "variables": ["/measurements/reflectance:b02"],
+            "width": 64,
+            "height": 64,
+        }
+        img = src.part(bbox, **options)
+        buffered = src.part(bbox, buffer=1, **options)
+
+    assert (buffered.width, buffered.height) == (66, 66)
+    px = (bbox[2] - bbox[0]) / 64
+    numpy.testing.assert_allclose(
+        buffered.bounds,
+        (bbox[0] - px, bbox[1] - px, bbox[2] + px, bbox[3] + px),
+    )
+    # The same pixel centres: the inner pixels are the unbuffered read.
+    numpy.testing.assert_array_equal(buffered.array[:, 1:-1, 1:-1], img.array)
 
 
 def test_part(geozarr_dataset):
