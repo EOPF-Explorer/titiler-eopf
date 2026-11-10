@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793019479477,
+  "lastUpdate": 1794296687948,
   "repoUrl": "https://github.com/EOPF-Explorer/titiler-eopf",
   "entries": {
     "titiler-eopf Benchmarks": [
@@ -2652,6 +2652,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.04050709403891405",
             "extra": "mean: 339.8156505600008 msec\nrounds: 50"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "emmanuel.mathot@gmail.com",
+            "name": "Emmanuel Mathot",
+            "username": "emmanuelmathot"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dc98a9a582777957c0ca83b8e0bc629dcfade477",
+          "message": "chore(openeo): upgrade titiler-openeo to version 0.20.0 and add angle band support (#225)\n\n* chore: update titiler-openeo dependency to version 0.20.0 and adjust tests accordingly\n\n* Add support for angle bands in EOPF Sentinel-2 reader\n\n- Introduced a new module `angles.py` to handle view and sun angle bands from EOPF Zarr products.\n- Updated `STACReader` to include angle bands derived from the product's `conditions/geometry` arrays.\n- Enhanced the `_reader` function to inherit derived band masks only when necessary.\n- Modified the STAC API to expose angle bands in the collection's asset information.\n- Added tests to ensure correct behavior when requesting derived bands with siblings and without siblings.\n\n* Add buffer_grid function and apply buffer logic in GeoZarrReader\n\n- Implemented buffer_grid to expand output grid by buffer pixels.\n- Updated GeoZarrReader to apply buffer when reading dataset parts.\n- Added tests for buffer functionality in reader tests.\n- Enhanced angle handling in angles.py to align with buffered grids.\n\n* Add URL handling and validation for product root in angles.py; enhance tests for angle grid dimensions\n\n* Add cachetools dependency and implement caching for angle grids and footprints\n\n* Enhance angle and STAC readers: support additional CRS formats and improve error handling",
+          "timestamp": "2026-11-10T08:40:41+01:00",
+          "tree_id": "06d76a90ea7dd8ad7dd3d22201c20bd4387036e4",
+          "url": "https://github.com/EOPF-Explorer/titiler-eopf/commit/dc98a9a582777957c0ca83b8e0bc629dcfade477"
+        },
+        "date": 1794296687058,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "GeoZarrReader-Open",
+            "value": 51.16085431406695,
+            "unit": "iter/sec",
+            "range": "stddev: 0.011858288845901451",
+            "extra": "mean: 19.546194320000723 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Info",
+            "value": 47.92559212657262,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0017466206511839073",
+            "extra": "mean: 20.86567855768952 msec\nrounds: 52"
+          },
+          {
+            "name": "GeoZarrReader-Preview",
+            "value": 2.5846208938501354,
+            "unit": "iter/sec",
+            "range": "stddev: 0.021337766038977832",
+            "extra": "mean: 386.90393719999975 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Tile",
+            "value": 2.43203793099437,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03874265592647769",
+            "extra": "mean: 411.17779753999855 msec\nrounds: 50"
           }
         ]
       }
