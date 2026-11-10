@@ -1,5 +1,6 @@
 """titiler.xarray Extensions."""
 
+import copy
 import json
 import math
 from typing import Annotated, Any
@@ -8,9 +9,10 @@ from urllib.parse import urlencode
 import jinja2
 import rasterio
 from attrs import define
-from fastapi import Depends, Query
+from fastapi import Depends, HTTPException, Path, Query
 from geojson_pydantic.features import Feature
 from morecantile.models import crs_axis_inverted
+from pydantic import BaseModel
 from rasterio import windows
 from rasterio.transform import array_bounds
 from rasterio.warp import Affine, calculate_default_transform, transform_geom
@@ -18,12 +20,20 @@ from rio_tiler.constants import WGS84_CRS
 from rio_tiler.utils import CRS_to_urn
 from starlette.requests import Request
 from starlette.responses import HTMLResponse
+from starlette.routing import NoMatchFound
 from starlette.templating import Jinja2Templates
 
-from titiler.core.factory import FactoryExtension
+from titiler.core.factory import FactoryExtension, MultiBaseTilerFactory
+from titiler.core.models.OGC import Link
 from titiler.core.resources.enums import ImageType, MediaType
 from titiler.core.resources.responses import GeoJSONResponse, XMLResponse
-from titiler.core.utils import bounds_to_geometry, rio_crs_to_pyproj, tms_limits
+from titiler.core.utils import (
+    bounds_to_geometry,
+    check_query_params,
+    rio_crs_to_pyproj,
+    tms_limits,
+)
+from titiler.extensions.render import RenderItem, _adapt_render_for_v2
 from titiler.extensions.wmts import wmtsExtension
 
 from .factory import TilerFactory
@@ -40,6 +50,155 @@ jinja2_env = jinja2.Environment(
     loader=jinja2.ChoiceLoader([jinja2.PackageLoader(__package__, "templates")]),
 )
 DEFAULT_TEMPLATES = Jinja2Templates(env=jinja2_env)
+
+
+class TemplatedLink(Link):
+    """OGC Link with a plain string `href`.
+
+    `Link.href` is a pydantic `AnyUrl`, which percent-encodes the braces of
+    URI templates such as `{tileMatrixSetId}`.
+    """
+
+    href: str  # type: ignore[assignment]
+
+
+class RenderItemWithLinks(BaseModel):
+    """STAC render with its validity and links."""
+
+    valid: bool
+    params: RenderItem
+    links: list[TemplatedLink]
+
+
+class RenderItemList(BaseModel):
+    """List of STAC renders with links."""
+
+    renders: dict[str, RenderItemWithLinks]
+    links: list[TemplatedLink]
+
+
+@define
+class EOPFRenderExtension(FactoryExtension):
+    """Add `/renders` endpoints (STAC render extension) to the STAC Item factory.
+
+    Same as `titiler.extensions.render.stacRenderExtension`, but the item comes
+    from the `{collection_id}/{item_id}` path, not from a `url` query parameter.
+    The upstream extension adds `?url=<src_path>` to each link, and here
+    `src_path` is a `pystac.Item`, so the links would be invalid.
+    """
+
+    def register(self, factory: MultiBaseTilerFactory):  # type: ignore [override]
+        """Register endpoint to the tiler factory."""
+
+        # Dependencies that a `/tile` URL validates. They must only need Query() inputs.
+        tile_dependencies = [
+            factory.reader_dependency,
+            factory.tile_dependency,
+            factory.layer_dependency,
+            factory.dataset_dependency,
+            factory.process_dependency,
+            factory.colormap_dependency,
+            factory.render_dependency,
+        ]
+
+        def _prepare_render_item(
+            render_id: str,
+            render: dict,
+            request: Request,
+        ) -> dict:
+            render = copy.deepcopy(render)
+            _adapt_render_for_v2(render)
+
+            links: list[dict[str, Any]] = [
+                {
+                    "href": factory.url_for(
+                        request, "STAC Renders metadata", render_id=render_id
+                    ),
+                    "rel": "self",
+                    "type": "application/json",
+                    "title": f"STAC Renders metadata for {render_id}",
+                }
+            ]
+
+            if not check_query_params(tile_dependencies, render):  # type: ignore[arg-type]
+                return {"valid": False, "params": render, "links": links}
+
+            query_string = urlencode(
+                {k: v for k, v in render.items() if k != "title"}, doseq=True
+            )
+            # `url_for` percent-encodes the braces: keep the URI template usable.
+            tilejson_url = factory.url_for(
+                request, "tilejson", tileMatrixSetId="{tileMatrixSetId}"
+            ).replace("%7BtileMatrixSetId%7D", "{tileMatrixSetId}")
+            links.append(
+                {
+                    "href": tilejson_url + "?" + query_string,
+                    "rel": "tilesets-map",
+                    "title": f"tilejson file for {render_id}",
+                    "templated": True,
+                }
+            )
+            try:
+                links.append(
+                    {
+                        "href": factory.url_for(request, "wmts") + "?" + query_string,
+                        "rel": "tilesets-map",
+                        "title": f"WMTS service for {render_id}",
+                        "templated": True,
+                    }
+                )
+            except NoMatchFound:
+                pass
+
+            return {"valid": True, "params": render, "links": links}
+
+        @factory.router.get(
+            "/renders",
+            response_model=RenderItemList,
+            response_model_exclude_none=True,
+            name="List STAC Renders metadata",
+            operation_id=f"{factory.operation_prefix}getRenderList",
+        )
+        def render_list(request: Request, src_path=Depends(factory.path_dependency)):
+            """List the STAC renders of the item, with ready-to-use links."""
+            with factory.reader(src_path) as src:
+                renders = factory.get_renders(src)
+
+            return {
+                "renders": {
+                    render_id: _prepare_render_item(render_id, render, request)
+                    for render_id, render in renders.items()
+                },
+                "links": [
+                    {
+                        "href": str(request.url),
+                        "rel": "self",
+                        "type": "application/json",
+                        "title": "List STAC Renders metadata",
+                    },
+                ],
+            }
+
+        @factory.router.get(
+            "/renders/{render_id}",
+            response_model=RenderItemWithLinks,
+            response_model_exclude_none=True,
+            name="STAC Renders metadata",
+            operation_id=f"{factory.operation_prefix}getRender",
+        )
+        def render(
+            request: Request,
+            render_id: Annotated[str, Path(description="render id")],
+            src_path=Depends(factory.path_dependency),
+        ):
+            """Return one STAC render of the item, with ready-to-use links."""
+            with factory.reader(src_path) as src:
+                renders = factory.get_renders(src)
+
+            if render_id not in renders:
+                raise HTTPException(status_code=404, detail="Render not found")
+
+            return _prepare_render_item(render_id, renders[render_id], request)
 
 
 @define

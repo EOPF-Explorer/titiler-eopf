@@ -350,3 +350,74 @@ def test_info_measurements(get_stac_item, app, geozarr_stac_measurements):
     )
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/png"
+
+
+@patch("titiler.stacapi.dependencies.get_stac_item")
+def test_renders(get_stac_item, app, geozarr_stac):
+    """Test /renders routes (STAC render extension)."""
+    collection = geozarr_stac.collection_id
+    item = geozarr_stac.id
+    base = f"/collections/{collection}/items/{item}"
+
+    get_stac_item.return_value = geozarr_stac
+
+    # Item without renders
+    response = app.get(f"{base}/renders")
+    assert response.status_code == 200
+    assert response.json()["renders"] == {}
+
+    response = app.get(f"{base}/renders/true_color")
+    assert response.status_code == 404
+
+    geozarr_stac.properties["renders"] = {
+        "true_color": {
+            "title": "True color",
+            "assets": ["reflectance|bands=b04,b03,b02"],
+            "rescale": [[0, 1]],
+        },
+        "invalid": {
+            "title": "No assets",
+            "rescale": [[0, 1]],
+        },
+    }
+
+    response = app.get(f"{base}/renders")
+    assert response.status_code == 200
+    renders = response.json()["renders"]
+    assert set(renders) == {"true_color", "invalid"}
+    assert renders["true_color"]["valid"]
+    assert not renders["invalid"]["valid"]
+
+    response = app.get(f"{base}/renders/true_color")
+    assert response.status_code == 200
+    render = response.json()
+    assert render["valid"]
+    assert render["params"]["assets"] == ["reflectance|bands=b04,b03,b02"]
+
+    links = {link["title"]: link["href"] for link in render["links"]}
+    assert links["STAC Renders metadata for true_color"].endswith(
+        f"{base}/renders/true_color"
+    )
+    tilejson = links["tilejson file for true_color"]
+    wmts = links["WMTS service for true_color"]
+    # The item comes from the path: no `url` query parameter.
+    assert f"{base}/{{tileMatrixSetId}}/tilejson.json?" in tilejson
+    for href in (tilejson, wmts):
+        assert f"{base}/" in href
+        query = parse_qs(href.split("?", 1)[1])
+        assert "url" not in query
+        assert "title" not in query
+        assert query["assets"] == ["reflectance|bands=b04,b03,b02"]
+
+    # The tilejson link works as is.
+    response = app.get(
+        tilejson.replace("{tileMatrixSetId}", "WebMercatorQuad").replace(
+            "http://testserver", ""
+        )
+    )
+    assert response.status_code == 200
+    assert response.json()["tiles"]
+
+    # Unknown render
+    response = app.get(f"{base}/renders/unknown")
+    assert response.status_code == 404
