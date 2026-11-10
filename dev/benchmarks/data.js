@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794310044871,
+  "lastUpdate": 1794315869406,
   "repoUrl": "https://github.com/EOPF-Explorer/titiler-eopf",
   "entries": {
     "titiler-eopf Benchmarks": [
@@ -2756,6 +2756,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.04640643468326692",
             "extra": "mean: 322.1355286399995 msec\nrounds: 50"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "emmanuel.mathot@gmail.com",
+            "name": "Emmanuel Mathot",
+            "username": "emmanuelmathot"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0618e98a479e2dcec1831fea42e55d4de4b269be",
+          "message": "refactor: update STACReader integration and remove deprecated code (#231)\n\n- Removed redundant copies of `_reader` and related functions, relying on upstream `STACReader`.\n- Updated `LoadCollection` to utilize the new EOPF band notation and upstream fixes.\n- Enhanced tests to validate new behavior with GeoZarr assets and STACReader.\n- Cleaned up unused imports and improved code organization in `stacapi.py` and `reader.py`.",
+          "timestamp": "2026-11-10T14:00:56+01:00",
+          "tree_id": "454398f7c9071c13054a0366b480da7e0f55a9da",
+          "url": "https://github.com/EOPF-Explorer/titiler-eopf/commit/0618e98a479e2dcec1831fea42e55d4de4b269be"
+        },
+        "date": 1794315868992,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "GeoZarrReader-Open",
+            "value": 53.642191856606665,
+            "unit": "iter/sec",
+            "range": "stddev: 0.010575347181618342",
+            "extra": "mean: 18.642042120000326 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Info",
+            "value": 56.441812915296346,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0003216485936581145",
+            "extra": "mean: 17.71736144444413 msec\nrounds: 54"
+          },
+          {
+            "name": "GeoZarrReader-Preview",
+            "value": 2.5936528159619114,
+            "unit": "iter/sec",
+            "range": "stddev: 0.020731737297854904",
+            "extra": "mean: 385.55661491999984 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Tile",
+            "value": 2.472993933249451,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04114301109674172",
+            "extra": "mean: 404.36815738000035 msec\nrounds: 50"
           }
         ]
       }
