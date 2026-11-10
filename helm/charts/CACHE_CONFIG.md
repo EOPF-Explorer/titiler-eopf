@@ -105,6 +105,11 @@ The chart automatically generates the following environment variables based on c
 - `TITILER_EOPF_CACHE_S3_BUCKET`: S3 bucket name
 - `TITILER_EOPF_CACHE_S3_REGION`: S3 region
 - `TITILER_EOPF_CACHE_S3_ENDPOINT_URL`: Custom S3 endpoint (optional)
+- `TITILER_EOPF_CACHE_S3_PREFIX`: Key prefix inside the bucket (from `cache.s3.prefix`, default `cache/`).
+  Upgrading: older releases ignored it and wrote `tiles/…` and `<namespace>/…` at the bucket
+  root. Those objects are never read again, so expire them with a bucket lifecycle rule.
+  If your prefix was `tiles/` (the old example), change it first, so live and orphaned
+  objects don't share a prefix.
 - `TITILER_EOPF_CACHE_S3_ACCESS_KEY_ID`: S3 access key (from secret)
 - `TITILER_EOPF_CACHE_S3_SECRET_ACCESS_KEY`: S3 secret key (from secret)
 
