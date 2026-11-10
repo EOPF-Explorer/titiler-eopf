@@ -202,13 +202,13 @@ class S3StorageBackend(CacheBackend):
     async def clear_pattern(self, pattern: Union[str, Pattern]) -> int:
         """Delete S3 objects matching pattern using list operations."""
         self._stats["total_operations"] += 1
-        if isinstance(pattern, str):
-            # obstore lists whole path segments, so list from the last complete one.
-            literal = re.split(r"[*?]", pattern, maxsplit=1)[0]
-            prefix = self._get_object_key(literal).rpartition("/")[0]
-            regex = re.compile(fnmatch.translate(pattern))
-        else:
-            regex, prefix = pattern, ""  # no safe literal prefix: list everything
+        if not isinstance(pattern, str):
+            # A regex has no safe literal prefix, so it would list the whole bucket.
+            raise TypeError("S3 clear_pattern takes a glob string, not a regex")
+        # obstore lists whole path segments, so list from the last complete one.
+        literal = re.split(r"[*?\[]", pattern, maxsplit=1)[0]
+        prefix = self._get_object_key(literal).rpartition("/")[0]
+        regex = re.compile(fnmatch.translate(pattern))
 
         deleted = 0
         try:

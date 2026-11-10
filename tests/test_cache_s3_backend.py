@@ -270,14 +270,23 @@ async def test_clear_pattern_spares_another_namespace(backend):
 
 
 @pytest.mark.asyncio
-async def test_clear_pattern_accepts_a_compiled_regex(backend):
-    """A compiled pattern deletes what it matches, and nothing else."""
-    await backend.set("titiler:tile:coll:item:1:1:1:a", b"a")
-    await backend.set("titiler:tile:other:item:2:2:2:b", b"b")
+async def test_clear_pattern_bracket_class_inside_a_segment(backend):
+    """A [...] class is a wildcard: the listing stops before it."""
+    for key in ("ns:tilejson:a", "ns:tile:a"):
+        await backend.set(key, b"x")
 
-    assert await backend.clear_pattern(re.compile(r"^titiler:tile:coll:")) == 1
-    assert await backend.get("titiler:tile:coll:item:1:1:1:a") is None
-    assert await backend.get("titiler:tile:other:item:2:2:2:b") == b"b"
+    assert await backend.clear_pattern("ns:tile[j]son:*") == 1
+    assert await backend.get("ns:tile:a") == b"x"
+
+
+@pytest.mark.asyncio
+async def test_clear_pattern_refuses_a_compiled_regex(backend):
+    """A regex would list (and could delete across) the whole bucket: refused."""
+    await backend.set("titiler:tile:coll:item:1:1:1:a", b"a")
+
+    with pytest.raises(TypeError):
+        await backend.clear_pattern(re.compile(r"^titiler:tile:coll:"))
+    assert await backend.get("titiler:tile:coll:item:1:1:1:a") == b"a"
 
 
 @pytest.mark.asyncio
