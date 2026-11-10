@@ -52,6 +52,7 @@ from .cache_deps import setup_cache
 from .extensions import (
     DatasetMetadataExtension,
     EOPFChunkVizExtension,
+    EOPFRenderExtension,
     EOPFViewerExtension,
     EOPFwmtsExtension,
 )
@@ -251,6 +252,7 @@ items = MultiBaseTilerFactory(
     get_renders=_get_renders_item,
     extensions=[
         wmtsExtension(),
+        EOPFRenderExtension(),
     ],
     templates=templates,
 )
