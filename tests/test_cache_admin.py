@@ -6,6 +6,7 @@ import logging
 
 import boto3
 import fakeredis
+import obstore
 import pytest
 import redis
 from fastapi import FastAPI
@@ -279,6 +280,69 @@ def test_invalidate_reports_unhealthy_backend():
     assert body["success"] is False
     assert body["failed_patterns"] == ["*"]
     assert backend.cleared == []
+
+
+@pytest.fixture
+def s3_redis(s3_endpoint):
+    """s3-redis composite on fakeredis and a fresh moto bucket."""
+    bucket = "s3-redis-cache"
+    s3 = boto3.client(
+        "s3",
+        region_name="us-east-1",
+        endpoint_url=s3_endpoint,
+        aws_access_key_id="testing",
+        aws_secret_access_key="testing",
+    )
+    s3.create_bucket(Bucket=bucket)
+    redis_backend = RedisCacheBackend(host="unused")
+    redis_backend._client = fakeredis.FakeAsyncRedis()
+    s3_backend = S3StorageBackend(
+        bucket=bucket,
+        endpoint_url=s3_endpoint,
+        access_key_id="testing",
+        secret_access_key="testing",
+    )
+    yield S3RedisCacheBackend(redis_backend, s3_backend)
+    for obj in s3.list_objects_v2(Bucket=bucket).get("Contents", []):
+        s3.delete_object(Bucket=bucket, Key=obj["Key"])
+    s3.delete_bucket(Bucket=bucket)
+
+
+@pytest.mark.parametrize("failing", ["s3", "redis"])
+def test_invalidate_reports_failed_delete_on_s3_redis(s3_redis, monkeypatch, failing):
+    """s3-redis: a delete that fails on either side fails the pattern."""
+    assert asyncio.run(s3_redis.set("test:tilejson:coll:x", b"x")) is True
+
+    async def connected():
+        return {"status": "connected"}
+
+    async def failing_delete(*args, **kwargs):
+        raise OSError(f"{failing} refused the delete")
+
+    # fakeredis has no INFO, which health_check uses.
+    s3_redis.health_check = connected
+    if failing == "s3":
+        monkeypatch.setattr(obstore, "delete_async", failing_delete)
+    else:
+        monkeypatch.setattr(s3_redis.redis._client, "delete", failing_delete)
+    resp = _admin_client(s3_redis).post(
+        "/admin/cache/invalidate", json={"patterns": ["tilejson:*"]}, headers=AUTH
+    )
+    body = resp.json()
+    assert body["success"] is False
+    assert body["failed_patterns"] == ["tilejson:*"]
+
+
+def test_s3_redis_counts_only_entries_still_served(s3_redis):
+    """An S3 object whose Redis metadata already expired is not counted."""
+
+    async def run():
+        await s3_redis.set("test:tilejson:coll:live", b"x")
+        await s3_redis.set("test:tilejson:coll:expired", b"x")
+        await s3_redis.redis._client.delete("meta:test:tilejson:coll:expired")
+        return await s3_redis.clear_pattern("test:tilejson:*")
+
+    assert asyncio.run(run()) == 1
 
 
 def test_invalidate_star_stays_in_namespace_on_redis(redis_host):

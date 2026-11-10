@@ -95,8 +95,8 @@ def _create_invalidate_endpoint(cache_backend: CacheBackend, namespace: str):
         invalidated_count = 0
         failed_patterns = []
 
-        # clear_pattern swallows backend errors and returns 0, so check the
-        # backend is reachable first instead of reporting a silent success.
+        # Cheap early exit: an unreachable backend fails every pattern at once.
+        # Past this check, a clear_pattern error fails just its own pattern.
         health = await cache_backend.health_check()
         if health.get("status") != "connected":
             logger.error("Cache invalidation skipped: backend unhealthy")

@@ -219,6 +219,23 @@ async def test_clear_pattern_wildcard_inside_a_key_segment(backend):
 
 
 @pytest.mark.asyncio
+async def test_clear_pattern_raises_when_the_delete_fails(backend, monkeypatch):
+    """A failed delete is an error, never a count of what was not deleted."""
+    import obstore
+
+    from titiler.cache.backends.base import CacheError
+
+    await backend.set("titiler:tilejson:coll:x", b"x")
+
+    async def failing_delete(*args, **kwargs):
+        raise OSError("S3 refused the delete")
+
+    monkeypatch.setattr(obstore, "delete_async", failing_delete)
+    with pytest.raises(CacheError):
+        await backend.clear_pattern("titiler:tilejson:coll:*")
+
+
+@pytest.mark.asyncio
 async def test_health_check_shape(backend):
     """/_mgmt/cache consumers read these keys."""
     health = await backend.health_check()
