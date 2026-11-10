@@ -350,3 +350,29 @@ def test_info_measurements(get_stac_item, app, geozarr_stac_measurements):
     )
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/png"
+
+
+@patch("titiler.stacapi.dependencies.get_stac_item")
+def test_expression_multidim(get_stac_item, app, geozarr_3d_stac):
+    """A per-asset `expression` on a multi-band variable returns a 400 (#130)."""
+    collection = geozarr_3d_stac.collection_id
+    item = geozarr_3d_stac.id
+
+    get_stac_item.return_value = geozarr_3d_stac
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/preview.png",
+        params={"assets": "reflectance|expression=b02"},
+    )
+    assert response.status_code == 400
+    assert "multidim dataset" in response.json()["detail"]
+    assert "sel=" in response.json()["detail"]
+
+    # One time slice: the expression applies.
+    response = app.get(
+        f"/collections/{collection}/items/{item}/preview.png",
+        params={
+            "assets": "reflectance|expression=b02|sel=time=2022-01-01T00:00:00.000000000"
+        },
+    )
+    assert response.status_code == 200

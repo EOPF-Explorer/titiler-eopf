@@ -73,6 +73,14 @@ class MissingVariables(RioTilerError):
     """Missing Variables."""
 
 
+def _multidim_expression_error(count: int) -> InvalidExpression:
+    """`expression` needs a single band per variable (mapped to a 400)."""
+    return InvalidExpression(
+        f"Can't use `expression` for multidim dataset: the variable has {count} bands. "
+        "Select a single slice with `sel=` (e.g. `sel=time=...`)."
+    )
+
+
 # Bound the in-process datatree memo. Unbounded caching + version-keying would
 # leak one datatree per append forever; LRU evicts the stale old versions first.
 DATASET_CACHE_MAXSIZE = 64
@@ -1201,7 +1209,7 @@ class GeoZarrReader(BaseReader):
                 )
                 if expression:
                     if len(img.band_names) > 1:
-                        raise ValueError("Can't use `expression` for multidim dataset")
+                        raise _multidim_expression_error(len(img.band_names))
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
 
@@ -1313,7 +1321,7 @@ class GeoZarrReader(BaseReader):
                 )
                 if expression:
                     if len(img.band_names) > 1:
-                        raise ValueError("Can't use `expression` for multidim dataset")
+                        raise _multidim_expression_error(len(img.band_names))
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
 
@@ -1398,7 +1406,7 @@ class GeoZarrReader(BaseReader):
                 )
                 if expression:
                     if len(img.band_names) > 1:
-                        raise ValueError("Can't use `expression` for multidim dataset")
+                        raise _multidim_expression_error(len(img.band_names))
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
 
@@ -1464,7 +1472,7 @@ class GeoZarrReader(BaseReader):
                 pt = da.point(*args, **kwargs)
                 if expression:
                     if len(pt.band_names) > 1:
-                        raise ValueError("Can't use `expression` for multidim dataset")
+                        raise _multidim_expression_error(len(pt.band_names))
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     pt.band_names = [self._variable_idx[gv]]
 
@@ -1560,7 +1568,7 @@ class GeoZarrReader(BaseReader):
                 )
                 if expression:
                     if len(img.band_names) > 1:
-                        raise ValueError("Can't use `expression` for multidim dataset")
+                        raise _multidim_expression_error(len(img.band_names))
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
 

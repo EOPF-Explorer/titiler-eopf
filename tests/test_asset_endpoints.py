@@ -446,3 +446,18 @@ def test_statistics(get_stac_item, app, geozarr_stac):
     infos = response.json()
     assert infos["b1"]
     assert infos["b1"]["description"] == "b02+b04"
+
+
+@patch("titiler.eopf.stac.get_stac_item")
+def test_missing_variables(get_stac_item, app, geozarr_stac):
+    """Image routes without `variables` or `expression` return a 400 (#178)."""
+    collection = geozarr_stac.collection_id
+    item = geozarr_stac.id
+    base = f"/collections/{collection}/items/{item}/assets/reflectance"
+
+    get_stac_item.return_value = geozarr_stac
+
+    for path in ("/tiles/WebMercatorQuad/0/0/0.png", "/preview.png"):
+        response = app.get(f"{base}{path}")
+        assert response.status_code == 400
+        assert "variables must be defined" in response.json()["detail"]
