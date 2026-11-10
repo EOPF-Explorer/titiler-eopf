@@ -142,6 +142,12 @@ class TestTileCacheMiddleware:
         )
 
         assert middleware._determine_cache_type("/tiles/10/512/384.png") == "tile"
+        tiles = "/collections/c/items/i/tiles/WebMercatorQuad"
+        assert middleware._determine_cache_type(f"{tiles}/10/512/384") == "tile"
+        # TileSet JSON and the mosaic asset list are metadata, not tiles
+        assert middleware._determine_cache_type(tiles) == "unknown"
+        assert middleware._determine_cache_type(f"{tiles}/3/4/2/assets") == "unknown"
+        assert middleware._determine_cache_type(f"{tiles}/10/512/384\n") == "unknown"
         assert middleware._determine_cache_type("/tilejson.json") == "tilejson"
         assert middleware._determine_cache_type("/preview") == "preview"
         assert middleware._determine_cache_type("/crop/bbox") == "crop"
@@ -269,7 +275,12 @@ class TestTileCacheMiddleware:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "path,ttl", [("/tiles/10/512/384.png", 600), ("/tilejson.json", 60)]
+        "path,ttl",
+        [
+            ("/tiles/10/512/384.png", 600),
+            ("/tilejson.json", 60),
+            ("/collections/c/tiles/WebMercatorQuad/3/4/2/assets", 60),
+        ],
     )
     async def test_tiles_are_stored_for_tile_ttl(self, path, ttl):
         """Tiles are stored for tile_ttl, everything else for default_ttl."""

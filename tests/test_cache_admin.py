@@ -170,23 +170,37 @@ def test_admin_enabled_with_token(main_app_with_env):
     assert not any(p.startswith("/cache-admin") for p in paths)
 
 
-def test_tile_ttl_env_reaches_the_middleware(main_app_with_env, monkeypatch):
-    """TITILER_EOPF_CACHE_TILE_TTL is what the deployed app stores tiles for."""
-    client = main_app_with_env(
-        TITILER_EOPF_CACHE_DEFAULT_TTL="60", TITILER_EOPF_CACHE_TILE_TTL="600"
-    )
+@pytest.mark.parametrize(
+    "tile_env,tile_ttl", [({"TITILER_EOPF_CACHE_TILE_TTL": "600"}, 600), ({}, 60)]
+)
+def test_tile_ttl_env_reaches_the_middleware(
+    main_app_with_env, monkeypatch, tile_env, tile_ttl
+):
+    """The deployed app stores tiles for TILE_TTL, or for DEFAULT_TTL if unset."""
+    monkeypatch.delenv("TITILER_EOPF_CACHE_TILE_TTL", raising=False)
+    client = main_app_with_env(TITILER_EOPF_CACHE_DEFAULT_TTL="60", **tile_env)
     # the app is built: drop the vars so the fixture's teardown reload doesn't keep them
     for k in ("DEFAULT_TTL", "TILE_TTL"):
-        monkeypatch.delenv(f"TITILER_EOPF_CACHE_{k}")
+        monkeypatch.delenv(f"TITILER_EOPF_CACHE_{k}", raising=False)
 
     (mw,) = [m for m in client.app.user_middleware if m.cls is TileCacheMiddleware]
-    assert (mw.kwargs["default_ttl"], mw.kwargs["tile_ttl"]) == (60, 600)
+    middleware = mw.cls(app=None, **mw.kwargs)
+    assert (middleware.default_ttl, middleware.tile_ttl) == (60, tile_ttl)
 
 
 def test_mgmt_cache_is_minimal(app):
     """Public /_mgmt/cache exposes no connection details or raw errors."""
     body = app.get("/_mgmt/cache").json()["cache"]
     assert set(body) <= {"status", "healthy"}
+
+
+def test_tile_ttl_must_be_positive(monkeypatch):
+    """TILE_TTL=0 would silently stop tile caching: refused at startup."""
+    from titiler.eopf.settings import EOPFCacheSettings
+
+    monkeypatch.setenv("TITILER_EOPF_CACHE_TILE_TTL", "0")
+    with pytest.raises(ValidationError):
+        EOPFCacheSettings()
 
 
 def test_settings_errors_hide_input(monkeypatch):

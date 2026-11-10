@@ -1,6 +1,7 @@
 """Cache middleware for automatic tile caching."""
 
 import logging
+import re
 import time
 from typing import Callable, Optional
 
@@ -13,6 +14,10 @@ from .backends import CacheBackend
 from .utils import CacheKeyGenerator
 
 logger = logging.getLogger(__name__)
+
+# An image tile: .../tiles/[{tms}/]{z}/{x}/{y}[.{format}]. Not the TileSet JSON
+# (.../tiles/{tms}) nor the mosaic's .../{y}/assets listing.
+_TILE_PATH = re.compile(r"/tiles/(?:[^/]+/)?\d+/\d+/\d+(?:\.\w+)?\Z", re.ASCII)
 
 
 class TileCacheMiddleware(BaseHTTPMiddleware):
@@ -165,7 +170,7 @@ class TileCacheMiddleware(BaseHTTPMiddleware):
         Returns:
             Cache type string
         """
-        if "/tiles/" in path:
+        if _TILE_PATH.search(path):
             return "tile"
         elif path.endswith("/tilejson.json"):
             return "tilejson"
