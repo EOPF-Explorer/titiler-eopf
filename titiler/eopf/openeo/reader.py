@@ -1,14 +1,12 @@
 """Custom STAC reader with Zarr support for EOPF."""
 
 import logging
-import time
 import warnings
 from collections.abc import Sequence
 from typing import Any
 
 import attr
 import pystac
-from rasterio.errors import RasterioIOError
 from rasterio.warp import transform_bounds
 from rio_tiler.errors import (
     AssetAsBandError,
@@ -22,21 +20,26 @@ from rio_tiler.tasks import multi_arrays
 from rio_tiler.types import AssetInfo, AssetType, AssetWithOptions, BBox
 from rio_tiler.utils import cast_to_sequence, inherit_rasterio_env
 
+from titiler.openeo import reader as upstream_reader
 from titiler.openeo.bandsources import ResolvedBand
-from titiler.openeo.reader import (
-    OpenEOReader,
-    SimpleSTACReader,
-    _inherit_derived_band_masks,
-    _resolve_asset_href,
-)
+from titiler.openeo.reader import OpenEOReader, SimpleSTACReader, _resolve_asset_href
 
 from ..reader import GeoZarrReader
 from ..stac import _resolve_zarr_bands
 from .angles import ANGLE_BANDS, angle_source_asset, product_root
 
-__all__ = ["STACReader", "_reader"]
+__all__ = ["STACReader"]
 
 logger = logging.getLogger(__name__)
+
+# `GeoZarrReader` returns decoded values (xarray CF decoding and the GeoZarr
+# ScaleOffset codec). The upstream `_reader` would apply the STAC
+# `raster:scale`/`raster:offset` of the same asset a second time, and the EOPF
+# items publish them (e.g. `reflectance` 0.0001). So scale/offset is off unless
+# the deployment sets TITILER_OPENEO_PROCESSING_APPLY_SCALE_OFFSET. Re-enable
+# when EOPF-Explorer/data-pipeline#384 lands (docs/openeo-migration.md §6).
+if "apply_scale_offset" not in upstream_reader.processing_settings.model_fields_set:
+    upstream_reader.processing_settings.apply_scale_offset = False
 
 
 @attr.s
@@ -323,104 +326,3 @@ class STACReader(SimpleSTACReader):
             return img.apply_expression(expression)
 
         return img
-
-
-def _reader(item: dict[str, Any], bbox: BBox, **kwargs: Any) -> ImageData:
-    """Read a STAC item and return an ImageData object.
-
-    This is the Zarr-aware reader function that uses STACReader
-    which detects Zarr media types and uses GeoZarrReader.
-
-    Args:
-        item: STAC item dictionary or pystac.Item
-        bbox: Bounding box to read
-        **kwargs: Additional keyword arguments to pass to the reader
-
-    Returns:
-        ImageData object
-    """
-    max_retries = 10
-    retry_delay = 1.0  # seconds
-    retries = 0
-
-    # Extract item info for logging
-    item_id = (
-        item.get("id", "unknown")
-        if isinstance(item, dict)
-        else getattr(item, "id", "unknown")
-    )
-    item_datetime = (
-        item.get("properties", {}).get("datetime", "unknown")
-        if isinstance(item, dict)
-        else getattr(item, "datetime", None) or "unknown"
-    )
-
-    logger.debug(f"Loading STAC item: {item_id} (datetime: {item_datetime})")
-
-    while True:
-        try:
-            with STACReader(item) as src_dst:  # type: ignore
-                img = src_dst.part(bbox, **kwargs)
-
-                # getattr, not a direct attribute access: some tests
-                # substitute a minimal stand-in for STACReader that does
-                # not carry this (SimpleSTACReader-internal) attribute --
-                # treat that the same as "no derived bands".
-                derived = getattr(src_dst, "_derived_bands", {})
-                # `assets` are `_parse_asset` dicts here; upstream wants names.
-                requested = [
-                    a["name"] if isinstance(a, dict) else a
-                    for a in cast_to_sequence(kwargs.get("assets") or [])
-                ]
-                # Only a derived band with a sibling takes its mask. Without
-                # one there is nothing to do, and upstream would log a
-                # warning for each asset that gives more than one band.
-                if any(
-                    derived.get(name) is not None and derived[name].sibling_key
-                    for name in requested
-                ):
-                    img = _inherit_derived_band_masks(img, derived, requested)
-
-                # IMPORTANT: We intentionally do NOT set cutline_mask on individual tiles.
-                #
-                # Background: rio-tiler's mosaic_reader uses cutline_mask from the FIRST
-                # image to determine when mosaicking is complete (via FirstMethod.is_done).
-                # The is_done check only verifies that pixels INSIDE the first tile's
-                # footprint geometry are filled, ignoring pixels outside that footprint.
-                #
-                # Problem: For multi-tile mosaics where each tile covers only a portion
-                # of the target bbox, this causes early termination after the first tile.
-                # Example: If tile 1 covers 7% of the bbox and has valid data for that 7%,
-                # is_done returns True even though 93% of the mosaic is still empty.
-                #
-                # Solution: By not setting cutline_mask, is_done falls back to checking
-                # if ALL pixels in the mosaic are filled (not numpy.ma.is_masked(mosaic)).
-                # This allows mosaicking to continue until all tiles are processed or
-                # all pixels have valid data.
-                #
-                # The nodata mask (created from the nodata value in STAC metadata)
-                # correctly tracks which pixels have valid data vs nodata, and this
-                # mask is properly combined during mosaicking via FirstMethod.feed().
-
-                logger.debug(
-                    f"  Loaded {item_id}: {img.width}x{img.height}, "
-                    f"bands={img.count}, dtype={img.data.dtype}"
-                )
-
-                return img
-        except RasterioIOError as e:
-            retries += 1
-            if retries >= max_retries:
-                # If we've reached max retries, re-raise the exception
-                logger.error(
-                    f"Failed to load {item_id} after {max_retries} retries: {e}"
-                )
-                raise
-            # Log the error and retry after a delay
-            logger.warning(
-                f"RasterioIOError loading {item_id}: {str(e)}. "
-                f"Retrying in {retry_delay}s... (Attempt {retries}/{max_retries})"
-            )
-            time.sleep(retry_delay)
-            # Increase delay for next retry (exponential backoff)
-            retry_delay *= 2
