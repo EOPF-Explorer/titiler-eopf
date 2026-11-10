@@ -6,7 +6,12 @@ import xarray
 from rio_tiler.errors import ExpressionMixingWarning
 
 from titiler.core.errors import BadRequestError
-from titiler.eopf.reader import GeoZarrReader, MissingVariables, buffer_grid
+from titiler.eopf.reader import (
+    GeoZarrReader,
+    InvalidGeoZarrStore,
+    MissingVariables,
+    buffer_grid,
+)
 
 
 def test_open(geozarr_dataset):
@@ -820,3 +825,12 @@ def test_sub_group(geozarr_dataset):
         assert img.band_names == ["b1"]
         assert img.band_descriptions == ["/reflectance:b02+/reflectance:b03"]
         assert img.data.shape == (1, 256, 256)
+
+
+def test_array(geozarr_dataset):
+    """Test GeoZarrReader raises InvalidGeoZarrStore for a Zarr array path."""
+    with pytest.raises(InvalidGeoZarrStore):
+        with GeoZarrReader(
+            input=f"{geozarr_dataset}/measurements/reflectance/r10m/b02"
+        ):
+            pass
