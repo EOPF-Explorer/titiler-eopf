@@ -264,8 +264,31 @@ class TestTileCacheMiddleware:
         assert response.status_code == 200
         call_next.assert_called_once()
 
-        # Verify data was cached
-        assert len(cache_backend.set_calls) == 1
+        # Verify data was cached; without tile_ttl, tiles use default_ttl
+        assert [ttl for _, _, ttl in cache_backend.set_calls] == [3600]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "path,ttl", [("/tiles/10/512/384.png", 600), ("/tilejson.json", 60)]
+    )
+    async def test_tiles_are_stored_for_tile_ttl(self, path, ttl):
+        """Tiles are stored for tile_ttl, everything else for default_ttl."""
+        cache_backend = MockCacheBackend()
+        middleware = TileCacheMiddleware(
+            app=None,
+            cache_backend=cache_backend,
+            key_generator=CacheKeyGenerator("test-app"),
+            default_ttl=60,
+            tile_ttl=600,
+        )
+        request = MagicMock(method="GET", query_params={})
+        request.url.path = path
+        response = Response(content=b"body")
+        response.body_iterator = iter([b"body"])
+
+        await middleware.dispatch(request, AsyncMock(return_value=response))
+
+        assert [call_ttl for _, _, call_ttl in cache_backend.set_calls] == [ttl]
 
 
 class TestCacheControlMiddleware:

@@ -122,8 +122,9 @@ class S3StorageBackend(CacheBackend):
             if expires_at and datetime.now(timezone.utc) > datetime.fromisoformat(
                 expires_at
             ):
+                # Left in place: the re-render's set() overwrites it and the
+                # bucket's lifecycle rule removes the rest.
                 logger.debug(f"S3 object expired for key: {key}")
-                await obstore.delete_async(self._store, object_key)
                 self._stats["misses"] += 1
                 return None
             data = bytes(await result.bytes_async())

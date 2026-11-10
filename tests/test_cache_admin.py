@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from pydantic import SecretStr, ValidationError
 from starlette.testclient import TestClient
 
+from titiler.cache import TileCacheMiddleware
 from titiler.cache.admin import create_cache_admin_router
 from titiler.cache.backends.redis import RedisCacheBackend
 from titiler.cache.backends.s3 import S3StorageBackend
@@ -167,6 +168,19 @@ def test_admin_enabled_with_token(main_app_with_env):
     assert resp.headers["Cache-Control"] == "no-store"
     paths = client.get("/api").json()["paths"]
     assert not any(p.startswith("/cache-admin") for p in paths)
+
+
+def test_tile_ttl_env_reaches_the_middleware(main_app_with_env, monkeypatch):
+    """TITILER_EOPF_CACHE_TILE_TTL is what the deployed app stores tiles for."""
+    client = main_app_with_env(
+        TITILER_EOPF_CACHE_DEFAULT_TTL="60", TITILER_EOPF_CACHE_TILE_TTL="600"
+    )
+    # the app is built: drop the vars so the fixture's teardown reload doesn't keep them
+    for k in ("DEFAULT_TTL", "TILE_TTL"):
+        monkeypatch.delenv(f"TITILER_EOPF_CACHE_{k}")
+
+    (mw,) = [m for m in client.app.user_middleware if m.cls is TileCacheMiddleware]
+    assert (mw.kwargs["default_ttl"], mw.kwargs["tile_ttl"]) == (60, 600)
 
 
 def test_mgmt_cache_is_minimal(app):

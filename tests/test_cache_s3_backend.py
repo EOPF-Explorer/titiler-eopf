@@ -113,17 +113,20 @@ async def test_set_without_ttl_writes_no_expiry(backend, s3_client):
 
 
 @pytest.mark.asyncio
-async def test_expired_entry_is_a_miss_and_is_evicted(backend, s3_client):
-    """An expired object reads as a miss and is deleted on the way out."""
-    key = "titiler:tile:coll:item:5:5:5:stale"
-    object_key = "tiles/coll/item/5/5/5/stale"
+async def test_expired_entry_is_a_miss_even_if_deletes_fail(backend, monkeypatch):
+    """An expired object reads as a miss, also where S3 refuses deletes."""
+    import obstore
+    from obstore.exceptions import PermissionDeniedError
 
+    async def refuse(*args, **kwargs):
+        raise PermissionDeniedError("AccessDenied")
+
+    monkeypatch.setattr(obstore, "delete_async", refuse)
+    key = "titiler:tile:coll:item:5:5:5:stale"
     await backend.set(key, b"stale-payload", ttl=-1)
-    assert "Contents" in s3_client.list_objects_v2(Bucket=BUCKET, Prefix=object_key)
 
     assert await backend.get(key) is None
 
-    assert "Contents" not in s3_client.list_objects_v2(Bucket=BUCKET, Prefix=object_key)
     stats = await backend.get_stats()
     assert stats["total_misses"] == 1
     assert stats["total_errors"] == 0

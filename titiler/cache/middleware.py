@@ -33,6 +33,7 @@ class TileCacheMiddleware(BaseHTTPMiddleware):
         default_ttl: int = 3600,
         cache_status_header: str = "X-Cache",
         exclude_paths: Optional[list[str]] = None,
+        tile_ttl: Optional[int] = None,
     ):
         """Initialize tile cache middleware.
 
@@ -43,6 +44,7 @@ class TileCacheMiddleware(BaseHTTPMiddleware):
             cache_paths: URL path patterns to cache (defaults to tile endpoints)
             cache_methods: HTTP methods to cache (defaults to GET only)
             default_ttl: Default cache TTL in seconds
+            tile_ttl: Cache TTL in seconds for tiles (defaults to `default_ttl`)
             cache_status_header: Header name for cache status
             exclude_paths: URL path patterns never cached, even if they also
                 match `cache_paths` (e.g. the cache admin API)
@@ -61,6 +63,7 @@ class TileCacheMiddleware(BaseHTTPMiddleware):
         self.cache_methods = set(cache_methods or ["GET"])
         self.exclude_paths = exclude_paths or []
         self.default_ttl = default_ttl
+        self.tile_ttl = default_ttl if tile_ttl is None else tile_ttl
         self.cache_status_header = cache_status_header
 
     async def dispatch(
@@ -112,7 +115,8 @@ class TileCacheMiddleware(BaseHTTPMiddleware):
             # Cache successful responses
             if response.status_code == 200:
                 try:
-                    await self._cache_response(cache_key, response, process_time)
+                    ttl = self.tile_ttl if cache_type == "tile" else self.default_ttl
+                    await self._cache_response(cache_key, response, process_time, ttl)
                     response.headers[self.cache_status_header] = "MISS"
                 except Exception as e:
                     logger.error(f"Error caching response: {e}")
@@ -225,7 +229,7 @@ class TileCacheMiddleware(BaseHTTPMiddleware):
             return None
 
     async def _cache_response(
-        self, cache_key: str, response: Response, process_time: float
+        self, cache_key: str, response: Response, process_time: float, ttl: int
     ) -> None:
         """Cache response data.
 
@@ -233,6 +237,7 @@ class TileCacheMiddleware(BaseHTTPMiddleware):
             cache_key: Cache key
             response: HTTP response
             process_time: Time taken to process request
+            ttl: Cache TTL in seconds
         """
         try:
             # Read response body
@@ -277,9 +282,7 @@ class TileCacheMiddleware(BaseHTTPMiddleware):
             import json
 
             serialized_data = json.dumps(response_data).encode("utf-8")
-            await self.cache_backend.set(
-                cache_key, serialized_data, ttl=self.default_ttl
-            )
+            await self.cache_backend.set(cache_key, serialized_data, ttl=ttl)
 
         except Exception as e:
             logger.error(f"Error caching response: {e}")
