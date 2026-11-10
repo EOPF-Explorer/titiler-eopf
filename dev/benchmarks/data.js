@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794315869406,
+  "lastUpdate": 1794316891110,
   "repoUrl": "https://github.com/EOPF-Explorer/titiler-eopf",
   "entries": {
     "titiler-eopf Benchmarks": [
@@ -2808,6 +2808,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.04114301109674172",
             "extra": "mean: 404.36815738000035 msec\nrounds: 50"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "emmanuel.mathot@gmail.com",
+            "name": "Emmanuel Mathot",
+            "username": "emmanuelmathot"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9093d2434eb46a39d6fbb9d812979d88ae442a8a",
+          "message": "fix: return 400 for missing variables and multidim expression (#230)\n\n* fix: handle invalid layer parameters and improve error messaging for multidim datasets\n\n* fix: replace multidim expression error handling with direct InvalidExpression raises\n\n---------\n\nCo-authored-by: Claude Opus 5.5 <noreply@anthropic.com>",
+          "timestamp": "2026-11-10T14:17:47+01:00",
+          "tree_id": "cdee35d30fbacf07a36ec6238457e2448522d2ea",
+          "url": "https://github.com/EOPF-Explorer/titiler-eopf/commit/9093d2434eb46a39d6fbb9d812979d88ae442a8a"
+        },
+        "date": 1794316889174,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "GeoZarrReader-Open",
+            "value": 44.103056211249545,
+            "unit": "iter/sec",
+            "range": "stddev: 0.014378812391162617",
+            "extra": "mean: 22.674165600000435 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Info",
+            "value": 45.10992460726955,
+            "unit": "iter/sec",
+            "range": "stddev: 0.001825720996599755",
+            "extra": "mean: 22.168070745098255 msec\nrounds: 51"
+          },
+          {
+            "name": "GeoZarrReader-Preview",
+            "value": 2.532818750361653,
+            "unit": "iter/sec",
+            "range": "stddev: 0.02348198870905712",
+            "extra": "mean: 394.81703925999966 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Tile",
+            "value": 2.3334800999132526,
+            "unit": "iter/sec",
+            "range": "stddev: 0.053493222974891355",
+            "extra": "mean: 428.54447314000026 msec\nrounds: 50"
           }
         ]
       }
