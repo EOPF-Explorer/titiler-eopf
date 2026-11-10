@@ -3,7 +3,7 @@
 import numpy
 import pytest
 import xarray
-from rio_tiler.errors import ExpressionMixingWarning
+from rio_tiler.errors import ExpressionMixingWarning, InvalidExpression
 
 from titiler.core.errors import BadRequestError
 from titiler.eopf.reader import (
@@ -417,7 +417,7 @@ def test_3d_geozarr(geozarr_3d_dataset):
 
         # Cannot use expression with multi-bands variables
         with pytest.raises(
-            ValueError, match="Can't use `expression` for multidim dataset"
+            InvalidExpression, match="Can't use `expression` for multidim dataset"
         ):
             _ = src.preview(
                 expression="/measurements/reflectance:b02+/measurements/reflectance:b03",
@@ -479,7 +479,7 @@ def test_3d_geozarr(geozarr_3d_dataset):
 
         # Cannot use expression with multi-bands variables
         with pytest.raises(
-            ValueError, match="Can't use `expression` for multidim dataset"
+            InvalidExpression, match="Can't use `expression` for multidim dataset"
         ):
             _ = src.point(
                 lon,
@@ -540,7 +540,7 @@ def test_3d_geozarr(geozarr_3d_dataset):
 
         # Cannot use expression with multi-bands variables
         with pytest.raises(
-            ValueError, match="Can't use `expression` for multidim dataset"
+            InvalidExpression, match="Can't use `expression` for multidim dataset"
         ):
             _ = src.tile(
                 *tile,
@@ -599,7 +599,7 @@ def test_3d_geozarr(geozarr_3d_dataset):
 
         # Cannot use expression with multi-bands variables
         with pytest.raises(
-            ValueError, match="Can't use `expression` for multidim dataset"
+            InvalidExpression, match="Can't use `expression` for multidim dataset"
         ):
             _ = src.part(
                 bbox,
@@ -673,7 +673,7 @@ def test_3d_geozarr(geozarr_3d_dataset):
 
         # Cannot use expression with multi-bands variables
         with pytest.raises(
-            ValueError, match="Can't use `expression` for multidim dataset"
+            InvalidExpression, match="Can't use `expression` for multidim dataset"
         ):
             _ = src.feature(
                 feature,
