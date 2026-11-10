@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 import attr
 import obstore
 import xarray
+import zarr
 from affine import Affine
 from morecantile import Tile, TileMatrixSet
 from rasterio import windows
@@ -71,6 +72,10 @@ def cache_settings() -> EOPFCacheSettings:
 
 class MissingVariables(RioTilerError):
     """Missing Variables."""
+
+
+class InvalidGeoZarrStore(RioTilerError):
+    """The GeoZarr store is not a Zarr group."""
 
 
 # Bound the in-process datatree memo. Unbounded caching + version-keying would
@@ -163,20 +168,25 @@ def _cache_token(src_path: str) -> tuple[str | None, int | None]:
 
 
 def _open_from_store(src_path: str) -> xarray.DataTree:
-    """Open the datatree from the store (no caching)."""
+    """Open the Zarr Group (datatree) from the store (no caching)."""
     zarr_store = ObjectStore(store=_get_store(src_path), read_only=True)
-    return xarray.open_datatree(
-        zarr_store,
-        decode_times=True,
-        decode_coords="all",
-        create_default_indexes=False,
-        # By default xarray will try to load the consolidated metadata
-        # consolidated=True,
-        # See https://github.com/pydata/xarray/issues/11361
-        # use_zarr_fill_value_as_mask=True,
-        zarr_format=3,
-        engine="zarr",
-    )
+    try:
+        return xarray.open_datatree(
+            zarr_store,
+            decode_times=True,
+            decode_coords="all",
+            create_default_indexes=False,
+            # By default xarray will try to load the consolidated metadata
+            # consolidated=True,
+            # See https://github.com/pydata/xarray/issues/11361
+            # use_zarr_fill_value_as_mask=True,
+            zarr_format=3,
+            engine="zarr",
+        )
+    except zarr.errors.ContainsArrayError as e:
+        raise InvalidGeoZarrStore(
+            f"{src_path} does not appear to be a valid GeoZarr group."
+        ) from e
 
 
 @lru_cache(maxsize=DATASET_CACHE_MAXSIZE)
@@ -413,6 +423,58 @@ def _get_proj_crs(attributes: dict) -> CRS:
         )
     )
     return CRS.from_user_input(proj_string)
+
+
+def buffer_grid(
+    bbox: BBox, width: int, height: int, buffer: float
+) -> tuple[BBox, int, int]:
+    """Expand an output grid by ``buffer`` pixels on each side.
+
+    The same rule as rio-tiler: ``buffer`` is a multiple of 0.5, and the
+    output grows by ``2 * buffer`` pixels (0.5 -> 257 x 257, 1 -> 258 x 258
+    for 256 x 256). The pixel size does not change. ``bbox`` is in the
+    output CRS.
+
+    `GeoZarrReader.part` and the openEO angle bands both use this function,
+    so that all the bands of one read have the same grid.
+    """
+    extra = round(2 * buffer)
+    pad_x = extra / 2 * (bbox[2] - bbox[0]) / width
+    pad_y = extra / 2 * (bbox[3] - bbox[1]) / height
+    return (
+        (bbox[0] - pad_x, bbox[1] - pad_y, bbox[2] + pad_x, bbox[3] + pad_y),
+        width + extra,
+        height + extra,
+    )
+
+
+def _apply_buffer(
+    bbox: BBox,
+    bounds_crs: CRS,
+    bounds_in_dst_crs: BBox,
+    dst_crs: CRS,
+    width: int | None,
+    height: int | None,
+    buffer: float | None,
+) -> tuple[BBox, CRS, BBox, int | None, int | None]:
+    """The read grid of `GeoZarrReader.part`, with ``buffer`` applied.
+
+    Returns ``(bbox, bounds_crs, bounds_in_dst_crs, width, height)``. With a
+    buffer, ``bbox`` becomes the buffered bounds in ``dst_crs``. A buffer
+    needs ``width`` and ``height``: without them it is ignored, with a
+    warning.
+    """
+    if not buffer:
+        return bbox, bounds_crs, bounds_in_dst_crs, width, height
+    if width is None or height is None:
+        warnings.warn(
+            "`buffer` needs `width` and `height`; it is ignored.",
+            UserWarning,
+            stacklevel=3,
+        )
+        return bbox, bounds_crs, bounds_in_dst_crs, width, height
+    buffered, width, height = buffer_grid(bounds_in_dst_crs, width, height, buffer)
+    return buffered, dst_crs, buffered, width, height
 
 
 def get_target_resolution(
@@ -1192,13 +1254,29 @@ class GeoZarrReader(BaseReader):
         sel: list[str] | None = None,
         **kwargs: Any,
     ) -> ImageData:
-        """Read part of a dataset."""
+        """Read part of a dataset.
+
+        ``buffer`` (in ``kwargs``): pixels added on each side of the output,
+        as in rio-tiler (e.g. openEO `load_collection`'s `tile_buffer`).
+        `GeoArrayReader.part` does not apply it, so it is applied here. It
+        needs ``width`` and ``height``.
+        """
         dst_crs = dst_crs or bounds_crs
 
         bounds_in_dst_crs = (
             transform_bounds(bounds_crs, dst_crs, *bbox, densify_pts=21)
             if dst_crs != bounds_crs
             else bbox
+        )
+
+        bbox, bounds_crs, bounds_in_dst_crs, width, height = _apply_buffer(
+            bbox,
+            bounds_crs,
+            bounds_in_dst_crs,
+            dst_crs,
+            width,
+            height,
+            kwargs.pop("buffer", None),
         )
 
         img_stack: list[ImageData] = []

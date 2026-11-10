@@ -10,17 +10,29 @@ import attr
 import pystac
 from rasterio.errors import RasterioIOError
 from rasterio.warp import transform_bounds
-from rio_tiler.errors import AssetAsBandError, MissingAssets, TileOutsideBounds
+from rio_tiler.errors import (
+    AssetAsBandError,
+    InvalidAssetName,
+    MissingAssets,
+    TileOutsideBounds,
+)
 from rio_tiler.io import BaseReader
 from rio_tiler.models import ImageData
 from rio_tiler.tasks import multi_arrays
 from rio_tiler.types import AssetInfo, AssetType, AssetWithOptions, BBox
 from rio_tiler.utils import cast_to_sequence, inherit_rasterio_env
 
-from titiler.openeo.reader import SimpleSTACReader, _inherit_derived_band_masks
+from titiler.openeo.bandsources import ResolvedBand
+from titiler.openeo.reader import (
+    OpenEOReader,
+    SimpleSTACReader,
+    _inherit_derived_band_masks,
+    _resolve_asset_href,
+)
 
 from ..reader import GeoZarrReader
 from ..stac import _resolve_zarr_bands
+from .angles import ANGLE_BANDS, angle_source_asset, product_root
 
 __all__ = ["STACReader", "_reader"]
 
@@ -29,10 +41,74 @@ logger = logging.getLogger(__name__)
 
 @attr.s
 class STACReader(SimpleSTACReader):
-    """STACReader with support of Zarr or COG."""
+    """STACReader with support of Zarr or COG.
+
+    For an EOPF Sentinel-2 item, also gives the view and sun angle bands from
+    the product's `conditions/geometry` arrays (see `angles.py`).
+    """
+
+    def __attrs_post_init__(self) -> None:
+        """Upstream setup, then the EOPF angle bands."""
+        super().__attrs_post_init__()
+        self._add_angle_bands()
+
+    def _add_angle_bands(self) -> None:
+        """Add the angle bands to `_derived_bands`.
+
+        Upstream gives these bands only from a `granule_metadata` XML asset,
+        which EOPF items do not have. A band that upstream already gives for
+        this item keeps the upstream reader.
+        """
+        collection_id = self.input.collection_id or ""
+        asset_key = angle_source_asset(collection_id, self.input.assets)
+        if asset_key is None:
+            return
+        for name, band in ANGLE_BANDS.items():
+            self._derived_bands.setdefault(
+                name,
+                ResolvedBand(
+                    asset_key=asset_key,
+                    sibling_key=None,
+                    quantity=band.quantity,
+                    reader=band.reader,
+                ),
+            )
+
+    def _get_derived_asset_info(self, asset_name: str) -> AssetInfo:
+        """Asset info of an angle band: the product root and the band options."""
+        band = ANGLE_BANDS.get(asset_name)
+        resolved = self._derived_bands[asset_name]
+        if band is None or resolved.reader is not band.reader:
+            return super()._get_derived_asset_info(asset_name)
+
+        # The href as the reflectance read resolves it (absolute href, and the
+        # `STAC_ALTERNATE_KEY` alternate), as upstream does for its own
+        # derived bands. The signer applies to the product root, after the
+        # cut, so that the cut does not remove a signature.
+        asset = self.input.assets[resolved.asset_key]
+        root = product_root(_resolve_asset_href(asset))
+        if root is None:
+            raise InvalidAssetName(
+                f"Band '{asset_name}': the href of asset '{resolved.asset_key}' "
+                "is not in a Zarr product"
+            )
+        if self.signer is not None:
+            root = self.signer(root)
+        return AssetInfo(
+            url=root,
+            name=asset_name,
+            media_type=asset.media_type,
+            reader_options={"quantity": band.quantity, "band": band.band},
+            method_options={},
+        )
 
     def _get_reader(self, asset_info: AssetInfo) -> type[BaseReader]:
         """Get Asset Reader."""
+        # A derived band can have a Zarr media type (the angle bands do):
+        # its own reader comes first.
+        if asset_info["name"] in self._derived_bands:
+            return super()._get_reader(asset_info)
+
         if asset_type := asset_info.get("media_type", None):
             if asset_type.split(";")[0] in [
                 "application/x-zarr",
@@ -47,6 +123,23 @@ class STACReader(SimpleSTACReader):
         # band (SAR noise/calibration LUTs, S2 view/sun angles) would be read
         # with the plain OpenEOReader instead of its own resolved reader.
         return super()._get_reader(asset_info)
+
+    def _get_asset_info(self, asset: AssetType) -> AssetInfo:
+        """Upstream asset info, without the options this asset's reader rejects.
+
+        Upstream (titiler-openeo#464) adds `fallback_nodata` to
+        `reader_options` when the class-level `self.reader` is an
+        `OpenEOReader`. But `_get_reader` selects the reader for each asset,
+        and `GeoZarrReader` does not accept that option. The value comes from
+        Sentinel-2 SAFE product metadata (`MTD_MSIL2A.xml`), which does not
+        apply to a GeoZarr asset, so remove it for each other reader.
+        """
+        info = super()._get_asset_info(asset)
+        if "fallback_nodata" in info["reader_options"] and not issubclass(
+            self._get_reader(info), OpenEOReader
+        ):
+            info["reader_options"].pop("fallback_nodata")
+        return info
 
     def _get_options(
         self,
@@ -209,32 +302,21 @@ class STACReader(SimpleSTACReader):
 
                     return data
 
-        try:
-            img = multi_arrays(
-                assets,
-                _reader,
-                bbox,
-                # Only TileOutsideBounds -- matches mosaic_reader's own default one
-                # level up. A wider tuple here used to swallow real option
-                # errors (e.g. an unknown band name from _get_options)
-                # silently: filter_tasks logs allowed exceptions at INFO and
-                # drops the asset, so the ValueError naming the bad band
-                # never reached the caller -- with every asset then dropped,
-                # this degraded into a generic "no valid data" failure.
-                allowed_exceptions=(TileOutsideBounds,),
-                **kwargs,
-            )
-        except ValueError as e:
-            # multi_arrays raises ValueError when all assets fail and it tries
-            # to create an ImageData from an empty list. Convert to TileOutsideBounds
-            # so the caller (mosaic_reader) can handle it gracefully.
-            logger.warning(
-                f"All assets failed to load for bbox {bbox}: {e!s}. "
-                "Raising TileOutsideBounds to allow mosaicking to continue."
-            )
-            raise TileOutsideBounds(
-                f"No valid data found in bounds {bbox} for any asset"
-            ) from e
+        # No `allowed_exceptions`: one asset outside the bbox makes the whole
+        # item outside it (`TileOutsideBounds`, which `mosaic_reader` skips).
+        # Dropping only that asset would give this item fewer bands than the
+        # others, in another order: openEO `load_collection` puts the bands
+        # in the requested order in each slice, and a pixel with no data is a
+        # no-data value, not a missing band. All the assets of an EOPF item
+        # cover the same tile, so no data is lost. Any other error (e.g. an
+        # unknown band name from `_get_options`) reaches the caller.
+        img = multi_arrays(
+            assets,
+            _reader,
+            bbox,
+            allowed_exceptions=(),
+            **kwargs,
+        )
 
         img.band_names = [f"b{ix + 1}" for ix in range(img.count)]
         if expression:
@@ -280,15 +362,24 @@ def _reader(item: dict[str, Any], bbox: BBox, **kwargs: Any) -> ImageData:
             with STACReader(item) as src_dst:  # type: ignore
                 img = src_dst.part(bbox, **kwargs)
 
-                requested = kwargs.get("assets")
-                if requested:
-                    # getattr, not a direct attribute access: some tests
-                    # substitute a minimal stand-in for STACReader that does
-                    # not carry this (SimpleSTACReader-internal) attribute --
-                    # treat that the same as "no derived bands".
-                    img = _inherit_derived_band_masks(
-                        img, getattr(src_dst, "_derived_bands", {}), requested
-                    )
+                # getattr, not a direct attribute access: some tests
+                # substitute a minimal stand-in for STACReader that does
+                # not carry this (SimpleSTACReader-internal) attribute --
+                # treat that the same as "no derived bands".
+                derived = getattr(src_dst, "_derived_bands", {})
+                # `assets` are `_parse_asset` dicts here; upstream wants names.
+                requested = [
+                    a["name"] if isinstance(a, dict) else a
+                    for a in cast_to_sequence(kwargs.get("assets") or [])
+                ]
+                # Only a derived band with a sibling takes its mask. Without
+                # one there is nothing to do, and upstream would log a
+                # warning for each asset that gives more than one band.
+                if any(
+                    derived.get(name) is not None and derived[name].sibling_key
+                    for name in requested
+                ):
+                    img = _inherit_derived_band_masks(img, derived, requested)
 
                 # IMPORTANT: We intentionally do NOT set cutline_mask on individual tiles.
                 #
