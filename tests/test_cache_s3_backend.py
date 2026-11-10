@@ -1,5 +1,6 @@
 """The S3 cache backend's contract, pinned over real HTTP (see `s3_endpoint`)."""
 
+import re
 from datetime import datetime, timezone
 
 import boto3
@@ -61,11 +62,36 @@ def test_constructs_without_endpoint_or_credentials():
     S3StorageBackend(bucket=BUCKET)
 
 
+@pytest.mark.asyncio
+async def test_prefix_env_var_reaches_the_bucket(monkeypatch, s3_endpoint, s3_client):
+    """The chart's TITILER_EOPF_CACHE_S3_PREFIX puts the objects under it."""
+    from titiler.eopf.settings import EOPFCacheSettings
+
+    env = {
+        "ENABLE": "true",
+        "BACKEND": "s3",
+        "S3_BUCKET": BUCKET,
+        "S3_PREFIX": "cache/",
+        "S3_ENDPOINT_URL": s3_endpoint,
+        "S3_ACCESS_KEY_ID": CREDENTIALS["access_key_id"],
+        "S3_SECRET_ACCESS_KEY": CREDENTIALS["secret_access_key"],
+    }
+    for name, value in env.items():
+        monkeypatch.setenv(f"TITILER_EOPF_CACHE_{name}", value)
+    settings = EOPFCacheSettings()
+    assert settings.s3.prefix == "cache/"
+
+    backend = S3StorageBackend.from_settings(settings.s3)
+    await backend.set("titiler-eopf:tile:coll:item:1:1:1:a", b"a")
+    listed = s3_client.list_objects_v2(Bucket=BUCKET)["Contents"]
+    assert [o["Key"] for o in listed] == ["cache/titiler-eopf/tile/coll/item/1/1/1/a"]
+
+
 def test_object_key_is_a_tile_path(backend):
-    """Tile keys become a directory layout; anything else just loses its colons."""
+    """Every key becomes a directory layout, namespace and cache type included."""
     assert (
         backend._get_object_key("titiler:tile:coll:item:10:512:384:abc123")
-        == "tiles/coll/item/10/512/384/abc123"
+        == "titiler/tile/coll/item/10/512/384/abc123"
     )
     assert backend._get_object_key("titiler:meta:coll") == "titiler/meta/coll"
 
@@ -91,7 +117,7 @@ async def test_ttl_is_stored_as_user_metadata(backend, s3_client):
     key = "titiler:tile:coll:item:1:2:3:hash"
     await backend.set(key, b"payload", ttl=1800)
 
-    head = s3_client.head_object(Bucket=BUCKET, Key="tiles/coll/item/1/2/3/hash")
+    head = s3_client.head_object(Bucket=BUCKET, Key="titiler/tile/coll/item/1/2/3/hash")
     metadata = head["Metadata"]
 
     assert metadata["cache-key"] == key
@@ -102,12 +128,39 @@ async def test_ttl_is_stored_as_user_metadata(backend, s3_client):
 
 
 @pytest.mark.asyncio
+async def test_prefix_holds_every_object(s3_endpoint, s3_client):
+    """With a prefix, objects live under it and clear_pattern still finds them."""
+    backend = S3StorageBackend(
+        bucket=BUCKET,
+        region="us-east-1",
+        endpoint_url=s3_endpoint,
+        prefix="cache/",
+        **CREDENTIALS,
+    )
+    await backend.set("titiler:tile:coll:item:1:1:1:a", b"a")
+    await backend.set("titiler:tile:other:item:2:2:2:b", b"b")
+
+    def stored():
+        listed = s3_client.list_objects_v2(Bucket=BUCKET).get("Contents", [])
+        return sorted(o["Key"] for o in listed)
+
+    assert stored() == [
+        "cache/titiler/tile/coll/item/1/1/1/a",
+        "cache/titiler/tile/other/item/2/2/2/b",
+    ]
+    assert await backend.clear_pattern("titiler:tile:coll:*") == 1
+    assert stored() == ["cache/titiler/tile/other/item/2/2/2/b"]
+
+
+@pytest.mark.asyncio
 async def test_set_without_ttl_writes_no_expiry(backend, s3_client):
     """No TTL means no expiry metadata, and the entry never expires."""
     key = "titiler:tile:coll:item:0:0:0:forever"
     await backend.set(key, b"payload")
 
-    head = s3_client.head_object(Bucket=BUCKET, Key="tiles/coll/item/0/0/0/forever")
+    head = s3_client.head_object(
+        Bucket=BUCKET, Key="titiler/tile/coll/item/0/0/0/forever"
+    )
     assert "ttl-expires-at" not in head["Metadata"]
     assert await backend.get(key) == b"payload"
 
@@ -116,7 +169,7 @@ async def test_set_without_ttl_writes_no_expiry(backend, s3_client):
 async def test_expired_entry_is_a_miss_and_is_evicted(backend, s3_client):
     """An expired object reads as a miss and is deleted on the way out."""
     key = "titiler:tile:coll:item:5:5:5:stale"
-    object_key = "tiles/coll/item/5/5/5/stale"
+    object_key = "titiler/tile/coll/item/5/5/5/stale"
 
     await backend.set(key, b"stale-payload", ttl=-1)
     assert "Contents" in s3_client.list_objects_v2(Bucket=BUCKET, Prefix=object_key)
@@ -170,7 +223,7 @@ async def test_delete_removes_the_object(backend, s3_client):
 
     assert await backend.delete(key) is True
     assert "Contents" not in s3_client.list_objects_v2(
-        Bucket=BUCKET, Prefix="tiles/coll/item/3/3/3/doomed"
+        Bucket=BUCKET, Prefix="titiler/tile/coll/item/3/3/3/doomed"
     )
 
 
@@ -190,12 +243,6 @@ async def test_delete_on_missing_key_is_not_an_error(backend):
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason="bug: object keys are mapped back with '/'->':' , yielding "
-    "'tiles:coll:...' which can never match a 'titiler:tile:coll:*' glob, so "
-    "clear_pattern deletes nothing and cache invalidation silently no-ops",
-)
 async def test_clear_pattern_deletes_matching_tiles(backend):
     """A glob over one collection clears that collection's tiles."""
     await backend.set("titiler:tile:coll:item:1:1:1:a", b"a")
@@ -205,6 +252,32 @@ async def test_clear_pattern_deletes_matching_tiles(backend):
     assert await backend.clear_pattern("titiler:tile:coll:*") == 2
     assert await backend.get("titiler:tile:coll:item:1:1:1:a") is None
     assert await backend.get("titiler:tile:other:item:3:3:3:c") == b"c"
+
+
+@pytest.mark.asyncio
+async def test_clear_pattern_spares_another_namespace(backend):
+    """Prod and staging share the bucket: clearing one namespace keeps the other."""
+    prod = ["titiler-eopf:tile:coll:item:1:1:1:a", "titiler-eopf:info:coll:item:a"]
+    staging = [k.replace("titiler-eopf:", "titiler-eopf-staging:") for k in prod]
+    for key in prod + staging:
+        await backend.set(key, key.encode())
+
+    assert await backend.clear_pattern("titiler-eopf:*") == 2
+    for key in prod:
+        assert await backend.get(key) is None
+    for key in staging:
+        assert await backend.get(key) == key.encode()
+
+
+@pytest.mark.asyncio
+async def test_clear_pattern_accepts_a_compiled_regex(backend):
+    """A compiled pattern deletes what it matches, and nothing else."""
+    await backend.set("titiler:tile:coll:item:1:1:1:a", b"a")
+    await backend.set("titiler:tile:other:item:2:2:2:b", b"b")
+
+    assert await backend.clear_pattern(re.compile(r"^titiler:tile:coll:")) == 1
+    assert await backend.get("titiler:tile:coll:item:1:1:1:a") is None
+    assert await backend.get("titiler:tile:other:item:2:2:2:b") == b"b"
 
 
 @pytest.mark.asyncio

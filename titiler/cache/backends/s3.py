@@ -36,6 +36,7 @@ class S3StorageBackend(CacheBackend):
         access_key_id: Optional[str] = None,
         secret_access_key: Optional[str] = None,
         session_token: Optional[str] = None,
+        prefix: Optional[str] = None,
     ):
         """Initialize S3 storage backend. No network I/O happens here.
 
@@ -46,6 +47,7 @@ class S3StorageBackend(CacheBackend):
             access_key_id: AWS access key (optional, uses credential chain if None)
             secret_access_key: AWS secret key
             session_token: AWS session token (for temporary credentials)
+            prefix: Key prefix within the bucket (e.g. "cache/") for all objects
         """
         self.bucket = bucket
         self.region = region
@@ -59,6 +61,7 @@ class S3StorageBackend(CacheBackend):
         }
         self._store = S3Store(
             bucket,
+            prefix=prefix,
             region=region,
             client_options={
                 "allow_http": bool(endpoint_url and endpoint_url.startswith("http://")),
@@ -92,24 +95,14 @@ class S3StorageBackend(CacheBackend):
         self._bucket_checked = True
 
     def _get_object_key(self, key: str) -> str:
-        """Convert cache key to S3 object key.
+        """Convert cache key to S3 object key (relative to the store prefix).
 
-        Args:
-            key: Cache key (e.g., "titiler:tile:collection:item:z:x:y:hash")
-
-        Returns:
-            S3 object key with proper structure for organization
+        Every ':' becomes '/', namespace included, e.g.
+        "titiler:tile:collection:item:10:512:384:abc123"
+        -> "titiler/tile/collection/item/10/512/384/abc123".
+        Cache keys never contain '/', so clear_pattern maps it back exactly.
         """
-        # Convert cache key to S3 path structure for better organization
-        # e.g., "titiler:tile:collection:item:10:512:384:abc123"
-        # -> "tiles/collection/item/10/512/384/abc123"
-        parts = key.split(":")
-        if len(parts) >= 2 and parts[1] == "tile":
-            # Tile cache key structure
-            return "/".join(["tiles"] + parts[2:])
-        else:
-            # Generic cache key - use as-is but replace colons
-            return key.replace(":", "/")
+        return key.replace(":", "/")
 
     async def get(self, key: str) -> Optional[bytes]:
         """Retrieve data from S3."""
@@ -215,11 +208,7 @@ class S3StorageBackend(CacheBackend):
             prefix = self._get_object_key(literal).rpartition("/")[0]
             regex = re.compile(fnmatch.translate(pattern))
         else:
-            regex = pattern
-            source = pattern.pattern
-            prefix = (
-                source[1:].split("[.*+?^${}()|\\]")[0] if source.startswith("^") else ""
-            )
+            regex, prefix = pattern, ""  # no safe literal prefix: list everything
 
         deleted = 0
         try:
@@ -297,4 +286,5 @@ class S3StorageBackend(CacheBackend):
             if settings.secret_access_key
             else None,
             session_token=settings.session_token,
+            prefix=settings.prefix,
         )
