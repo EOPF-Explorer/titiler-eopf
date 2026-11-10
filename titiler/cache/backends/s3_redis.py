@@ -179,18 +179,18 @@ class S3RedisCacheBackend(CacheBackend):
 
         Returns the Redis count, the entries that stop being served. An error
         from either backend propagates, so a failed S3 delete is never a success.
+        S3 goes first: if it fails, the metadata is intact and the entries are
+        still served, so a failed pattern means nothing was invalidated.
         """
         try:
             self._stats["total_operations"] += 1
 
-            # Clear metadata from Redis first (faster pattern matching)
+            s3_deleted = await self.s3.clear_pattern(pattern)
+            self._stats["s3_operations"] += 1
+
             metadata_pattern = f"{self.metadata_prefix}{pattern}"
             redis_deleted = await self.redis.clear_pattern(metadata_pattern)
             self._stats["redis_operations"] += 1
-
-            # Clear data from S3
-            s3_deleted = await self.s3.clear_pattern(pattern)
-            self._stats["s3_operations"] += 1
 
             logger.debug(
                 f"Composite Cache CLEAR pattern: {pattern} (redis: {redis_deleted}, s3: {s3_deleted})"

@@ -126,7 +126,9 @@ Every call must send `Authorization: Bearer <token>`; responses carry
 - `TITILER_EOPF_CACHE_ADMIN_TOKEN`: Bearer token (from `cache.admin.auth.existingSecret`)
 
 `POST <prefix>/invalidate` accepts 1-100 patterns of 1-256 characters each
-(422 otherwise). Patterns are confined to the cache namespace: a pattern not
+(422 otherwise). Patterns may use the `*` and `?` wildcards; `[`, `]` and `\` are
+rejected, because Redis and the S3 backend read them differently. Patterns are
+confined to the cache namespace: a pattern not
 starting with `<namespace>:` is prefixed with it, so `*` clears this app's keys
 only. Deployments that share a Redis DB or S3 bucket must use distinct
 `cache.namespace` values to be isolated from each other.

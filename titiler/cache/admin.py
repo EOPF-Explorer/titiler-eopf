@@ -20,12 +20,18 @@ MIN_TOKEN_LENGTH = 16
 class InvalidateRequest(BaseModel):
     """Request model for cache invalidation."""
 
-    patterns: List[Annotated[str, StringConstraints(min_length=1, max_length=256)]] = (
-        Field(
-            min_length=1,
-            max_length=100,
-            description="Cache key patterns to invalidate",
-        )
+    # Printable ASCII without [ \ ]: Redis and the S3 backend's fnmatch read those
+    # differently, Redis' ? matches a byte where S3's matches a character, and a
+    # newline could forge log lines.
+    patterns: List[
+        Annotated[
+            str,
+            StringConstraints(min_length=1, max_length=256, pattern=r"^[ -Z^-~]+$"),
+        ]
+    ] = Field(
+        min_length=1,
+        max_length=100,
+        description="Cache key patterns to invalidate",
     )
 
 
