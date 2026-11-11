@@ -1,5 +1,6 @@
 """Test eopf openeo processes io module."""
 
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -352,3 +353,103 @@ class TestExceptionHandling:
 
             # Check that the RasterStack was created with the correct exceptions
             assert isinstance(result, RasterStack)
+
+
+def _s1_rtc_item(nodata) -> pystac.Item:
+    """A Sentinel-1 RTC-like item: one Zarr asset, `nodata` in the asset and
+    in each band (the real items give the string "nan")."""
+    item = pystac.Item(
+        id="s1-rtc-28RBS-20211203t071038",
+        geometry={
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [-18.1, 27.9],
+                    [-16.9, 27.9],
+                    [-16.9, 28.9],
+                    [-18.1, 28.9],
+                    [-18.1, 27.9],
+                ]
+            ],
+        },
+        bbox=[-18.1, 27.9, -16.9, 28.9],
+        datetime=datetime(2021, 12, 3, 7, 10, 38, tzinfo=timezone.utc),
+        properties={},
+    )
+    item.add_asset(
+        "gamma0-rtc-backscatter-desc",
+        pystac.Asset(
+            href="https://example.com/s1-rtc-28RBS.zarr/descending",
+            media_type="application/vnd.zarr; version=3",
+            roles=["data"],
+            extra_fields={
+                "nodata": nodata,
+                "bands": [
+                    {"name": "vv", "nodata": nodata, "data_type": "float32"},
+                    {"name": "vh", "nodata": nodata, "data_type": "float32"},
+                ],
+            },
+        ),
+    )
+    return item
+
+
+@pytest.mark.parametrize(
+    ("stac_nodata", "expected"),
+    [
+        ("nan", float("nan")),
+        ("inf", float("inf")),
+        ("-inf", float("-inf")),
+        (0, 0),
+        (-9999.0, -9999.0),
+    ],
+)
+def test_get_asset_info_nodata_string_to_float(stac_nodata, expected):
+    """A STAC `nodata` string ("nan", "inf", "-inf") reaches the reader as a
+    float. As a string, rasterio's reprojection raised `TypeError: ufunc
+    'isnan' not supported` for every Sentinel-1 RTC tile."""
+    with STACReader(_s1_rtc_item(stac_nodata)) as src:
+        info = src._get_asset_info(
+            {"name": "gamma0-rtc-backscatter-desc", "bands": ["vv"]}
+        )
+
+    nodata = info["method_options"]["nodata"]
+    assert not isinstance(nodata, str)
+    if np.isnan(expected):
+        assert np.isnan(nodata)
+    else:
+        assert nodata == expected
+
+
+def test_get_asset_info_nodata_invalid_string_is_ignored():
+    """A `nodata` string that is not a number is removed, not sent to the
+    reader (where it would fail in the same way)."""
+    with STACReader(_s1_rtc_item("none")) as src:
+        info = src._get_asset_info(
+            {"name": "gamma0-rtc-backscatter-desc", "bands": ["vv"]}
+        )
+
+    assert "nodata" not in info["method_options"]
+
+
+def test_get_options_zarr_gives_the_item_datetime():
+    """Zarr asset: the item datetime (UTC, no offset) goes to the reader, so
+    that it reads the item's time slice of a time-stacked store."""
+    item = _s1_rtc_item("nan")
+    with STACReader(item) as src:
+        info = src._get_asset_info(
+            {"name": "gamma0-rtc-backscatter-desc", "bands": ["vv"]}
+        )
+    assert info["reader_options"]["item_datetime"] == "2021-12-03T07:10:38"
+
+
+def test_get_options_cog_has_no_item_datetime():
+    """Not Zarr: no `item_datetime` (the rasterio reader does not take it)."""
+    with patch("titiler.eopf.openeo.reader.SimpleSTACReader.__attrs_post_init__"):
+        reader = STACReader(_s1_rtc_item("nan"))
+        metadata = pystac.Asset(
+            href="https://example.com/b04.tif",
+            media_type="image/tiff; application=geotiff",
+        )
+        reader_options, _ = reader._get_options({"name": "b04"}, metadata)
+    assert "item_datetime" not in reader_options
