@@ -115,16 +115,7 @@ def setup_cache_system():
         )
 
     elif cache_settings.backend == "s3" and cache_settings.s3:
-        cache_backend = S3StorageBackend(
-            bucket=cache_settings.s3.bucket,
-            region=cache_settings.s3.region,
-            endpoint_url=cache_settings.s3.endpoint_url,
-            access_key_id=cache_settings.s3.access_key_id,
-            secret_access_key=cache_settings.s3.secret_access_key.get_secret_value()
-            if cache_settings.s3.secret_access_key
-            else None,
-            session_token=cache_settings.s3.session_token,
-        )
+        cache_backend = S3StorageBackend.from_settings(cache_settings.s3)
         logger.info(f"S3 cache configured: {cache_settings.s3.bucket}")
 
     elif (
