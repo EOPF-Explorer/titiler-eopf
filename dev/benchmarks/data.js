@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794345477328,
+  "lastUpdate": 1794475754404,
   "repoUrl": "https://github.com/EOPF-Explorer/titiler-eopf",
   "entries": {
     "titiler-eopf Benchmarks": [
@@ -2912,6 +2912,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.04115146799853273",
             "extra": "mean: 408.975767080001 msec\nrounds: 50"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "10154151+lhoupert@users.noreply.github.com",
+            "name": "Loïc Houpert",
+            "username": "lhoupert"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c928819a1d8b79f0895190b5ecc11d84396c8e83",
+          "message": "fix(cache): keep the namespace and prefix in S3 object keys (#233)",
+          "timestamp": "2026-11-12T09:25:35Z",
+          "tree_id": "f3ee8811f1d985e09d1129428317928b8c0c43b0",
+          "url": "https://github.com/EOPF-Explorer/titiler-eopf/commit/c928819a1d8b79f0895190b5ecc11d84396c8e83"
+        },
+        "date": 1794475753477,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "GeoZarrReader-Open",
+            "value": 49.710645171378374,
+            "unit": "iter/sec",
+            "range": "stddev: 0.015129333869973872",
+            "extra": "mean: 20.11641563999987 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Info",
+            "value": 53.03608450711166,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00047618432185486583",
+            "extra": "mean: 18.85508723529372 msec\nrounds: 51"
+          },
+          {
+            "name": "GeoZarrReader-Preview",
+            "value": 2.5295235077787277,
+            "unit": "iter/sec",
+            "range": "stddev: 0.024750219374652386",
+            "extra": "mean: 395.3313724600008 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Tile",
+            "value": 2.3474897997548094,
+            "unit": "iter/sec",
+            "range": "stddev: 0.050310370342704976",
+            "extra": "mean: 425.98694150000057 msec\nrounds: 50"
           }
         ]
       }
