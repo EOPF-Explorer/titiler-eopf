@@ -11,6 +11,24 @@
 
 **Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.8.0...v0.9.0
 
+## 0.12.5 (2026-11-12)
+
+## What's Changed
+* chore(openeo): upgrade titiler-openeo to version 0.20.0 and add angle band support by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/225
+* chore(deps): bump the python group across 1 directory with 14 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/227
+* fix: raise proper 400 error when store point to an array by @vincentsarago in https://github.com/EOPF-Explorer/titiler-eopf/pull/165
+* chore(deps): bump the docker group with 2 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/218
+* refactor(openeo): use the titiler-openeo 0.20 reader seam, drop the _reader/load_collection copies by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/231
+* fix: return 400 for missing variables and multidim expression by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/230
+* fix(openeo): convert STAC nodata strings to float by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/237
+* fix(openeo): read the time slice of the item datetime by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/238
+* fix(cache): keep the namespace and prefix in S3 object keys by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/233
+* fix(cache): store tiles for tile_ttl by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/235
+* fix(cache): report what s3-redis actually invalidated by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/236
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.12.4...v0.12.5
+
 ## 0.12.4 (2026-10-26)
 
 ## What's Changed
