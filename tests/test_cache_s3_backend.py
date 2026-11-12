@@ -55,6 +55,8 @@ async def test_missing_bucket_is_unavailable_not_a_miss(s3_endpoint, s3_client):
     with pytest.raises(CacheBackendUnavailable):
         await backend.get("titiler:tile:coll:item:9:9:9:absent")
     assert await backend.set("titiler:tile:coll:item:9:9:9:absent", b"x") is False
+    with pytest.raises(CacheBackendUnavailable):
+        await backend.clear_pattern("titiler:tile:*")
 
 
 def test_constructs_without_endpoint_or_credentials():
@@ -301,6 +303,24 @@ async def test_clear_pattern_wildcard_inside_a_key_segment(backend):
 
     assert await backend.clear_pattern("titiler:meta:coll*") == 2
     assert await backend.get("titiler:other:collection:c") == b"c"
+
+
+@pytest.mark.asyncio
+async def test_clear_pattern_raises_when_the_delete_fails(backend, monkeypatch):
+    """A failed delete is an error, never a count of what was not deleted."""
+    import obstore
+
+    from titiler.cache.backends.base import CacheError
+
+    await backend.set("titiler:tilejson:coll:x", b"x")
+
+    async def failing_delete(*args, **kwargs):
+        raise OSError("S3 refused the delete")
+
+    monkeypatch.setattr(obstore, "delete_async", failing_delete)
+    with pytest.raises(CacheError) as excinfo:
+        await backend.clear_pattern("titiler:tilejson:coll:*")
+    assert type(excinfo.value) is CacheError  # not "unavailable": the bucket answered
 
 
 @pytest.mark.asyncio

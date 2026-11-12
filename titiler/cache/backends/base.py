@@ -73,6 +73,10 @@ class CacheBackend(abc.ABC):
 
         Returns:
             Number of keys deleted
+
+        Raises:
+            CacheBackendUnavailable: pass it through as is, never wrapped
+            CacheError: deletion failed; never return a partial count instead
         """
         ...
 

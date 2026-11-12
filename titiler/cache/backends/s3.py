@@ -225,9 +225,13 @@ class S3StorageBackend(CacheBackend):
                 if doomed:
                     await obstore.delete_async(self._store, doomed)
                     deleted += len(doomed)
+        except CacheBackendUnavailable:
+            self._stats["errors"] += 1
+            raise
         except Exception as e:
             self._stats["errors"] += 1
             logger.error(f"S3 clear pattern error for {pattern}: {_brief(e)}")
+            raise CacheError(f"Failed to clear pattern {pattern}: {_brief(e)}") from e
 
         return deleted
 
