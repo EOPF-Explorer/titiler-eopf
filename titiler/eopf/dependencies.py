@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import Query
 
 from titiler.core.dependencies import BidxParams, DefaultDependency, ExpressionParams
+from titiler.core.errors import BadRequestError
 from titiler.xarray.dependencies import SelDimStr
 
 
@@ -35,6 +36,6 @@ class LayerParams(BidxParams, ExpressionParams, VariablesParams):
     def __post_init__(self):
         """Post Init."""
         if not self.variables and not self.expression:
-            raise ValueError(
+            raise BadRequestError(
                 "variables must be defined either via expression or variables options."
             )

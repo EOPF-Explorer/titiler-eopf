@@ -1,32 +1,19 @@
 """Custom stacApiBackend for EOPF."""
 
-from typing import Optional
+from collections.abc import Sequence
 
-from attrs import define
-from openeo_pg_parser_networkx.pg_schema import BoundingBox, TemporalInterval
-from pystac import Collection, Item
+from attrs import define, field
+from pystac import Collection
 from pystac.extensions import datacube as dc
-from rasterio.warp import transform_bounds
-from rio_tiler.errors import EmptyMosaicError, TileOutsideBounds
-from rio_tiler.mosaic.methods import PixelSelectionMethod
-from rio_tiler.mosaic.reader import mosaic_reader
+from rio_tiler.types import AssetType
 
-from titiler.openeo.errors import (
-    ItemsLimitExceeded,
-    NoDataAvailable,
-    OutputLimitExceeded,
-)
-from titiler.openeo.processes.implementations.data_model import RasterStack
-from titiler.openeo.reader import _estimate_output_dimensions
-from titiler.openeo.settings import ProcessingSettings
+from titiler.openeo.reader import SimpleSTACReader
 from titiler.openeo.stacapi import LoadCollection as BaseLoadCollection
 from titiler.openeo.stacapi import stacApiBackend as BaseBackend
 
 from ..stac import _parse_asset
 from .angles import ANGLE_BANDS, has_angle_bands
-from .reader import _reader
-
-processing_settings = ProcessingSettings()
+from .reader import STACReader
 
 
 def extract_bands_from_asset(asset) -> list[dict]:
@@ -390,249 +377,27 @@ class stacApiBackend(BaseBackend):
         return
 
 
-def _make_mosaic_task(
-    date_items: list[Item],
-    bbox: list[float],
-    bounds_crs,
-    output_crs,
-    bands: list[str] | None,
-    width: int | None,
-    height: int | None,
-    tile_buffer: float | None,
-):
-    """Create a closure that loads data for a date group."""
-
-    # parse bands to assets with options format expected by _reader
-    assets = _parse_asset(bands) if bands else None
-
-    def task():
-        mosaic_kwargs = {
-            "threads": 0,
-            "bounds_crs": bounds_crs,
-            "assets": assets,
-            "dst_crs": output_crs,
-            "width": int(width) if width else width,
-            "height": int(height) if height else height,
-            "buffer": float(tile_buffer) if tile_buffer is not None else tile_buffer,
-            "pixel_selection": PixelSelectionMethod["first"].value(),
-            # No explicit allowed_exceptions: mosaic_reader's own default is
-            # already (TileOutsideBounds,) (rio-tiler 9.4.2). The
-            # EmptyMosaicError -> TileOutsideBounds conversion below is the
-            # real content here.
-        }
-
-        try:
-            img, _ = mosaic_reader(
-                date_items,
-                _reader,
-                bbox,
-                **mosaic_kwargs,
-            )
-            return img
-        except EmptyMosaicError as e:
-            # All items failed to return data for this bbox/date.
-            # Re-raise as TileOutsideBounds so RasterStack can handle it gracefully.
-            raise TileOutsideBounds(
-                f"No valid data found in bbox {bbox} for date group"
-            ) from e
-
-    return task
-
-
-def _group_items_by_date(items: list[Item]) -> dict[str, list[Item]]:
-    """Group items by their datetime."""
-    items_by_date: dict[str, list[Item]] = {}
-    for item in items:
-        date = item.datetime.isoformat()
-        if date not in items_by_date:
-            items_by_date[date] = []
-        items_by_date[date].append(item)
-    return items_by_date
-
-
-def _build_tasks(
-    items_by_date: dict[str, list[Item]],
-    bbox: list[float],
-    bounds_crs,
-    output_crs,
-    bands: list[str] | None,
-    width: int | None,
-    height: int | None,
-    tile_buffer: float | None,
-) -> list:
-    """Build task list for RasterStack from grouped items."""
-    tasks = []
-    for date, date_items in items_by_date.items():
-        task_fn = _make_mosaic_task(
-            date_items,
-            bbox,
-            bounds_crs,
-            output_crs,
-            bands,
-            width,
-            height,
-            tile_buffer,
-        )
-        geometries = [item.geometry for item in date_items if item.geometry is not None]
-        tasks.append(
-            (
-                task_fn,
-                {
-                    "id": date,
-                    "datetime": date_items[0].datetime if date_items else None,
-                    "geometry": geometries if geometries else None,
-                    # The source items behind this date group's mosaic. Carried
-                    # so processes that need per-item STAC metadata (asset
-                    # hrefs, properties) can reach it -- notably
-                    # sar_backscatter, whose calibration LUTs and GCP geometry
-                    # are per source item. Retrieve via
-                    # RasterStack.get_source_items, never by reaching into task
-                    # metadata directly. Matches upstream's own load_collection.
-                    "items": date_items,
-                },
-            )
-        )
-    return tasks
-
-
 @define
 class LoadCollection(BaseLoadCollection):
     """Load Collection process implementation with Zarr support.
 
-    This class inherits from the base LoadCollection and uses our custom
-    _reader that supports both COG and Zarr assets.
+    Upstream `load_collection` does the read. This class only gives it the EOPF
+    reader and the EOPF band notation, through the backend seam
+    (sentinel-hub/titiler-openeo#462, ADR 0011):
+
+    - `reader_cls`: `STACReader` opens each item, and sends the Zarr assets to
+      `GeoZarrReader`. The same class is used for the dimension estimate.
+    - `_bands_to_assets`: a band in `<asset>|bands=<band>` form becomes the
+      asset dict that `STACReader` reads.
 
     NOTE: `stac_api` is inherited from `BaseLoadCollection` rather than
-    redeclared here. Upstream 0.18.0 added `signer_key: Optional[str] =
-    field(default=None)` to the base class; attrs orders an overridden field
-    at the *subclass's* declaration position, so redeclaring `stac_api` here
-    (mandatory, no default) put it after `signer_key` (has a default) and
-    attrs refused to build the class ("No mandatory attributes allowed after
-    an attribute with a default value"). EOPF's `stacApiBackend` subclasses
-    the upstream one, so passing an instance of it still satisfies the
-    inherited (upstream-typed) `stac_api` field.
+    redeclared here. attrs orders an overridden field at the *subclass's*
+    declaration position, so redeclaring `stac_api` (mandatory, no default)
+    after `signer_key` (has a default) makes attrs refuse to build the class.
     """
 
-    def _validate_limits(
-        self, items: list[Item], width: int | None, height: int | None
-    ) -> None:
-        """Validate item count and pixel limits."""
-        if len(items) > processing_settings.max_items:
-            raise ItemsLimitExceeded(len(items), processing_settings.max_items)
+    reader_cls: type[SimpleSTACReader] | None = field(default=STACReader)
 
-        if width and height:
-            width_int = int(width)
-            height_int = int(height)
-            pixel_count = width_int * height_int * len(items)
-            if pixel_count > processing_settings.max_pixels:
-                raise OutputLimitExceeded(
-                    width_int,
-                    height_int,
-                    processing_settings.max_pixels,
-                    items_count=len(items),
-                )
-
-    def load_collection(
-        self,
-        id: str,
-        # NOTE: spatial_extent/temporal_extent stay `Optional[X]` (old-style),
-        # not `X | None`, deliberately. titiler.openeo's process-graph
-        # ParameterReference resolution (core._is_optional_type) only
-        # recognises `typing.Union` -- `typing.get_origin(X | None)` returns
-        # `types.UnionType`, a different object, so `X | None` silently skips
-        # the BoundingBox/TemporalInterval coercion and a raw dict/list from a
-        # UDP parameter default reaches this function unconverted (then fails
-        # deeper, e.g. `temporal_extent.start` on a plain list in
-        # LoadCollection._get_items). Confirmed this affects both parameters
-        # identically; upstream's own load_collection dodges it only because
-        # it happens to use `Optional[X]` already. See EOPF-Explorer/titiler-eopf
-        # migration notes and the upstream fix this should eventually make
-        # unnecessary.
-        spatial_extent: Optional[BoundingBox] = None,
-        temporal_extent: Optional[TemporalInterval] = None,
-        bands: list[str] | None = None,
-        properties: dict | None = None,
-        # private arguments
-        width: int | None = 1024,
-        height: int | None = 1024,
-        tile_buffer: float | None = None,
-        named_parameters: dict | None = None,
-        target_crs: int | str | None = None,
-    ) -> RasterStack:
-        """Load Collection with Zarr support.
-
-        Args:
-            id: Collection ID
-            spatial_extent: Bounding box for the output (coordinates in its own CRS)
-            temporal_extent: Temporal filter
-            bands: Band names to load
-            properties: Metadata filters
-            width: Output width in pixels
-            height: Output height in pixels
-            tile_buffer: Tile overlap buffer
-            named_parameters: Named parameters for process graph evaluation
-            target_crs: Target CRS for output. If None, uses native CRS from source images.
-        """
-        # Retrieve up to one item beyond the configured processing limit so the
-        # guard below (_validate_limits) can detect genuine overflow. Without an
-        # explicit max_items, upstream's get_items silently caps at the first
-        # page (limit=100, newest-first), which drops whole months/years from
-        # wide temporal extents instead of raising ItemsLimitExceeded. Matches
-        # upstream's own load_collection (titiler-openeo#302).
-        items = self._get_items(
-            id,
-            spatial_extent=spatial_extent,
-            temporal_extent=temporal_extent,
-            properties=properties,
-            named_parameters=named_parameters,
-            limit=100,
-            max_items=processing_settings.max_items + 1,
-        )
-        if not items:
-            raise NoDataAvailable("There is no data available for the given extents.")
-
-        self._validate_limits(items, width, height)
-
-        # If bands parameter is missing, use the first asset from the first item
-        if bands is None and items and items[0].assets:
-            bands = list(items[0].assets.keys())[:1]
-
-        # Estimate dimensions based on items and spatial extent
-        dimensions = _estimate_output_dimensions(
-            items, spatial_extent, bands, width, height, target_crs=target_crs
-        )
-
-        width = dimensions["width"]
-        height = dimensions["height"]
-        bbox = dimensions["bbox"]
-        bounds_crs = dimensions["bounds_crs"]
-        output_crs = dimensions["crs"]
-
-        # Reproject bbox from bounds_crs to output_crs for the RasterStack bounds
-        output_bbox = (
-            list(transform_bounds(bounds_crs, output_crs, *bbox, densify_pts=21))
-            if bounds_crs != output_crs
-            else bbox
-        )
-
-        items_by_date = _group_items_by_date(items)
-        tasks = _build_tasks(
-            items_by_date,
-            bbox,
-            bounds_crs,
-            output_crs,
-            bands,
-            width,
-            height,
-            tile_buffer,
-        )
-
-        return RasterStack(
-            tasks=tasks,
-            timestamp_fn=lambda asset: asset["datetime"],
-            width=int(width) if width else None,
-            height=int(height) if height else None,
-            bounds=output_bbox,
-            dst_crs=output_crs,
-            band_names=bands if bands else [],
-        )
+    def _bands_to_assets(self, bands: list[str] | None) -> Sequence[AssetType] | None:
+        """Parse `<asset>|bands=<band>` (and the other asset options): one entry per band."""
+        return _parse_asset(bands) if bands else bands

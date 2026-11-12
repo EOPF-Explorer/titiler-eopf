@@ -142,6 +142,12 @@ class TestTileCacheMiddleware:
         )
 
         assert middleware._determine_cache_type("/tiles/10/512/384.png") == "tile"
+        tiles = "/collections/c/items/i/tiles/WebMercatorQuad"
+        assert middleware._determine_cache_type(f"{tiles}/10/512/384") == "tile"
+        # TileSet JSON and the mosaic asset list are metadata, not tiles
+        assert middleware._determine_cache_type(tiles) == "unknown"
+        assert middleware._determine_cache_type(f"{tiles}/3/4/2/assets") == "unknown"
+        assert middleware._determine_cache_type(f"{tiles}/10/512/384\n") == "unknown"
         assert middleware._determine_cache_type("/tilejson.json") == "tilejson"
         assert middleware._determine_cache_type("/preview") == "preview"
         assert middleware._determine_cache_type("/crop/bbox") == "crop"
@@ -264,8 +270,36 @@ class TestTileCacheMiddleware:
         assert response.status_code == 200
         call_next.assert_called_once()
 
-        # Verify data was cached
-        assert len(cache_backend.set_calls) == 1
+        # Verify data was cached; without tile_ttl, tiles use default_ttl
+        assert [ttl for _, _, ttl in cache_backend.set_calls] == [3600]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "path,ttl",
+        [
+            ("/tiles/10/512/384.png", 600),
+            ("/tilejson.json", 60),
+            ("/collections/c/tiles/WebMercatorQuad/3/4/2/assets", 60),
+        ],
+    )
+    async def test_tiles_are_stored_for_tile_ttl(self, path, ttl):
+        """Tiles are stored for tile_ttl, everything else for default_ttl."""
+        cache_backend = MockCacheBackend()
+        middleware = TileCacheMiddleware(
+            app=None,
+            cache_backend=cache_backend,
+            key_generator=CacheKeyGenerator("test-app"),
+            default_ttl=60,
+            tile_ttl=600,
+        )
+        request = MagicMock(method="GET", query_params={})
+        request.url.path = path
+        response = Response(content=b"body")
+        response.body_iterator = iter([b"body"])
+
+        await middleware.dispatch(request, AsyncMock(return_value=response))
+
+        assert [call_ttl for _, _, call_ttl in cache_backend.set_calls] == [ttl]
 
 
 class TestCacheControlMiddleware:

@@ -11,7 +11,7 @@ Uses Redis for both metadata and tile data storage.
 - **Use cases**: Development, testing, small deployments
 
 ### 2. S3-only (`s3`) 
-Uses S3 for tile data storage with TTL metadata stored as object tags.
+Uses S3 for tile data storage, with each object's expiry in its user metadata. The app never deletes expired objects, so the bucket needs a lifecycle expiration rule, on every prefix the cache writes, with days >= the largest cache TTL (also for `s3-redis`).
 - **Pros**: Unlimited storage, persistent across restarts
 - **Cons**: Higher latency, more complex TTL management
 - **Use cases**: Large datasets with infrequent access patterns
@@ -90,7 +90,7 @@ The chart automatically generates the following environment variables based on c
 - `TITILER_EOPF_CACHE_ENABLE`: "true" when cache is enabled
 - `TITILER_EOPF_CACHE_BACKEND`: Backend type (redis/s3/s3-redis)  
 - `TITILER_EOPF_CACHE_DEFAULT_TTL`: Default TTL in seconds
-- `TITILER_EOPF_CACHE_TILE_TTL`: Tile cache TTL in seconds
+- `TITILER_EOPF_CACHE_TILE_TTL`: TTL in seconds for z/x/y image tiles (unset: `DEFAULT_TTL`)
 - `TITILER_EOPF_CACHE_METADATA_TTL`: TTL for cached datatrees (from `cache.ttl.datasets`)
 - `TITILER_EOPF_CACHE_VERSION_PROBE_TTL`: Store-version probe throttle (0 disables probing)
 - `TITILER_EOPF_CACHE_NAMESPACE`: Cache key namespace
@@ -105,6 +105,11 @@ The chart automatically generates the following environment variables based on c
 - `TITILER_EOPF_CACHE_S3_BUCKET`: S3 bucket name
 - `TITILER_EOPF_CACHE_S3_REGION`: S3 region
 - `TITILER_EOPF_CACHE_S3_ENDPOINT_URL`: Custom S3 endpoint (optional)
+- `TITILER_EOPF_CACHE_S3_PREFIX`: Key prefix inside the bucket (from `cache.s3.prefix`, default `cache/`).
+  Upgrading: older releases ignored it and wrote `tiles/…` and `<namespace>/…` at the bucket
+  root. Those objects are never read again, so expire them with a bucket lifecycle rule.
+  If your prefix was `tiles/` (the old example), change it first, so live and orphaned
+  objects don't share a prefix.
 - `TITILER_EOPF_CACHE_S3_ACCESS_KEY_ID`: S3 access key (from secret)
 - `TITILER_EOPF_CACHE_S3_SECRET_ACCESS_KEY`: S3 secret key (from secret)
 
