@@ -361,6 +361,7 @@ if cache_backend and cache_key_generator:
         cache_paths=cache_settings.cache_paths,
         exclude_paths=[cache_admin_router.prefix] if cache_admin_router else None,
         default_ttl=cache_settings.default_ttl,
+        tile_ttl=cache_settings.tile_ttl,
         cache_status_header="X-Cache",
     )
     logger.info("Tile cache middleware enabled")
