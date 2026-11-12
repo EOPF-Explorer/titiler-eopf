@@ -22,7 +22,7 @@ cache:
     enabled: true
     bucket: "prod-tile-cache"
     region: "us-west-2"
-    prefix: "tiles/"
+    prefix: "cache/"
     auth:
       existingSecret: "s3-cache-secret"
       accessKeyIdKey: "access-key-id"
