@@ -1,7 +1,7 @@
 """Test titiler.eopf.main.app."""
 
 from unittest.mock import patch
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, unquote
 
 from owslib.wmts import WebMapTileService
 
@@ -398,7 +398,10 @@ def test_renders(get_stac_item, app, geozarr_stac):
     assert links["STAC Renders metadata for true_color"].endswith(
         f"{base}/renders/true_color"
     )
-    tilejson = links["tilejson file for true_color"]
+    # `Link.href` is a pydantic `AnyUrl`: it encodes the braces of the
+    # `{tileMatrixSetId}` template (developmentseed/titiler#1558).
+    path, query_string = links["tilejson file for true_color"].split("?", 1)
+    tilejson = f"{unquote(path)}?{query_string}"
     wmts = links["WMTS service for true_color"]
     # The item comes from the path: no `url` query parameter.
     assert f"{base}/{{tileMatrixSetId}}/tilejson.json?" in tilejson
@@ -409,7 +412,7 @@ def test_renders(get_stac_item, app, geozarr_stac):
         assert "title" not in query
         assert query["assets"] == ["reflectance|bands=b04,b03,b02"]
 
-    # The tilejson link works as is.
+    # The tilejson link works once the template is filled.
     response = app.get(
         tilejson.replace("{tileMatrixSetId}", "WebMercatorQuad").replace(
             "http://testserver", ""

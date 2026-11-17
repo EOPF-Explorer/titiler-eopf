@@ -35,7 +35,7 @@ from titiler.core.middleware import CacheControlMiddleware, TotalTimeMiddleware
 from titiler.core.models.OGC import Conformance, Landing
 from titiler.core.resources.enums import MediaType
 from titiler.core.utils import accept_media_type, create_html_response, update_openapi
-from titiler.extensions.render import _adapt_render_for_v2
+from titiler.extensions.render import _adapt_render_for_v2, stacRenderExtension
 from titiler.extensions.wmts import wmtsExtension
 from titiler.mosaic.errors import MOSAIC_STATUS_CODES
 from titiler.mosaic.extensions.wmts import wmtsExtension as wmtsExtensionMosaic
@@ -53,7 +53,6 @@ from .cache_deps import setup_cache
 from .extensions import (
     DatasetMetadataExtension,
     EOPFChunkVizExtension,
-    EOPFRenderExtension,
     EOPFViewerExtension,
     EOPFwmtsExtension,
 )
@@ -245,7 +244,7 @@ items = MultiBaseTilerFactory(
     get_renders=_get_renders_item,
     extensions=[
         wmtsExtension(),
-        EOPFRenderExtension(),
+        stacRenderExtension(),
     ],
     templates=templates,
 )
