@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794482294458,
+  "lastUpdate": 1794913549582,
   "repoUrl": "https://github.com/EOPF-Explorer/titiler-eopf",
   "entries": {
     "titiler-eopf Benchmarks": [
@@ -3120,6 +3120,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.040273276359786676",
             "extra": "mean: 234.19203093999926 msec\nrounds: 50"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "emmanuel.mathot@gmail.com",
+            "name": "Emmanuel Mathot",
+            "username": "emmanuelmathot"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fd56bbfb1e2045e00ef1a97791016cf0d38d2549",
+          "message": "feat(api): add /renders endpoint for STAC render extension (#229)\n\n* feat(render): add /renders endpoint for STAC render extension\n\n* feat(render): use titiler stacRenderExtension\n\ntitiler 2.4.1 no longer adds `url=` to the render links of path-based\nfactories (developmentseed/titiler#1558). Remove the local\nEOPFRenderExtension and register the upstream extension.\n\nBump titiler to >=2.4.1 and titiler-stacapi to >=2.2.0 (2.1.1 pins\ntitiler <2.3).\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5.5 <noreply@anthropic.com>",
+          "timestamp": "2026-11-17T12:02:04+01:00",
+          "tree_id": "d4921bdd16e609b31deb6225034e7f5c4ba097ed",
+          "url": "https://github.com/EOPF-Explorer/titiler-eopf/commit/fd56bbfb1e2045e00ef1a97791016cf0d38d2549"
+        },
+        "date": 1794913548934,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "GeoZarrReader-Open",
+            "value": 49.39677463977393,
+            "unit": "iter/sec",
+            "range": "stddev: 0.011625542080652532",
+            "extra": "mean: 20.244236739999764 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Info",
+            "value": 52.7459293460895,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0006750068302708645",
+            "extra": "mean: 18.958808999999892 msec\nrounds: 51"
+          },
+          {
+            "name": "GeoZarrReader-Preview",
+            "value": 2.524209144295128,
+            "unit": "iter/sec",
+            "range": "stddev: 0.02447282004529447",
+            "extra": "mean: 396.16368646 msec\nrounds: 50"
+          },
+          {
+            "name": "GeoZarrReader-Tile",
+            "value": 2.4321678800104376,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04114207804055546",
+            "extra": "mean: 411.1558286000013 msec\nrounds: 50"
           }
         ]
       }
