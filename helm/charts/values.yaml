@@ -121,7 +121,8 @@ cache:
         existingSecret: ""
         existingSecretKey: "redis-password"
 
-  # S3 cache configuration
+  # S3 cache configuration. S3 backends never delete expired objects, so the
+  # bucket needs a lifecycle expiration rule with days >= the largest cache TTL in days.
   s3:
     enabled: false
     bucket: ""

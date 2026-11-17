@@ -17,8 +17,10 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 
 import attr
+import numpy
 import obstore
 import xarray
+import zarr
 from affine import Affine
 from morecantile import Tile, TileMatrixSet
 from rasterio import windows
@@ -71,6 +73,36 @@ def cache_settings() -> EOPFCacheSettings:
 
 class MissingVariables(RioTilerError):
     """Missing Variables."""
+
+
+class InvalidGeoZarrStore(RioTilerError):
+    """The GeoZarr store is not a Zarr group."""
+
+
+# The largest difference between a STAC item datetime and the time slice of
+# the store that the reader takes for it.
+ITEM_TIME_TOLERANCE = numpy.timedelta64(1, "h")
+
+
+def _select_item_time(da: xarray.DataArray, item_datetime: str) -> xarray.DataArray:
+    """The time slice of `da` nearest to `item_datetime`.
+
+    Uses the smallest absolute difference, not `sel(method="nearest")`:
+    the `time` axis of a store that is appended to is not always sorted
+    (the Sentinel-1 RTC stores are not), and `nearest` needs a sorted index.
+    A slice more than `ITEM_TIME_TOLERANCE` away is an error: a read of
+    another acquisition must not look like a valid result.
+    """
+    target = numpy.datetime64(item_datetime, "ns")
+    times = da["time"].values.astype("datetime64[ns]")
+    delta = numpy.abs(times - target)
+    index = int(delta.argmin())
+    if delta[index] > ITEM_TIME_TOLERANCE:
+        raise BadRequestError(
+            f"No time slice for the item datetime {item_datetime}: the nearest "
+            f"is {numpy.datetime_as_string(times[index], unit='s')}."
+        )
+    return da.isel(time=index)
 
 
 # Bound the in-process datatree memo. Unbounded caching + version-keying would
@@ -163,20 +195,25 @@ def _cache_token(src_path: str) -> tuple[str | None, int | None]:
 
 
 def _open_from_store(src_path: str) -> xarray.DataTree:
-    """Open the datatree from the store (no caching)."""
+    """Open the Zarr Group (datatree) from the store (no caching)."""
     zarr_store = ObjectStore(store=_get_store(src_path), read_only=True)
-    return xarray.open_datatree(
-        zarr_store,
-        decode_times=True,
-        decode_coords="all",
-        create_default_indexes=False,
-        # By default xarray will try to load the consolidated metadata
-        # consolidated=True,
-        # See https://github.com/pydata/xarray/issues/11361
-        # use_zarr_fill_value_as_mask=True,
-        zarr_format=3,
-        engine="zarr",
-    )
+    try:
+        return xarray.open_datatree(
+            zarr_store,
+            decode_times=True,
+            decode_coords="all",
+            create_default_indexes=False,
+            # By default xarray will try to load the consolidated metadata
+            # consolidated=True,
+            # See https://github.com/pydata/xarray/issues/11361
+            # use_zarr_fill_value_as_mask=True,
+            zarr_format=3,
+            engine="zarr",
+        )
+    except zarr.errors.ContainsArrayError as e:
+        raise InvalidGeoZarrStore(
+            f"{src_path} does not appear to be a valid GeoZarr group."
+        ) from e
 
 
 @lru_cache(maxsize=DATASET_CACHE_MAXSIZE)
@@ -569,6 +606,11 @@ class GeoZarrReader(BaseReader):
 
     opener: Callable[..., xarray.DataTree] = attr.ib(default=open_dataset)
     opener_options: dict = attr.ib(factory=dict)
+
+    # The datetime of the STAC item that points to this store. A store can
+    # stack several acquisitions on a `time` dimension (e.g. Sentinel-1 RTC),
+    # with one item per acquisition: read the item's own time slice.
+    item_datetime: str | None = attr.ib(default=None)
 
     groups: list[str] = attr.ib(init=False)
     variables: list[str] = attr.ib(init=False)
@@ -1024,7 +1066,15 @@ class GeoZarrReader(BaseReader):
                 f"Group {group} or Array {variable} do not have spatial/geo-proj conventions."
             )
 
-        for selector in _parse_dsl(sel):
+        selectors = _parse_dsl(sel)
+        if (
+            self.item_datetime
+            and "time" in da.dims
+            and not any(s["dimension"] == "time" for s in selectors)
+        ):
+            da = _select_item_time(da, self.item_datetime)
+
+        for selector in selectors:
             dimension = selector["dimension"]
             values = selector["values"]
             method = selector["method"]
@@ -1201,7 +1251,11 @@ class GeoZarrReader(BaseReader):
                 )
                 if expression:
                     if len(img.band_names) > 1:
-                        raise ValueError("Can't use `expression` for multidim dataset")
+                        raise InvalidExpression(
+                            "Can't use `expression` for multidim dataset: the variable has "
+                            f"{len(img.band_names)} bands. Select a single slice with `sel=` "
+                            "(e.g. `sel=time=...`)."
+                        )
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
 
@@ -1313,7 +1367,11 @@ class GeoZarrReader(BaseReader):
                 )
                 if expression:
                     if len(img.band_names) > 1:
-                        raise ValueError("Can't use `expression` for multidim dataset")
+                        raise InvalidExpression(
+                            "Can't use `expression` for multidim dataset: the variable has "
+                            f"{len(img.band_names)} bands. Select a single slice with `sel=` "
+                            "(e.g. `sel=time=...`)."
+                        )
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
 
@@ -1398,7 +1456,11 @@ class GeoZarrReader(BaseReader):
                 )
                 if expression:
                     if len(img.band_names) > 1:
-                        raise ValueError("Can't use `expression` for multidim dataset")
+                        raise InvalidExpression(
+                            "Can't use `expression` for multidim dataset: the variable has "
+                            f"{len(img.band_names)} bands. Select a single slice with `sel=` "
+                            "(e.g. `sel=time=...`)."
+                        )
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
 
@@ -1464,7 +1526,11 @@ class GeoZarrReader(BaseReader):
                 pt = da.point(*args, **kwargs)
                 if expression:
                     if len(pt.band_names) > 1:
-                        raise ValueError("Can't use `expression` for multidim dataset")
+                        raise InvalidExpression(
+                            "Can't use `expression` for multidim dataset: the variable has "
+                            f"{len(pt.band_names)} bands. Select a single slice with `sel=` "
+                            "(e.g. `sel=time=...`)."
+                        )
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     pt.band_names = [self._variable_idx[gv]]
 
@@ -1560,7 +1626,11 @@ class GeoZarrReader(BaseReader):
                 )
                 if expression:
                     if len(img.band_names) > 1:
-                        raise ValueError("Can't use `expression` for multidim dataset")
+                        raise InvalidExpression(
+                            "Can't use `expression` for multidim dataset: the variable has "
+                            f"{len(img.band_names)} bands. Select a single slice with `sel=` "
+                            "(e.g. `sel=time=...`)."
+                        )
                     # NOTE: create band_names in form of Var{ix} used later for expressions
                     img.band_names = [self._variable_idx[gv]]
 

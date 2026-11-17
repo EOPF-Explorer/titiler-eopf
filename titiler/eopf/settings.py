@@ -1,6 +1,6 @@
 """API settings."""
 
-from pydantic import SecretStr, field_validator, model_validator
+from pydantic import PositiveInt, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing_extensions import Self
 
@@ -46,7 +46,7 @@ class EOPFCacheSettings(BaseCacheSettings):
     # EOPF-specific cache settings
     namespace: str = "titiler-eopf"
     default_ttl: int = 3600  # 1 hour default TTL
-    tile_ttl: int = 86400  # 24 hours for tiles
+    tile_ttl: PositiveInt | None = None  # tiles; None means default_ttl
     metadata_ttl: int = 300  # 5 minutes for metadata (incl. cached datatrees)
     # TTL (seconds) for the store-version probe; bounds both the staleness window
     # after an append and the per-process HEAD rate (see GeoZarrReader caching).

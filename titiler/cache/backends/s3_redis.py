@@ -175,34 +175,31 @@ class S3RedisCacheBackend(CacheBackend):
             return False
 
     async def clear_pattern(self, pattern: Union[str, Pattern]) -> int:
-        """Clear pattern from both Redis and S3."""
+        """Clear pattern from both Redis and S3.
+
+        Returns the Redis count, the entries that stop being served. An error
+        from either backend propagates, so a failed S3 delete is never a success.
+        S3 goes first: if it fails, the metadata is intact and the entries are
+        still served, so a failed pattern means nothing was invalidated.
+        """
         try:
             self._stats["total_operations"] += 1
 
-            # Clear metadata from Redis first (faster pattern matching)
+            s3_deleted = await self.s3.clear_pattern(pattern)
+            self._stats["s3_operations"] += 1
+
             metadata_pattern = f"{self.metadata_prefix}{pattern}"
             redis_deleted = await self.redis.clear_pattern(metadata_pattern)
             self._stats["redis_operations"] += 1
 
-            # Clear data from S3
-            s3_deleted = await self.s3.clear_pattern(pattern)
-            self._stats["s3_operations"] += 1
-
-            total_deleted = max(
-                redis_deleted, s3_deleted
-            )  # Use max as they should be similar
             logger.debug(
                 f"Composite Cache CLEAR pattern: {pattern} (redis: {redis_deleted}, s3: {s3_deleted})"
             )
-            return total_deleted
+            return redis_deleted
 
-        except CacheBackendUnavailable:
+        except Exception:
             self._stats["errors"] += 1
-            return 0
-        except Exception as e:
-            self._stats["errors"] += 1
-            logger.error(f"Composite clear pattern error for {pattern}: {e}")
-            return 0
+            raise
 
     async def health_check(self) -> dict[str, Any]:
         """Check health of both Redis and S3 backends."""

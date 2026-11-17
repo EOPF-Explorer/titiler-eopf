@@ -1,12 +1,15 @@
 """titiler-eopf openeo test processes"""
 
+import datetime
 import os
 
 from openeo_pg_parser_networkx.pg_schema import BoundingBox
+from rio_tiler.errors import TileOutsideBounds
 from rio_tiler.models import ImageData
 
 from titiler.eopf.openeo.processes import PROCESS_IMPLEMENTATIONS, process_registry
 from titiler.eopf.openeo.processes.implementations import load_zarr
+from titiler.eopf.openeo.reader import STACReader
 from titiler.eopf.openeo.stacapi import LoadCollection
 
 FIXTURES_DIRECTORY = os.path.join(os.path.dirname(__file__), "fixtures")
@@ -121,3 +124,96 @@ def test_load_collection(geozarr_stac):
     # titiler-openeo>=0.20 (#460) labels each image with the stack's
     # band names, so the band dimension keeps the requested labels.
     assert img_stack[0].band_descriptions == collection.band_names
+
+
+class _FakeBackend:
+    """STAC backend stand-in that returns fixed items."""
+
+    url = "https://fake.api.io/stac"
+
+    def __init__(self, items):
+        self.items = items
+
+    def get_items(self, *args, **kwargs):
+        return self.items
+
+
+_BBOX = BoundingBox(
+    west=14.941406249999993,
+    south=37.857507156252034,
+    east=15.11718749999999,
+    north=37.99616267972812,
+)
+
+
+def _valid_pixels(collection) -> int:
+    img = list(collection.values())[0]
+    return int((~img.array.mask).sum())
+
+
+def test_load_collection_geojson_extent(geozarr_stac):
+    """A GeoJSON polygon extent masks the pixels outside the polygon."""
+    loaders = LoadCollection(_FakeBackend([geozarr_stac]))
+    kwargs = {"width": 64, "height": 64, "bands": ["reflectance|bands=b04"]}
+
+    # Triangle over the item (14.99..15.12, 37.85..37.95), and its bounding box:
+    # the same output grid, the triangle masks about half of it.
+    west, south, east, north = 15.0, 37.86, 15.11, 37.94
+    triangle = {
+        "type": "Polygon",
+        "coordinates": [[[west, south], [east, south], [east, north], [west, south]]],
+    }
+    box = BoundingBox(west=west, south=south, east=east, north=north)
+
+    full = loaders.load_collection("sentinel-2-l2a", spatial_extent=box, **kwargs)
+    half = loaders.load_collection("sentinel-2-l2a", spatial_extent=triangle, **kwargs)
+
+    assert 0 < _valid_pixels(half) < 0.75 * _valid_pixels(full)
+
+
+def test_load_collection_skips_empty_date(geozarr_stac, monkeypatch):
+    """A date with no pixels in the bbox is skipped; the other date keeps its label."""
+    empty = geozarr_stac.clone()
+    empty.id = "empty"
+    empty.datetime = datetime.datetime(2026, 3, 17, tzinfo=datetime.timezone.utc)
+
+    part = STACReader.part
+
+    def part_or_outside(self, *args, **kwargs):
+        if self.input.id == "empty":
+            raise TileOutsideBounds("no data in bbox")
+        return part(self, *args, **kwargs)
+
+    monkeypatch.setattr(STACReader, "part", part_or_outside)
+
+    loaders = LoadCollection(_FakeBackend([geozarr_stac, empty]))
+    collection = loaders.load_collection(
+        "sentinel-2-l2a",
+        spatial_extent=_BBOX,
+        width=64,
+        height=64,
+        bands=["reflectance|bands=b04"],
+    )
+
+    images = dict(collection.items())
+    assert list(images) == [geozarr_stac.datetime.replace(tzinfo=None)]
+
+
+def test_load_collection_null_datetime(geozarr_stac):
+    """An item with only `start_datetime`/`end_datetime` is read."""
+    item = geozarr_stac.clone()
+    item.datetime = None
+    item.properties["datetime"] = None
+
+    loaders = LoadCollection(_FakeBackend([item]))
+    collection = loaders.load_collection(
+        "sentinel-2-l2a",
+        spatial_extent=_BBOX,
+        width=64,
+        height=64,
+        bands=["reflectance|bands=b04"],
+    )
+
+    images = list(collection.values())
+    assert len(images) == 1
+    assert _valid_pixels(collection) > 0

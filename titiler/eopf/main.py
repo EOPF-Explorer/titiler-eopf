@@ -10,6 +10,7 @@ import xarray
 import zarr
 from fastapi import FastAPI, Query
 from pydantic import SecretStr
+from starlette import status
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.templating import Jinja2Templates
@@ -57,6 +58,7 @@ from .extensions import (
     EOPFwmtsExtension,
 )
 from .factory import TilerFactory
+from .reader import InvalidGeoZarrStore
 from .settings import ApiSettings, EOPFCacheSettings, STACAPISettings
 from .stac import (
     AssetsExprParams,
@@ -114,16 +116,7 @@ def setup_cache_system():
         )
 
     elif cache_settings.backend == "s3" and cache_settings.s3:
-        cache_backend = S3StorageBackend(
-            bucket=cache_settings.s3.bucket,
-            region=cache_settings.s3.region,
-            endpoint_url=cache_settings.s3.endpoint_url,
-            access_key_id=cache_settings.s3.access_key_id,
-            secret_access_key=cache_settings.s3.secret_access_key.get_secret_value()
-            if cache_settings.s3.secret_access_key
-            else None,
-            session_token=cache_settings.s3.session_token,
-        )
+        cache_backend = S3StorageBackend.from_settings(cache_settings.s3)
         logger.info(f"S3 cache configured: {cache_settings.s3.bucket}")
 
     elif (
@@ -309,7 +302,13 @@ app.include_router(
 TITILER_CONFORMS_TO.update(cmaps.conforms_to)
 
 # Error handlers
-ERRORS = {**DEFAULT_STATUS_CODES, **MOSAIC_STATUS_CODES, **STACAPI_STATUS_CODES}
+ERRORS = {
+    **DEFAULT_STATUS_CODES,
+    **MOSAIC_STATUS_CODES,
+    **STACAPI_STATUS_CODES,
+    InvalidGeoZarrStore: status.HTTP_400_BAD_REQUEST,
+    FileNotFoundError: status.HTTP_404_NOT_FOUND,
+}
 add_exception_handlers(app, ERRORS)
 
 # Set all CORS enabled origins
@@ -364,6 +363,7 @@ if cache_backend and cache_key_generator:
         cache_paths=cache_settings.cache_paths,
         exclude_paths=[cache_admin_router.prefix] if cache_admin_router else None,
         default_ttl=cache_settings.default_ttl,
+        tile_ttl=cache_settings.tile_ttl,
         cache_status_header="X-Cache",
     )
     logger.info("Tile cache middleware enabled")
