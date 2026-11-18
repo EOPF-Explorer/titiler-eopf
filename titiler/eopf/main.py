@@ -35,7 +35,7 @@ from titiler.core.middleware import CacheControlMiddleware, TotalTimeMiddleware
 from titiler.core.models.OGC import Conformance, Landing
 from titiler.core.resources.enums import MediaType
 from titiler.core.utils import accept_media_type, create_html_response, update_openapi
-from titiler.extensions.render import _adapt_render_for_v2
+from titiler.extensions.render import _adapt_render_for_v2, stacRenderExtension
 from titiler.extensions.wmts import wmtsExtension
 from titiler.mosaic.errors import MOSAIC_STATUS_CODES
 from titiler.mosaic.extensions.wmts import wmtsExtension as wmtsExtensionMosaic
@@ -115,16 +115,7 @@ def setup_cache_system():
         )
 
     elif cache_settings.backend == "s3" and cache_settings.s3:
-        cache_backend = S3StorageBackend(
-            bucket=cache_settings.s3.bucket,
-            region=cache_settings.s3.region,
-            endpoint_url=cache_settings.s3.endpoint_url,
-            access_key_id=cache_settings.s3.access_key_id,
-            secret_access_key=cache_settings.s3.secret_access_key.get_secret_value()
-            if cache_settings.s3.secret_access_key
-            else None,
-            session_token=cache_settings.s3.session_token,
-        )
+        cache_backend = S3StorageBackend.from_settings(cache_settings.s3)
         logger.info(f"S3 cache configured: {cache_settings.s3.bucket}")
 
     elif (
@@ -253,6 +244,7 @@ items = MultiBaseTilerFactory(
     get_renders=_get_renders_item,
     extensions=[
         wmtsExtension(),
+        stacRenderExtension(),
     ],
     templates=templates,
 )
@@ -370,6 +362,7 @@ if cache_backend and cache_key_generator:
         cache_paths=cache_settings.cache_paths,
         exclude_paths=[cache_admin_router.prefix] if cache_admin_router else None,
         default_ttl=cache_settings.default_ttl,
+        tile_ttl=cache_settings.tile_ttl,
         cache_status_header="X-Cache",
     )
     logger.info("Tile cache middleware enabled")
