@@ -76,10 +76,10 @@ def seeded_key(s3_endpoint):
     )
     client.create_bucket(Bucket=BUCKET)
     client.put_object(
-        Bucket=BUCKET, Key="tiles/coll/item/8/8/8/payload", Body=b"tile-bytes"
+        Bucket=BUCKET, Key="titiler/tile/coll/item/8/8/8/payload", Body=b"tile-bytes"
     )
     yield "titiler:tile:coll:item:8:8:8:payload"
-    client.delete_object(Bucket=BUCKET, Key="tiles/coll/item/8/8/8/payload")
+    client.delete_object(Bucket=BUCKET, Key="titiler/tile/coll/item/8/8/8/payload")
     client.delete_bucket(Bucket=BUCKET)
 
 

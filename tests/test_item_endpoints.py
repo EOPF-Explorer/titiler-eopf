@@ -1,7 +1,7 @@
 """Test titiler.eopf.main.app."""
 
 from unittest.mock import patch
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, unquote
 
 from owslib.wmts import WebMapTileService
 
@@ -350,3 +350,168 @@ def test_info_measurements(get_stac_item, app, geozarr_stac_measurements):
     )
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/png"
+
+
+@patch("titiler.stacapi.dependencies.get_stac_item")
+def test_renders(get_stac_item, app, geozarr_stac):
+    """Test /renders routes (STAC render extension)."""
+    collection = geozarr_stac.collection_id
+    item = geozarr_stac.id
+    base = f"/collections/{collection}/items/{item}"
+
+    get_stac_item.return_value = geozarr_stac
+
+    # Item without renders
+    response = app.get(f"{base}/renders")
+    assert response.status_code == 200
+    assert response.json()["renders"] == {}
+
+    response = app.get(f"{base}/renders/true_color")
+    assert response.status_code == 404
+
+    geozarr_stac.properties["renders"] = {
+        "true_color": {
+            "title": "True color",
+            "assets": ["reflectance|bands=b04,b03,b02"],
+            "rescale": [[0, 1]],
+        },
+        "invalid": {
+            "title": "No assets",
+            "rescale": [[0, 1]],
+        },
+    }
+
+    response = app.get(f"{base}/renders")
+    assert response.status_code == 200
+    renders = response.json()["renders"]
+    assert set(renders) == {"true_color", "invalid"}
+    assert renders["true_color"]["valid"]
+    assert not renders["invalid"]["valid"]
+
+    response = app.get(f"{base}/renders/true_color")
+    assert response.status_code == 200
+    render = response.json()
+    assert render["valid"]
+    assert render["params"]["assets"] == ["reflectance|bands=b04,b03,b02"]
+
+    links = {link["title"]: link["href"] for link in render["links"]}
+    assert links["STAC Renders metadata for true_color"].endswith(
+        f"{base}/renders/true_color"
+    )
+    # `Link.href` is a pydantic `AnyUrl`: it encodes the braces of the
+    # `{tileMatrixSetId}` template (developmentseed/titiler#1558).
+    path, query_string = links["tilejson file for true_color"].split("?", 1)
+    tilejson = f"{unquote(path)}?{query_string}"
+    wmts = links["WMTS service for true_color"]
+    # The item comes from the path: no `url` query parameter.
+    assert f"{base}/{{tileMatrixSetId}}/tilejson.json?" in tilejson
+    for href in (tilejson, wmts):
+        assert f"{base}/" in href
+        query = parse_qs(href.split("?", 1)[1])
+        assert "url" not in query
+        assert "title" not in query
+        assert query["assets"] == ["reflectance|bands=b04,b03,b02"]
+
+    # The tilejson link works once the template is filled.
+    response = app.get(
+        tilejson.replace("{tileMatrixSetId}", "WebMercatorQuad").replace(
+            "http://testserver", ""
+        )
+    )
+    assert response.status_code == 200
+    assert response.json()["tiles"]
+
+    # Unknown render
+    response = app.get(f"{base}/renders/unknown")
+    assert response.status_code == 404
+
+
+@patch("titiler.stacapi.dependencies.get_stac_item")
+def test_expression_multidim(get_stac_item, app, geozarr_3d_stac):
+    """A per-asset `expression` on a multi-band variable returns a 400 (#130)."""
+    collection = geozarr_3d_stac.collection_id
+    item = geozarr_3d_stac.id
+
+    get_stac_item.return_value = geozarr_3d_stac
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/preview.png",
+        params={"assets": "reflectance|expression=b02"},
+    )
+    assert response.status_code == 400
+    assert "multidim dataset" in response.json()["detail"]
+    assert "sel=" in response.json()["detail"]
+
+    # One time slice: the expression applies.
+    response = app.get(
+        f"/collections/{collection}/items/{item}/preview.png",
+        params={
+            "assets": "reflectance|expression=b02|sel=time=2022-01-01T00:00:00.000000000"
+        },
+    )
+    assert response.status_code == 200
+
+
+@patch("titiler.stacapi.dependencies.get_stac_item")
+def test_item_with_array(get_stac_item, app, geozarr_stac_array):
+    """Test /info route with an asset that points to a Zarr array."""
+    collection = geozarr_stac_array.collection_id
+    item = geozarr_stac_array.id
+    get_stac_item.return_value = geozarr_stac_array
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/assets",
+    )
+    assert response.status_code == 200
+    assert response.json() == ["b02_r10m", "reflectance"]
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/info?assets=:all:",
+    )
+    assert "does not appear to be a valid GeoZarr group" in response.text
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/info?assets=b02_r10m&assets=reflectance",
+    )
+    assert response.status_code == 400
+    assert "does not appear to be a valid GeoZarr group" in response.text
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/info?assets=b02_r10m",
+    )
+    assert response.status_code == 400
+    assert "does not appear to be a valid GeoZarr group" in response.text
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/info?assets=reflectance",
+    )
+    assert response.status_code == 200
+    assert {
+        "reflectance_b02",
+        "reflectance_b03",
+        "reflectance_b04",
+        "reflectance_b05",
+        "reflectance_b06",
+        "reflectance_b07",
+        "reflectance_b08",
+        "reflectance_b11",
+        "reflectance_b12",
+        "reflectance_b8a",
+    } == set(response.json().keys())
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/info?assets=reflectance|bands=red",
+    )
+    assert response.status_code == 200
+    assert {"reflectance_b04"} == set(response.json().keys())
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/preview?assets=reflectance|bands=red",
+    )
+    assert response.status_code == 200
+
+    response = app.get(
+        f"/collections/{collection}/items/{item}/preview?assets=b02_r10m",
+    )
+    assert response.status_code == 400
+    assert "does not appear to be a valid GeoZarr group" in response.text

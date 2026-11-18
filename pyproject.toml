@@ -1,6 +1,6 @@
 [project]
 name = "titiler.eopf"
-version = "0.12.4"
+version = "0.12.5"
 description = "TiTiler application for EOPF datasets"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
@@ -23,10 +23,10 @@ classifiers = [
 ]
 dependencies = [
     "orjson",
-    "titiler-core>=2.1,<3.0",
-    "titiler-xarray>=2.1,<3.0",
-    "titiler-extensions>=2.1,<3.0",
-    "titiler-stacapi>=2.0,<3.0",
+    "titiler-core>=2.4.1,<3.0",
+    "titiler-xarray>=2.4.1,<3.0",
+    "titiler-extensions>=2.4.1,<3.0",
+    "titiler-stacapi>=2.2.0,<3.0",
     "rioxarray>=0.22",
     "zarr[cast-value-rs]>=3.2.0",
     "obstore",
@@ -41,8 +41,12 @@ dependencies = [
 
 [project.optional-dependencies]
 openeo = [
-    "titiler-openeo[oidc]>=0.18.3,<0.20",
+    "titiler-openeo[oidc]>=0.20.0,<0.21",
     "openeo",
+    # The angle bands' caches (titiler/eopf/openeo/angles.py): 6.0 added the
+    # `condition` option of `cached`. rio-tiler brings it too; declared
+    # because this package imports it.
+    "cachetools>=6.0",
     "duckdb",
     "sqlalchemy>=2.0.0",
     # SQLAlchemy 2.1's default driver for plain postgresql:// store URLs.
@@ -72,7 +76,7 @@ dev = [
     "pre-commit",
     "bump-my-version",
     "boto3",
-    "titiler-openeo[oidc]>=0.18.3,<0.20",
+    "titiler-openeo[oidc]>=0.20.0,<0.21",
     "ipython",
     "ipykernel",
     "jupyter-client",

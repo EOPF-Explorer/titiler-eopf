@@ -27,3 +27,4 @@ repos:
         - types-attrs
         - pydantic~=2.0
         - types-redis
+        - types-cachetools

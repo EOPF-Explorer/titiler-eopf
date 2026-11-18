@@ -1217,3 +1217,21 @@ rather than hand-merging, so every one of the 4 branch tips carries a lockfile c
 All 4 branches force-pushed to their rebased history; PR numbers, bases, and stacking unchanged. Full
 suite verified independently at the bottom of the stack (chore/openeo-0.18-bump: 125/125) and at the tip
 (fix/multiscale-band-fallback: 136/136, the 11 extra tests being PR #114/#158's own new endpoint tests).
+
+### 7.21 0.20: the copies go, the reader seam stays (#217)
+
+titiler-openeo 0.20.0 ships the backend seam (sentinel-hub/titiler-openeo#462, ADR 0011). The EOPF
+copies of `_reader` and of `LoadCollection.load_collection` (with `_make_mosaic_task`, `_build_tasks`,
+`_group_items_by_date`, `_validate_limits`) are deleted. `LoadCollection` keeps two overrides only:
+
+- `reader_cls = STACReader` (the field default, so every `LoadCollection(...)` uses it);
+- `_bands_to_assets(bands)` → `_parse_asset(bands)`, one asset dict per band.
+
+The EOPF backend now gets the upstream fixes that the copies missed: GeoJSON spatial extents (#447),
+cooperative cancellation (#471), items with a null `datetime` (#473), and the upstream
+`EmptyMosaicError` → `TileOutsideBounds` conversion. The dimension estimate also uses `STACReader`.
+
+Scale/offset (§6) is now applied in code: the upstream `_reader` applies STAC `raster:scale`/
+`raster:offset`, and `GeoZarrReader` already returns decoded values, so `titiler/eopf/openeo/reader.py`
+sets `apply_scale_offset = False` unless `TITILER_OPENEO_PROCESSING_APPLY_SCALE_OFFSET` is set. Without
+it, `sentinel-2-l2a-new` `reflectance` (`raster:scale: 0.0001`) would be scaled two times.

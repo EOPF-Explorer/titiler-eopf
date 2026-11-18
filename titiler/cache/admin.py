@@ -20,12 +20,18 @@ MIN_TOKEN_LENGTH = 16
 class InvalidateRequest(BaseModel):
     """Request model for cache invalidation."""
 
-    patterns: List[Annotated[str, StringConstraints(min_length=1, max_length=256)]] = (
-        Field(
-            min_length=1,
-            max_length=100,
-            description="Cache key patterns to invalidate",
-        )
+    # Printable ASCII without [ \ ]: Redis and the S3 backend's fnmatch read those
+    # differently, Redis' ? matches a byte where S3's matches a character, and a
+    # newline could forge log lines.
+    patterns: List[
+        Annotated[
+            str,
+            StringConstraints(min_length=1, max_length=256, pattern=r"^[ -Z^-~]+$"),
+        ]
+    ] = Field(
+        min_length=1,
+        max_length=100,
+        description="Cache key patterns to invalidate",
     )
 
 
@@ -95,8 +101,8 @@ def _create_invalidate_endpoint(cache_backend: CacheBackend, namespace: str):
         invalidated_count = 0
         failed_patterns = []
 
-        # clear_pattern swallows backend errors and returns 0, so check the
-        # backend is reachable first instead of reporting a silent success.
+        # Cheap early exit: an unreachable backend fails every pattern at once.
+        # Past this check, a clear_pattern error fails just its own pattern.
         health = await cache_backend.health_check()
         if health.get("status") != "connected":
             logger.error("Cache invalidation skipped: backend unhealthy")

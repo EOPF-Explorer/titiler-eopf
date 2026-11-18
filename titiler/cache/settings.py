@@ -71,6 +71,7 @@ class CacheS3Settings(BaseSettings):
     access_key_id: str | None = None
     secret_access_key: SecretStr | None = None
     session_token: str | None = None
+    prefix: str | None = None
 
     model_config = SettingsConfigDict(
         env_prefix="TITILER_CACHE_S3_", env_file=".env", extra="ignore"

@@ -174,11 +174,11 @@ class RedisCacheBackend(CacheBackend):
 
         except CacheBackendUnavailable:
             self._stats["errors"] += 1
-            return 0
+            raise
         except Exception as e:
             self._stats["errors"] += 1
             logger.error(f"Redis clear pattern error for {pattern}: {e}")
-            return 0
+            raise CacheError(f"Failed to clear pattern {pattern}: {e}") from e
 
     async def health_check(self) -> dict[str, Any]:
         """Check Redis health and return metrics."""

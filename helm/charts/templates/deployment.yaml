@@ -45,16 +45,19 @@ spec:
             - name: TITILER_EOPF_CACHE_BACKEND
               value: {{ .Values.cache.backend | quote }}
             - name: TITILER_EOPF_CACHE_DEFAULT_TTL
-              value: {{ .Values.cache.ttl.default | quote }}
+              value: {{ .Values.cache.ttl.default | int | quote }}
+            {{- /* unset or null: tiles use the default TTL */}}
+            {{- if .Values.cache.ttl.tiles }}
             - name: TITILER_EOPF_CACHE_TILE_TTL
-              value: {{ .Values.cache.ttl.tiles | quote }}
+              value: {{ .Values.cache.ttl.tiles | int | quote }}
+            {{- end }}
             # TTL the GeoZarr reader actually reads for cached datatrees
             # (EOPFCacheSettings.metadata_ttl).
             - name: TITILER_EOPF_CACHE_METADATA_TTL
-              value: {{ .Values.cache.ttl.datasets | quote }}
+              value: {{ .Values.cache.ttl.datasets | int | quote }}
             # Store-version probe throttle; 0 disables probing (plain TTL mode).
             - name: TITILER_EOPF_CACHE_VERSION_PROBE_TTL
-              value: {{ .Values.cache.versionProbeTtl | quote }}
+              value: {{ .Values.cache.versionProbeTtl | int | quote }}
             - name: TITILER_EOPF_CACHE_NAMESPACE
               value: {{ .Values.cache.namespace | quote }}
             {{- /* Redis Configuration */ -}}

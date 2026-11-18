@@ -3,10 +3,16 @@
 import numpy
 import pytest
 import xarray
-from rio_tiler.errors import ExpressionMixingWarning
+from rio_tiler.errors import ExpressionMixingWarning, InvalidExpression
 
 from titiler.core.errors import BadRequestError
-from titiler.eopf.reader import GeoZarrReader, MissingVariables
+from titiler.eopf.reader import (
+    GeoZarrReader,
+    InvalidGeoZarrStore,
+    MissingVariables,
+    _select_item_time,
+    buffer_grid,
+)
 
 
 def test_open(geozarr_dataset):
@@ -215,6 +221,43 @@ def test_preview(geozarr_dataset):
         assert img.array.shape == (1, 102, 128)
 
 
+@pytest.mark.parametrize("buffer,extra", [(0.5, 1), (1, 2), (2, 4)])
+def test_buffer_grid(buffer, extra):
+    """The grid grows by 2 * buffer pixels; the pixel size does not change."""
+    bbox, width, height = buffer_grid((0.0, 0.0, 256.0, 128.0), 256, 128, buffer)
+    assert (width, height) == (256 + extra, 128 + extra)
+    assert bbox == (-extra / 2, -extra / 2, 256 + extra / 2, 128 + extra / 2)
+
+
+def test_part_buffer(geozarr_dataset):
+    """`buffer` adds pixels on each side, as rio-tiler does (openEO
+    `tile_buffer`). `GeoArrayReader.part` does not apply it."""
+    with GeoZarrReader(geozarr_dataset) as src:
+        bounds = src.bounds
+        lon, lat = (bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2
+        # A tile inside the data: at the data edge, GDAL's warp uses another
+        # source window, which changes some nearest-neighbour picks.
+        bbox = src.tms.xy_bounds(*src.tms.tile(lon, lat, 13))
+        options = {
+            "bounds_crs": "epsg:3857",
+            "dst_crs": "epsg:3857",
+            "variables": ["/measurements/reflectance:b02"],
+            "width": 64,
+            "height": 64,
+        }
+        img = src.part(bbox, **options)
+        buffered = src.part(bbox, buffer=1, **options)
+
+    assert (buffered.width, buffered.height) == (66, 66)
+    px = (bbox[2] - bbox[0]) / 64
+    numpy.testing.assert_allclose(
+        buffered.bounds,
+        (bbox[0] - px, bbox[1] - px, bbox[2] + px, bbox[3] + px),
+    )
+    # The same pixel centres: the inner pixels are the unbuffered read.
+    numpy.testing.assert_array_equal(buffered.array[:, 1:-1, 1:-1], img.array)
+
+
 def test_part(geozarr_dataset):
     """test part method."""
     with GeoZarrReader(geozarr_dataset) as src:
@@ -375,7 +418,7 @@ def test_3d_geozarr(geozarr_3d_dataset):
 
         # Cannot use expression with multi-bands variables
         with pytest.raises(
-            ValueError, match="Can't use `expression` for multidim dataset"
+            InvalidExpression, match="Can't use `expression` for multidim dataset"
         ):
             _ = src.preview(
                 expression="/measurements/reflectance:b02+/measurements/reflectance:b03",
@@ -437,7 +480,7 @@ def test_3d_geozarr(geozarr_3d_dataset):
 
         # Cannot use expression with multi-bands variables
         with pytest.raises(
-            ValueError, match="Can't use `expression` for multidim dataset"
+            InvalidExpression, match="Can't use `expression` for multidim dataset"
         ):
             _ = src.point(
                 lon,
@@ -498,7 +541,7 @@ def test_3d_geozarr(geozarr_3d_dataset):
 
         # Cannot use expression with multi-bands variables
         with pytest.raises(
-            ValueError, match="Can't use `expression` for multidim dataset"
+            InvalidExpression, match="Can't use `expression` for multidim dataset"
         ):
             _ = src.tile(
                 *tile,
@@ -557,7 +600,7 @@ def test_3d_geozarr(geozarr_3d_dataset):
 
         # Cannot use expression with multi-bands variables
         with pytest.raises(
-            ValueError, match="Can't use `expression` for multidim dataset"
+            InvalidExpression, match="Can't use `expression` for multidim dataset"
         ):
             _ = src.part(
                 bbox,
@@ -631,7 +674,7 @@ def test_3d_geozarr(geozarr_3d_dataset):
 
         # Cannot use expression with multi-bands variables
         with pytest.raises(
-            ValueError, match="Can't use `expression` for multidim dataset"
+            InvalidExpression, match="Can't use `expression` for multidim dataset"
         ):
             _ = src.feature(
                 feature,
@@ -688,6 +731,68 @@ def test_sel_on_int64_axis_raises_bad_request(geozarr_3d_dataset):
             "b02",
             sel=["time=2022-01-02T00:00:00.000000000"],
         )
+
+
+def _time_of(da: xarray.DataArray) -> str:
+    return numpy.datetime_as_string(da["time"].values, unit="D")
+
+
+def test_item_datetime_selects_the_item_time_slice(geozarr_3d_dataset):
+    """One STAC item per acquisition of a time-stacked store: the reader
+    reads the slice of the item datetime, not every slice."""
+    with GeoZarrReader(geozarr_3d_dataset, item_datetime="2022-01-02T00:00:00") as src:
+        da = src._get_variable("/measurements/reflectance", "b02")
+        assert "time" not in da.dims
+        assert _time_of(da) == "2022-01-02"
+
+        info = src.info(variables=["/measurements/reflectance:b02"])
+        assert info["/measurements/reflectance:b02"].count == 1
+
+
+def test_item_datetime_explicit_sel_wins(geozarr_3d_dataset):
+    """A `sel` on `time` in the request is used, not the item datetime."""
+    with GeoZarrReader(geozarr_3d_dataset, item_datetime="2022-01-02T00:00:00") as src:
+        da = src._get_variable(
+            "/measurements/reflectance", "b02", sel=["time=2022-01-01T00:00:00"]
+        )
+        assert _time_of(da) == "2022-01-01"
+
+
+def test_item_datetime_too_far_raises_bad_request(geozarr_3d_dataset):
+    """No slice within `ITEM_TIME_TOLERANCE`: an error, not another date."""
+    with GeoZarrReader(geozarr_3d_dataset, item_datetime="2022-01-05T00:00:00") as src:
+        with pytest.raises(BadRequestError, match="No time slice"):
+            src._get_variable("/measurements/reflectance", "b02")
+
+
+def test_item_datetime_without_time_dimension(geozarr_dataset):
+    """A store with no `time` dimension (Sentinel-2) reads as before."""
+    with GeoZarrReader(geozarr_dataset, item_datetime="2022-01-02T00:00:00") as src:
+        da = src._get_variable("/measurements/reflectance", "b02")
+        assert da.ndim == 2
+
+
+def test_select_item_time_unsorted_axis():
+    """The `time` axis of an appended store is not always sorted (the
+    Sentinel-1 RTC stores are not): `sel(method="nearest")` would fail."""
+    times = numpy.array(
+        [
+            "2021-09-10T07:10:38",
+            "2021-10-04T07:10:39",
+            "2021-12-03T07:10:38",
+            "2021-11-09T07:10:38",
+        ],
+        dtype="datetime64[ns]",
+    )
+    da = xarray.DataArray(
+        numpy.arange(4 * 2 * 2, dtype="float32").reshape(4, 2, 2),
+        dims=("time", "y", "x"),
+        coords={"time": times},
+    )
+    out = _select_item_time(da, "2021-11-09T07:10:38")
+    assert out.values[0, 0] == 12  # the 4th slice
+    out = _select_item_time(da, "2021-10-04T07:10:38")  # 1 s from the slice
+    assert out.values[0, 0] == 4
 
 
 def test_root_group(geozarr_dataset):
@@ -783,3 +888,12 @@ def test_sub_group(geozarr_dataset):
         assert img.band_names == ["b1"]
         assert img.band_descriptions == ["/reflectance:b02+/reflectance:b03"]
         assert img.data.shape == (1, 256, 256)
+
+
+def test_array(geozarr_dataset):
+    """Test GeoZarrReader raises InvalidGeoZarrStore for a Zarr array path."""
+    with pytest.raises(InvalidGeoZarrStore):
+        with GeoZarrReader(
+            input=f"{geozarr_dataset}/measurements/reflectance/r10m/b02"
+        ):
+            pass
