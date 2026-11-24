@@ -50,9 +50,4 @@ updates:
         - "*"
         exclude-patterns:
         - "titiler-openeo*"
-      # The groups above only apply to version updates, so without this each
-      # security advisory opens its own PR.
-      security:
-        applies-to: security-updates
-        patterns:
-        - "*"
+      # No security-updates group: while a grouped security PR is open, Dependabot defers fixes for packages not already in it.
