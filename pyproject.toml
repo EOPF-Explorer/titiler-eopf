@@ -107,6 +107,8 @@ Changelog = "https://github.com/EOPF-Explorer/titiler-eopf/CHANGELOG.md"
 # this app needs; verified `openeo`'s own STAC handling still works against
 # pystac 1.14.3.
 override-dependencies = ["pystac>=1.12"]
+# Security floors for transitive dependencies.
+constraint-dependencies = ["wcmatch>=11.2"]
 
 [build-system]
 requires = ["hatchling"]
