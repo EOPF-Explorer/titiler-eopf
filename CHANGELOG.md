@@ -11,6 +11,19 @@
 
 **Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.8.0...v0.9.0
 
+## 0.13.0 (2026-11-26)
+
+## What's Changed
+* feat(api): add /renders endpoint for STAC render extension by @emmanuelmathot in https://github.com/EOPF-Explorer/titiler-eopf/pull/229
+* chore(deps): bump the python group across 1 directory with 4 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/243
+* chore(deps): bump the security group across 1 directory with 5 updates by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/221
+* ci: stop grouping Dependabot security updates by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/248
+* chore(deps): bump tornado from 6.6 to 6.6.1 by @dependabot[bot] in https://github.com/EOPF-Explorer/titiler-eopf/pull/250
+* chore(deps): raise wcmatch floor to 11.2 by @lhoupert in https://github.com/EOPF-Explorer/titiler-eopf/pull/251
+
+
+**Full Changelog**: https://github.com/EOPF-Explorer/titiler-eopf/compare/v0.12.5...v0.13.0
+
 ## 0.12.5 (2026-11-12)
 
 ## What's Changed
