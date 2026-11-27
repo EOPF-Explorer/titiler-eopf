@@ -5,7 +5,7 @@
 # unpinned and built against Wolfi's *current* glibc, while this rootfs keeps
 # the glibc it shipped with (nothing here runs `apk upgrade`). A stale digest
 # fails docker/smoke-test.sh with "version `GLIBC_x.yy' not found".
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:88a20e2d017bd20cdc0cb3910de603e7bea9512a6c351a8dd3c9df212ab03d73 AS base
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:43f53fe2a02ba1a9484cc560ccf188da32f4a4b38055752514d78a3923ff05c8 AS base
 
 # Declared AFTER "FROM" on purpose: an ARG before the first FROM is in scope for
 # FROM only, so the RUN below would expand it to "" and run `apk add python-`.
@@ -31,7 +31,7 @@ RUN apk add --no-cache \
 # direct COPY --from=<image> because Dependabot only parses FROM lines — it
 # ignores images in COPY (dependabot-core#5103) — and a digest pin nothing
 # moves would rot.
-FROM ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.10@sha256:a3ea1357342c1a4bf9a0c53a3deb1b55379aefa037338d8113d5771efa01774f AS uv
 
 # Build stage
 FROM base AS builder
